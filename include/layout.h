@@ -64,3 +64,30 @@ void layout_register(uint8_t key, uint8_t keycode);
  * @return None
  */
 void layout_unregister(uint8_t key, uint8_t keycode);
+
+/**
+ * @brief Process key event
+ *
+ * @param key Key index
+ * @param pressed Whether the key is pressed
+ *
+ * @return true if a non-Tap-Hold key press occurred
+ */
+bool layout_process_key(uint8_t key, bool pressed);
+
+/**
+ * @brief Get the current layer
+ *
+ * @return Current layer
+ */
+uint8_t layout_get_current_layer(void);
+
+/**
+ * @brief Get the keycode of a key
+ *
+ * @param current_layer Current layer
+ * @param key Key index
+ *
+ * @return Keycode
+ */
+uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key);

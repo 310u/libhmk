@@ -114,6 +114,7 @@ typedef enum {
   AK_TYPE_DYNAMIC_KEYSTROKE,
   AK_TYPE_TAP_HOLD,
   AK_TYPE_TOGGLE,
+  AK_TYPE_COMBO,
   AK_TYPE_COUNT,
 } ak_type_t;
 
@@ -181,6 +182,16 @@ typedef struct __attribute__((packed)) {
   uint16_t tapping_term;
 } toggle_t;
 
+// Combo configuration
+typedef struct __attribute__((packed)) {
+  // Trigger key indices (0-255)
+  uint8_t keys[4];
+  // Resulting keycode
+  uint8_t output_keycode;
+  // Combo term in milliseconds (0 = use default)
+  uint16_t term;
+} combo_t;
+
 // Advanced key configuration
 typedef struct __attribute__((packed)) {
   uint8_t layer;
@@ -191,6 +202,7 @@ typedef struct __attribute__((packed)) {
     dynamic_keystroke_t dynamic_keystroke;
     tap_hold_t tap_hold;
     toggle_t toggle;
+    combo_t combo;
   };
 } advanced_key_t;
 

@@ -37,8 +37,7 @@ static uint8_t default_layer;
  *
  * @return Current layer
  */
-__attribute__((always_inline)) static inline uint8_t
-layout_get_current_layer(void) {
+uint8_t layout_get_current_layer(void) {
   return layer_mask ? 31 - __builtin_clz(layer_mask) : default_layer;
 }
 
@@ -77,7 +76,7 @@ __attribute__((always_inline)) static inline void layout_layer_lock(void) {
  *
  * @return Keycode
  */
-static uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
+uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
   // Find the first active layer with a non-transparent keycode
   for (uint32_t i = (uint32_t)current_layer + 1; i-- > 0;) {
     if (((layer_mask >> i) & 1) == 0)
@@ -117,8 +116,8 @@ void layout_load_advanced_keys(void) {
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
     const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
 
-    if (ak->type == AK_TYPE_NONE || ak->layer >= NUM_LAYERS ||
-        ak->key >= NUM_KEYS)
+    if (ak->type == AK_TYPE_NONE || ak->type == AK_TYPE_COMBO ||
+        ak->layer >= NUM_LAYERS || ak->key >= NUM_KEYS)
       continue;
 
     advanced_key_indices[ak->layer][ak->key] = i + 1;
@@ -128,8 +127,54 @@ void layout_load_advanced_keys(void) {
   }
 }
 
+bool layout_process_key(uint8_t key, bool pressed) {
+  const uint8_t current_layer = layout_get_current_layer();
+  bool has_non_tap_hold_press = false;
+
+  if (pressed) {
+    const uint8_t keycode = layout_get_keycode(current_layer, key);
+    const uint8_t ak_index = advanced_key_indices[current_layer][key];
+
+    if (ak_index) {
+      active_advanced_keys[key] = ak_index;
+      advanced_key_event_t ak_event = (advanced_key_event_t){
+          .type = AK_EVENT_TYPE_PRESS,
+          .key = key,
+          .keycode = keycode,
+          .ak_index = ak_index - 1,
+      };
+      advanced_key_process(&ak_event);
+      has_non_tap_hold_press |=
+          (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
+           AK_TYPE_TAP_HOLD);
+    } else {
+      active_keycodes[key] = keycode;
+      layout_register(key, keycode);
+      has_non_tap_hold_press |= (keycode != KC_NO);
+    }
+  } else {
+    const uint8_t keycode = active_keycodes[key];
+    const uint8_t ak_index = active_advanced_keys[key];
+
+    if (ak_index) {
+      active_advanced_keys[key] = 0;
+      advanced_key_event_t ak_event = (advanced_key_event_t){
+          .type = AK_EVENT_TYPE_RELEASE,
+          .key = key,
+          .keycode = keycode,
+          .ak_index = ak_index - 1,
+      };
+      advanced_key_process(&ak_event);
+    } else {
+      active_keycodes[key] = KC_NO;
+      layout_unregister(key, keycode);
+    }
+  }
+
+  return has_non_tap_hold_press;
+}
+
 void layout_task(void) {
-  static advanced_key_event_t ak_event = {0};
   static uint32_t last_ak_tick = 0;
 
   const uint8_t current_layer = layout_get_current_layer();
@@ -163,51 +208,24 @@ void layout_task(void) {
 
     if (k->is_pressed & !last_key_press) {
       // Key press event
-      const uint8_t keycode = layout_get_keycode(current_layer, i);
-      const uint8_t ak_index = advanced_key_indices[current_layer][i];
+      if (advanced_key_combo_process(i, true, timer_read()))
+        goto update_key_state;
 
-      if (ak_index) {
-        active_advanced_keys[i] = ak_index;
-        ak_event = (advanced_key_event_t){
-            .type = AK_EVENT_TYPE_PRESS,
-            .key = i,
-            .keycode = keycode,
-            .ak_index = ak_index - 1,
-        };
-        advanced_key_process(&ak_event);
-        has_non_tap_hold_press |=
-            (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
-             AK_TYPE_TAP_HOLD);
-      } else {
-        active_keycodes[i] = keycode;
-        layout_register(i, keycode);
-        has_non_tap_hold_press |= (keycode != KC_NO);
-      }
+      if (layout_process_key(i, true))
+        has_non_tap_hold_press = true;
     } else if (!k->is_pressed & last_key_press) {
       // Key release event
-      const uint8_t keycode = active_keycodes[i];
-      const uint8_t ak_index = active_advanced_keys[i];
+      if (advanced_key_combo_process(i, false, timer_read()))
+        goto update_key_state;
 
-      if (ak_index) {
-        active_advanced_keys[i] = 0;
-        ak_event = (advanced_key_event_t){
-            .type = AK_EVENT_TYPE_RELEASE,
-            .key = i,
-            .keycode = keycode,
-            .ak_index = ak_index - 1,
-        };
-        advanced_key_process(&ak_event);
-      } else {
-        active_keycodes[i] = KC_NO;
-        layout_unregister(i, keycode);
-      }
+      layout_process_key(i, false);
     } else if (k->is_pressed) {
       // Key hold event
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
 
       if (ak_index) {
-        ak_event = (advanced_key_event_t){
+        advanced_key_event_t ak_event = (advanced_key_event_t){
             .type = AK_EVENT_TYPE_HOLD,
             .key = i,
             .keycode = keycode,
@@ -217,9 +235,13 @@ void layout_task(void) {
       }
     }
 
+update_key_state:
     // Finally, update the key state
     bitmap_set(key_press_states, i, k->is_pressed);
   }
+
+  if (advanced_key_combo_task())
+    has_non_tap_hold_press = true;
 
   if (has_non_tap_hold_press || timer_elapsed(last_ak_tick) > 0) {
     // We only need to tick the advanced keys every 1ms, or when there is a

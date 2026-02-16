@@ -81,6 +81,18 @@ typedef struct {
 } ak_state_toggle_t;
 
 //--------------------------------------------------------------------+
+// Combo State
+//--------------------------------------------------------------------+
+
+// Combo state
+typedef struct {
+  // Time when the first key in the combo was pressed
+  uint32_t since;
+  // Whether the combo is active
+  bool is_active;
+} ak_state_combo_t;
+
+//--------------------------------------------------------------------+
 // Advanced Key State
 //--------------------------------------------------------------------+
 
@@ -90,6 +102,7 @@ typedef union {
   ak_state_dynamic_keystroke_t dynamic_keystroke;
   ak_state_tap_hold_t tap_hold;
   ak_state_toggle_t toggle;
+  ak_state_combo_t combo;
 } advanced_key_state_t;
 
 //--------------------------------------------------------------------+
@@ -159,3 +172,23 @@ void advanced_key_process(const advanced_key_event_t *event);
  * @return None
  */
 void advanced_key_tick(bool has_non_tap_hold_press);
+
+/**
+ * @brief Process a key event for combo detection
+ *
+ * @param key Key index
+ * @param pressed Whether the key is pressed
+ * @param time Time of the event
+ *
+ * @return true if the event is consumed (buffered), false otherwise
+ */
+bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time);
+
+/**
+ * @brief Combo task
+ *
+ * This function should be called periodically to update the combo state.
+ *
+ * @return None
+ */
+bool advanced_key_combo_task(void);
