@@ -54,3 +54,13 @@ void hid_keycode_remove(uint8_t keycode);
  * @return None
  */
 void hid_send_reports(void);
+
+/**
+ * @brief Update the mouse X/Y coordinates
+ *
+ * @param x X coordinate
+ * @param y Y coordinate
+ *
+ * @return None
+ */
+void hid_mouse_xy_update(int8_t x, int8_t y);

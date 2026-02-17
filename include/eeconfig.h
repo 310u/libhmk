@@ -61,6 +61,9 @@ typedef union __attribute__((packed)) {
 _Static_assert(sizeof(eeconfig_options_t) == sizeof(uint16_t),
                "Invalid eeconfig_options_t size");
 
+// Number of analog configurations per profile
+#define NUM_ANALOG_CONFIGS 4
+
 // Keyboard profile configuration
 typedef struct __attribute__((packed)) {
   uint8_t keymap[NUM_LAYERS][NUM_KEYS];
@@ -69,12 +72,13 @@ typedef struct __attribute__((packed)) {
   uint8_t gamepad_buttons[NUM_KEYS];
   gamepad_options_t gamepad_options;
   uint8_t tick_rate;
+  analog_config_t analog_configs[NUM_ANALOG_CONFIGS];
 } eeconfig_profile_t;
 
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0104
+#define EECONFIG_VERSION 0x0107
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -155,6 +159,11 @@ extern const eeconfig_t *eeconfig;
 #if !defined(DEFAULT_TICK_RATE)
 // Default tick rate
 #define DEFAULT_TICK_RATE 30
+#endif
+
+#if !defined(DEFAULT_ANALOG_CONFIGS)
+// Default analog configurations (Empty by default)
+#define DEFAULT_ANALOG_CONFIGS {0}
 #endif
 
 //--------------------------------------------------------------------+

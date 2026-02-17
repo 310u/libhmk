@@ -66,12 +66,31 @@ void command_process(const uint8_t *buf) {
     const command_in_analog_info_t *p = &in->analog_info;
     command_out_analog_info_t *o = out->analog_info;
 
+    // Allow querying up to 255 if special IDs are used, otherwise NUM_KEYS
+#if defined(ANALOG_SPECIAL_START_ID)
+    COMMAND_VERIFY(p->offset <= 255);
+#else
     COMMAND_VERIFY(p->offset < NUM_KEYS);
+#endif
 
-    for (uint32_t i = 0;
-         i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
-      o[i].adc_value = key_matrix[i + p->offset].adc_filtered;
-      o[i].distance = key_matrix[i + p->offset].distance;
+    for (uint32_t i = 0; i < M_ARRAY_SIZE(out->analog_info); i++) {
+        uint32_t key_idx = p->offset + i;
+        
+        if (key_idx < NUM_KEYS) {
+            o[i].adc_value = key_matrix[key_idx].adc_filtered;
+            o[i].distance = key_matrix[key_idx].distance;
+        } 
+#if defined(ANALOG_SPECIAL_START_ID)
+        else if (key_idx >= ANALOG_SPECIAL_START_ID && key_idx <= 255) {
+            o[i].adc_value = analog_read(key_idx);
+            o[i].distance = 0; // No distance for raw analog
+        }
+#endif
+        else {
+            // Out of range / unused
+            o[i].adc_value = 0;
+            o[i].distance = 0;
+        }
     }
     break;
   }
@@ -273,6 +292,31 @@ void command_process(const uint8_t *buf) {
 
     success = EECONFIG_WRITE(profiles[p->profile].gamepad_options,
                              &p->gamepad_options);
+    break;
+  }
+  case COMMAND_GET_ANALOG_CONFIG: {
+    const command_in_analog_config_t *p = &in->analog_config;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < NUM_ANALOG_CONFIGS);
+
+    memcpy(out->analog_configs,
+           eeconfig->profiles[p->profile].analog_configs + p->offset,
+           M_MIN(M_ARRAY_SIZE(out->analog_configs),
+                 (uint32_t)(NUM_ANALOG_CONFIGS - p->offset)) *
+               sizeof(analog_config_t));
+    break;
+  }
+  case COMMAND_SET_ANALOG_CONFIG: {
+    const command_in_analog_config_t *p = &in->analog_config;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < NUM_ANALOG_CONFIGS);
+    COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->analog_configs) &&
+                   p->len <= NUM_ANALOG_CONFIGS - p->offset);
+
+    success = EECONFIG_WRITE_N(profiles[p->profile].analog_configs[p->offset],
+                               p->analog_configs, sizeof(analog_config_t) * p->len);
     break;
   }
   default: {

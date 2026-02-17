@@ -13,18 +13,8 @@
  * this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "advanced_keys.h"
-#include "commands.h"
-#include "crc32.h"
-#include "deferred_actions.h"
-#include "eeconfig.h"
-#include "hardware/hardware.h"
-#include "hid.h"
-#include "layout.h"
-#include "matrix.h"
-#include "tusb.h"
-#include "wear_leveling.h"
-#include "xinput.h"
+
+#include "joystick.h"
 
 int main(void) {
   // Initialize the hardware
@@ -46,6 +36,7 @@ int main(void) {
   xinput_init();
   layout_init();
   command_init();
+  joystick_init();
 
   tud_init(BOARD_TUD_RHPORT);
 
@@ -56,6 +47,7 @@ int main(void) {
     matrix_scan();
     layout_task();
     xinput_task();
+    joystick_task();
   }
 
   return 0;

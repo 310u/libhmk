@@ -92,9 +92,22 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
                        sizeof(mouse_report));
       return;
 
+
     default:
       break;
     }
+  }
+}
+
+void hid_mouse_xy_update(int8_t x, int8_t y) {
+  if (mouse_report.x != x || mouse_report.y != y) {
+    mouse_report.x = x;
+    mouse_report.y = y;
+    // Ensure we send the report if it changed (optimization handling is in hid_send_hid_report)
+    // But we need to make sure hid_send_reports gets called or logic knows it's dirty?
+    // hid_send_hid_report checks memcmp, so we just need to update it.
+    // However, hid_send_reports is called by layout_task -> calls hid_send_reports.
+    // So as long as we update it before that runs, it's fine.
   }
 }
 

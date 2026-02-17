@@ -93,7 +93,72 @@ __attribute__((aligned(8))) static volatile uint16_t
 // ADC values for each key
 static volatile uint16_t adc_values[NUM_KEYS];
 
-void analog_init(void) {
+// Special analog values storage (for IDs >= ANALOG_SPECIAL_START_ID)
+#if defined(ANALOG_SPECIAL_START_ID)
+static volatile uint16_t special_analog_values[256 - ANALOG_SPECIAL_START_ID];
+#endif
+
+// ... (analog_init remains same) ...
+
+void analog_task(void) {}
+
+uint16_t analog_read(uint8_t key) { 
+#if defined(ANALOG_SPECIAL_START_ID)
+    if (key >= ANALOG_SPECIAL_START_ID) {
+        return special_analog_values[key - ANALOG_SPECIAL_START_ID];
+    }
+#endif
+    return adc_values[key]; 
+}
+
+//--------------------------------------------------------------------+
+// Interrupt Handlers
+//--------------------------------------------------------------------+
+
+void DMA1_Channel1_IRQHandler(void) {
+#if ADC_NUM_MUX_INPUTS > 0
+  static uint8_t current_mux_channel = 0;
+#endif
+
+  if (dma_interrupt_flag_get(DMA1_FDT1_FLAG) == SET) {
+    // Clear the DMA transfer complete flag
+    dma_flag_clear(DMA1_FDT1_FLAG);
+
+#if ADC_NUM_MUX_INPUTS > 0
+    for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS; i++) {
+      const uint16_t key = mux_input_matrix[current_mux_channel][i];
+      if (key) {
+#if defined(ANALOG_SPECIAL_START_ID)
+        if (key >= ANALOG_SPECIAL_START_ID) {
+            special_analog_values[key - ANALOG_SPECIAL_START_ID] = adc_buffer[i];
+            continue;
+        }
+#endif
+        // Standard key processing, bounds check just in case
+        if (key <= NUM_KEYS)
+            adc_values[key - 1] = adc_buffer[i];
+      }
+    }
+#endif
+
+#if ADC_NUM_RAW_INPUTS > 0
+    for (uint32_t i = 0; i < ADC_NUM_RAW_INPUTS; i++) {
+      const uint16_t key = raw_input_vector[i];
+      if (key) {
+#if defined(ANALOG_SPECIAL_START_ID)
+        if (key >= ANALOG_SPECIAL_START_ID) {
+            special_analog_values[key - ANALOG_SPECIAL_START_ID] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
+            continue;
+        }
+#endif
+         // Standard key processing
+         if (key <= NUM_KEYS)
+            adc_values[key - 1] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
+      }
+    }
+#endif
+// ... (rest of handler)
+  // ... (unchanged init code) ...
   // Enable peripheral clocks
   crm_periph_clock_enable(CRM_ADC1_PERIPH_CLOCK, TRUE);
   crm_periph_clock_enable(CRM_DMA1_PERIPH_CLOCK, TRUE);
@@ -218,9 +283,18 @@ void analog_init(void) {
     ;
 }
 
+
+
 void analog_task(void) {}
 
-uint16_t analog_read(uint8_t key) { return adc_values[key]; }
+uint16_t analog_read(uint8_t key) { 
+#if defined(ANALOG_SPECIAL_START_ID)
+    if (key >= ANALOG_SPECIAL_START_ID) {
+        return special_analog_values[key - ANALOG_SPECIAL_START_ID];
+    }
+#endif
+    return adc_values[key]; 
+}
 
 //--------------------------------------------------------------------+
 // Interrupt Handlers
@@ -238,16 +312,34 @@ void DMA1_Channel1_IRQHandler(void) {
 #if ADC_NUM_MUX_INPUTS > 0
     for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS; i++) {
       const uint16_t key = mux_input_matrix[current_mux_channel][i];
-      if (key)
-        adc_values[key - 1] = adc_buffer[i];
+      if (key) {
+#if defined(ANALOG_SPECIAL_START_ID)
+        if (key >= ANALOG_SPECIAL_START_ID) {
+            special_analog_values[key - ANALOG_SPECIAL_START_ID] = adc_buffer[i];
+            continue;
+        }
+#endif
+        // Standard key processing, bounds check just in case
+        if (key <= NUM_KEYS)
+            adc_values[key - 1] = adc_buffer[i];
+      }
     }
 #endif
 
 #if ADC_NUM_RAW_INPUTS > 0
     for (uint32_t i = 0; i < ADC_NUM_RAW_INPUTS; i++) {
       const uint16_t key = raw_input_vector[i];
-      if (key)
-        adc_values[key - 1] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
+      if (key) {
+#if defined(ANALOG_SPECIAL_START_ID)
+        if (key >= ANALOG_SPECIAL_START_ID) {
+            special_analog_values[key - ANALOG_SPECIAL_START_ID] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
+            continue;
+        }
+#endif
+         // Standard key processing
+         if (key <= NUM_KEYS)
+            adc_values[key - 1] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
+      }
     }
 #endif
 

@@ -240,6 +240,39 @@ typedef enum {
   GP_BUTTON_RT,
 } gamepad_button_t;
 
+// Analog Input Functions
+typedef enum {
+    ANALOG_FUNC_NONE = 0,
+    ANALOG_FUNC_MOUSE_X,
+    ANALOG_FUNC_MOUSE_Y,
+    ANALOG_FUNC_GAMEPAD_LX,
+    ANALOG_FUNC_GAMEPAD_LY,
+    ANALOG_FUNC_GAMEPAD_RX,
+    ANALOG_FUNC_GAMEPAD_RY,
+    ANALOG_FUNC_GAMEPAD_L_TRIG,
+    ANALOG_FUNC_GAMEPAD_R_TRIG,
+} analog_function_t;
+
+// Analog Input Types
+typedef enum {
+    ANALOG_TYPE_CENTERED = 0,
+    ANALOG_TYPE_LINEAR = 1,
+} analog_type_t;
+
+// Analog Input Configuration
+typedef struct __attribute__((packed)) {
+    uint8_t id;             // Matrix ID (e.g., 254)
+    uint8_t function;       // analog_function_t
+    uint8_t type;           // analog_type_t
+    uint8_t inverted;       // 0 or 1
+    
+    // Calibration Data
+    uint16_t min_value;     // Raw ADC min
+    uint16_t center_value;  // Raw ADC center (for centered types)
+    uint16_t max_value;     // Raw ADC max
+    uint16_t deadzone;      // Deadzone at center/ends
+} analog_config_t;
+
 // Gamepad options configuration
 typedef struct __attribute__((packed)) {
   // 4 points that define the analog curve, representing the relationship
