@@ -57,6 +57,8 @@ typedef struct {
   uint32_t since;
   // Tap-Hold stage
   uint8_t stage;
+  // Whether another key was pressed during the hold
+  bool interrupted;
 } ak_state_tap_hold_t;
 
 //--------------------------------------------------------------------+
@@ -171,7 +173,8 @@ void advanced_key_process(const advanced_key_event_t *event);
  *
  * @return None
  */
-void advanced_key_tick(bool has_non_tap_hold_press);
+void advanced_key_tick(bool has_non_tap_hold_press,
+                       bool has_non_tap_hold_release);
 
 /**
  * @brief Process a key event for combo detection

@@ -173,19 +173,34 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
   case AK_EVENT_TYPE_PRESS:
     state->since = timer_read();
     state->stage = TAP_HOLD_STAGE_TAP;
+    state->interrupted = false;
     break;
 
   case AK_EVENT_TYPE_RELEASE:
     if (state->stage == TAP_HOLD_STAGE_TAP) {
-      deferred_action = (deferred_action_t){
-          .type = DEFERRED_ACTION_TYPE_RELEASE,
-          .key = event->key,
-          .keycode = tap_hold->tap_keycode,
-      };
-      if (deferred_action_push(&deferred_action))
-        // We only perform the tap action if the release action was
-        // successfully.
-        layout_register(event->key, tap_hold->tap_keycode);
+      if (tap_hold->retro_tapping && !state->interrupted &&
+          timer_elapsed(state->since) >= tap_hold->tapping_term) {
+        // Retro Tapping: If the key is held longer than the tapping term, and
+        // released without any other key being pressed, register the tap
+        // action.
+        deferred_action = (deferred_action_t){
+            .type = DEFERRED_ACTION_TYPE_RELEASE,
+            .key = event->key,
+            .keycode = tap_hold->tap_keycode,
+        };
+        if (deferred_action_push(&deferred_action))
+          layout_register(event->key, tap_hold->tap_keycode);
+      } else {
+        deferred_action = (deferred_action_t){
+            .type = DEFERRED_ACTION_TYPE_RELEASE,
+            .key = event->key,
+            .keycode = tap_hold->tap_keycode,
+        };
+        if (deferred_action_push(&deferred_action))
+          // We only perform the tap action if the release action was
+          // successfully.
+          layout_register(event->key, tap_hold->tap_keycode);
+      }
     } else if (state->stage == TAP_HOLD_STAGE_HOLD)
       layout_unregister(event->key, tap_hold->hold_keycode);
     state->stage = TAP_HOLD_STAGE_NONE;
@@ -277,17 +292,24 @@ void advanced_key_process(const advanced_key_event_t *event) {
   }
 }
 
-void advanced_key_tick(bool has_non_tap_hold_press) {
+void advanced_key_tick(bool has_non_tap_hold_press,
+                       bool has_non_tap_hold_release) {
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
     const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
     advanced_key_state_t *state = &ak_states[i];
 
     switch (ak->type) {
     case AK_TYPE_TAP_HOLD:
+      if (has_non_tap_hold_press)
+        state->tap_hold.interrupted = true;
+
       if (state->tap_hold.stage == TAP_HOLD_STAGE_TAP &&
           // If hold on other key press is enabled, immediately register the
           // hold key when another non-Tap-Hold key is pressed.
           ((has_non_tap_hold_press & ak->tap_hold.hold_on_other_key_press) ||
+           // If permissive hold is enabled, immediately register the hold key
+           // when another non-Tap-Hold key is tapped (released).
+           (has_non_tap_hold_release & ak->tap_hold.permissive_hold) ||
            // Otherwise, the key must be held for the tapping term.
            timer_elapsed(state->tap_hold.since) >= ak->tap_hold.tapping_term)) {
         layout_register(ak->key, ak->tap_hold.hold_keycode);

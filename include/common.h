@@ -173,6 +173,12 @@ typedef struct __attribute__((packed)) {
   // Whether to immediately register the hold action if another non-Tap-Hold key
   // is pressed, regardless of the tapping term
   bool hold_on_other_key_press;
+  // Whether to immediately register the hold action if another non-Tap-Hold key
+  // is tapped (pressed and then released), regardless of the tapping term
+  bool permissive_hold;
+  // Whether to register the tap action if the key is held longer than the
+  // tapping term, and released without any other key being pressed
+  bool retro_tapping;
 } tap_hold_t;
 
 // Toggle configuration

@@ -179,6 +179,7 @@ void layout_task(void) {
 
   const uint8_t current_layer = layout_get_current_layer();
   bool has_non_tap_hold_press = false;
+  bool has_non_tap_hold_release = false;
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     const key_state_t *k = &key_matrix[i];
@@ -218,7 +219,8 @@ void layout_task(void) {
       if (advanced_key_combo_process(i, false, timer_read()))
         goto update_key_state;
 
-      layout_process_key(i, false);
+      if (layout_process_key(i, false))
+        has_non_tap_hold_release = true;
     } else if (k->is_pressed) {
       // Key hold event
       const uint8_t keycode = active_keycodes[i];
@@ -247,7 +249,7 @@ update_key_state:
     // We only need to tick the advanced keys every 1ms, or when there is a
     // non-Tap-Hold key press event since these are the only cases that
     // the advanced keys might perform an action.
-    advanced_key_tick(has_non_tap_hold_press);
+    advanced_key_tick(has_non_tap_hold_press, has_non_tap_hold_release);
     last_ak_tick = timer_read();
   }
 
