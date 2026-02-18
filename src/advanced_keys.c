@@ -554,6 +554,7 @@ static void process_combo_logic(uint32_t current_time) {
           if (head && (current_time - head->time) > max_pending_term) {
              goto execute_match;
           }
+          // Still waiting for potential longer combo
           return; 
       }
       
@@ -590,20 +591,40 @@ static void process_combo_logic(uint32_t current_time) {
       if (pending_candidates) {
           combo_event_t *head = queue_peek(0);
           if (head && (current_time - head->time) > max_pending_term) {
+             // Timed out: flush one event at a time
              flush_events(1);
           }
+          // Else: still waiting
       } else {
+          // No match, no candidates: flush everything immediately
           flush_events(queue_count);
       }
   }
 }
 
 bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time) {
+  // Fast path: If queue is empty and this key is not in any combo, pass through
   if (queue_count == 0 && !is_key_in_any_combo(key)) {
       return false; 
   }
 
+  // ── Interrupt handling ──
+  // If a non-combo key is PRESSED while we have pending events,
+  // flush all pending events first (preserving order), then let the
+  // non-combo key pass through normally.
+  if (pressed && queue_count > 0 && !is_key_in_any_combo(key)) {
+      flush_events(queue_count);
+      return false; // Let caller process this key normally
+  }
+
+  // Add to queue
   queue_push(key, pressed, time);
+  
+  // ── Early flush on release ──
+  // When a combo-constituent key is released, re-evaluate.
+  // If it was released before the combo completed, all candidates using
+  // that key become impossible. process_combo_logic will detect
+  // "no candidates" and flush immediately, eliminating the wait.
   process_combo_logic(time);
   
   return true;
@@ -618,3 +639,4 @@ bool advanced_key_combo_task(void) {
   
   return pending_activity;
 }
+
