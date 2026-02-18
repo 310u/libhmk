@@ -340,6 +340,7 @@ void advanced_key_tick(bool has_non_tap_hold_press,
 
 #define COMBO_QUEUE_SIZE 16
 #define DEFAULT_COMBO_TERM 50
+#define COMBO_KEY_NONE 255
 
 typedef struct {
   uint8_t key;
@@ -358,7 +359,36 @@ static uint8_t queue_count = 0;
 // Track if any activity occurred during processing (for layout task return)
 static bool pending_activity = false;
 
+// Bitmap cache: bit N is set if key N is part of any combo on the current layer.
+// Rebuilt lazily when the layer changes.
+static uint8_t combo_key_bitmap[(NUM_KEYS + 7) / 8];
+static uint8_t combo_key_bitmap_layer = 255; // Invalid initial value to force rebuild
+
+static void combo_key_bitmap_rebuild(uint8_t layer) {
+  if (combo_key_bitmap_layer == layer) return;
+  
+  memset(combo_key_bitmap, 0, sizeof(combo_key_bitmap));
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+    if (ak->type != AK_TYPE_COMBO || ak->layer != layer) continue;
+    for (int k = 0; k < 4; k++) {
+      if (ak->combo.keys[k] < NUM_KEYS) {
+        combo_key_bitmap[ak->combo.keys[k] / 8] |= (uint8_t)(1 << (ak->combo.keys[k] % 8));
+      }
+    }
+  }
+  combo_key_bitmap_layer = layer;
+}
+
+static inline bool is_key_in_any_combo(uint8_t key) {
+  if (key >= NUM_KEYS) return false;
+  return (combo_key_bitmap[key / 8] & (1 << (key % 8))) != 0;
+}
+
 static void flush_events(uint8_t count_to_flush);
+
+// Recursion guard for flush_events
+static bool flush_in_progress = false;
 
 static void queue_push(uint8_t key, bool pressed, uint32_t time) {
   if (queue_count >= COMBO_QUEUE_SIZE) {
@@ -391,6 +421,9 @@ static void queue_pop(void) {
 
 // Flush unconsumed events up to a certain point
 static void flush_events(uint8_t count_to_flush) {
+  if (flush_in_progress) return; // Prevent recursion
+  flush_in_progress = true;
+  
   for (uint8_t i = 0; i < count_to_flush && queue_count > 0; i++) {
     combo_event_t *ev = queue_peek(0);
     
@@ -402,31 +435,19 @@ static void flush_events(uint8_t count_to_flush) {
     
     queue_pop();
   }
+  
+  flush_in_progress = false;
 }
 
-// Helper: Check if a key is part of ANY combo in the current layer
-static bool is_key_in_any_combo(uint8_t key) {
-  const uint8_t current_layer = layout_get_current_layer();
-  
-  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
-    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
-    if (ak->type != AK_TYPE_COMBO || ak->layer != current_layer)
-      continue;
-      
-    for (int k = 0; k < 4; k++) {
-      if (ak->combo.keys[k] == key) return true;
-    }
-  }
-  return false;
-}
+
 
 // Evaluate status of a specific combo definition against the buffer
+// Only press events in the queue are considered for combo matching.
 // Returns: 
 // 0 = No match
-// 1 = Candidate (Partial match)
+// 1 = Candidate (Partial match, still possible)
 // 2 = Full Match (All keys pressed within term)
 static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
-  uint32_t first_press_time = 0;
   int keys_found = 0;
   int keys_required = 0;
   bool active_part[4] = {0};
@@ -434,7 +455,7 @@ static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
   
   // Count required keys
   for (int k = 0; k < 4; k++) {
-      if (ak->combo.keys[k] != 255 && ak->combo.keys[k] < NUM_KEYS) {
+      if (ak->combo.keys[k] != COMBO_KEY_NONE && ak->combo.keys[k] < NUM_KEYS) {
           keys_required++;
       }
   }
@@ -444,26 +465,25 @@ static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
     combo_event_t *ev = queue_peek(i);
     if (!ev || ev->consumed) continue; 
     
+    // Release events are not queued (handled immediately in combo_process),
+    // but skip them defensively if present.
+    if (!ev->pressed) continue;
+    
     bool is_part = false;
     for (int k = 0; k < 4; k++) {
         if (ak->combo.keys[k] == ev->key) {
             is_part = true;
-            if (ev->pressed) {
-                if (!active_part[k]) {
-                   active_part[k] = true;
-                   key_times[k] = ev->time;
-                   if (first_press_time == 0) first_press_time = ev->time;
-                }
-            } else {
-                active_part[k] = false;
+            if (!active_part[k]) {
+               active_part[k] = true;
+               key_times[k] = ev->time;
             }
             break;
         }
     }
     
-    if (!is_part && ev->pressed) {
-        // Foreign key press detected
-        // Interrupt the combo candidate
+    if (!is_part) {
+        // Foreign key press detected in the queue
+        // This interrupts the combo candidate
         return 0;
     }
   }
@@ -476,8 +496,8 @@ static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
   uint16_t term = ak->combo.term > 0 ? ak->combo.term : DEFAULT_COMBO_TERM;
 
   if (keys_found == keys_required) {
-      uint32_t min_t = key_times[0];
-      uint32_t max_t = key_times[0];
+      uint32_t min_t = 0;
+      uint32_t max_t = 0;
       bool first = true;
       for (int k=0; k<4; k++) {
            if (active_part[k]) {
@@ -515,6 +535,7 @@ static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
 
 static void process_combo_logic(uint32_t current_time) {
   const uint8_t current_layer = layout_get_current_layer();
+  combo_key_bitmap_rebuild(current_layer);
   
   int best_match_idx = -1;
   int best_match_len = 0;
@@ -603,28 +624,44 @@ static void process_combo_logic(uint32_t current_time) {
 }
 
 bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time) {
+  const uint8_t current_layer = layout_get_current_layer();
+  combo_key_bitmap_rebuild(current_layer);
+  
+  bool key_in_combo = is_key_in_any_combo(key);
+  
   // Fast path: If queue is empty and this key is not in any combo, pass through
-  if (queue_count == 0 && !is_key_in_any_combo(key)) {
+  if (queue_count == 0 && !key_in_combo) {
       return false; 
   }
 
-  // ── Interrupt handling ──
-  // If a non-combo key is PRESSED while we have pending events,
-  // flush all pending events first (preserving order), then let the
-  // non-combo key pass through normally.
-  if (pressed && queue_count > 0 && !is_key_in_any_combo(key)) {
-      flush_events(queue_count);
+  // ── Non-combo key handling ──
+  // Press: flush all pending events, then let this key pass through normally.
+  // Release: always pass through (its press was already handled normally).
+  if (!key_in_combo) {
+      if (pressed && queue_count > 0) {
+          flush_events(queue_count);
+      }
       return false; // Let caller process this key normally
   }
 
-  // Add to queue
+  // ── Release of a combo key ──
+  // Don't queue release events. Pass them through immediately
+  // so key-up reports are not delayed. Then re-evaluate combo state:
+  // the release may have killed all candidates, triggering an
+  // immediate flush inside process_combo_logic.
+  if (!pressed) {
+      if (layout_process_key(key, false)) {
+          pending_activity = true;
+      }
+      // Re-evaluate: release may have killed all candidates
+      if (queue_count > 0) {
+          process_combo_logic(time);
+      }
+      return true; // We handled this event
+  }
+
+  // ── Press of a combo key: queue it ──
   queue_push(key, pressed, time);
-  
-  // ── Early flush on release ──
-  // When a combo-constituent key is released, re-evaluate.
-  // If it was released before the combo completed, all candidates using
-  // that key become impossible. process_combo_logic will detect
-  // "no candidates" and flush immediately, eliminating the wait.
   process_combo_logic(time);
   
   return true;
@@ -640,3 +677,7 @@ bool advanced_key_combo_task(void) {
   return pending_activity;
 }
 
+// Called when layer changes or profile reloads to invalidate the bitmap cache
+void advanced_key_combo_invalidate_cache(void) {
+  combo_key_bitmap_layer = 255;
+}

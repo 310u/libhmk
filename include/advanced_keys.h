@@ -195,3 +195,4 @@ bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time);
  * @return None
  */
 bool advanced_key_combo_task(void);
+void advanced_key_combo_invalidate_cache(void);
