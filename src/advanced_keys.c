@@ -338,157 +338,275 @@ void advanced_key_tick(bool has_non_tap_hold_press,
 // Combo Implementation
 //--------------------------------------------------------------------+
 
-#define COMBO_BUFFER_SIZE 8
+#define COMBO_QUEUE_SIZE 16
 #define DEFAULT_COMBO_TERM 50
 
 typedef struct {
   uint8_t key;
   bool pressed;
   uint32_t time;
+  // Whether the event has been consumed by a combo match
+  bool consumed;
 } combo_event_t;
 
-static combo_event_t combo_buffer[COMBO_BUFFER_SIZE];
-static uint8_t combo_buffer_count = 0;
-static uint32_t combo_timer = 0;
-static bool combo_active = false;
-static uint8_t active_combo_idx = 255; // 255 = No active combo
+// Event queue (Ring buffer)
+static combo_event_t event_queue[COMBO_QUEUE_SIZE];
+static uint8_t queue_head = 0; // Read index
+static uint8_t queue_tail = 0; // Write index
+static uint8_t queue_count = 0;
 
-static const advanced_key_t *get_combo(uint8_t idx) {
-    if (idx >= NUM_ADVANCED_KEYS) return NULL;
-    return &CURRENT_PROFILE.advanced_keys[idx];
+// Track if any activity occurred during processing (for layout task return)
+static bool pending_activity = false;
+
+static void queue_push(uint8_t key, bool pressed, uint32_t time) {
+  if (queue_count >= COMBO_QUEUE_SIZE) {
+    return;
+  }
+  
+  event_queue[queue_tail] = (combo_event_t){
+      .key = key,
+      .pressed = pressed,
+      .time = time,
+      .consumed = false,
+  };
+  queue_tail = (queue_tail + 1) % COMBO_QUEUE_SIZE;
+  queue_count++;
 }
 
-static bool process_buffered_keys(void) {
-  bool has_non_tap_hold_press = false;
-  for (uint8_t i = 0; i < combo_buffer_count; i++) {
-    if (layout_process_key(combo_buffer[i].key, combo_buffer[i].pressed))
-      has_non_tap_hold_press = true;
-  }
-  combo_buffer_count = 0;
-  combo_active = false;
-  active_combo_idx = 255;
-  return has_non_tap_hold_press;
+static combo_event_t *queue_peek(uint8_t offset) {
+  if (offset >= queue_count) return NULL;
+  return &event_queue[(queue_head + offset) % COMBO_QUEUE_SIZE];
 }
 
-bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time) {
-  // If a combo is already active
-  if (active_combo_idx != 255) {
-      const advanced_key_t *ak = get_combo(active_combo_idx);
-      // Check if this key is part of the combo
-      bool is_combo_part = false;
-      for(int i=0; i<4; i++) {
-          if (ak->combo.keys[i] == key) {
-              is_combo_part = true;
-              break;
-          }
-      }
-      
-      if (is_combo_part) {
-          if (!pressed) {
-              // Release the combo
-              layout_unregister(255, ak->combo.output_keycode);
-              active_combo_idx = 255;
-              // We don't release the constituent keys as they were consumed by the combo
-              
-              // However, if there are other keys still held from the combo, we might need to handle them?
-              // Simple logic: First release breaks the combo.
-              // Remaining keys will be released naturally?
-              // If A+B -> C. Release A -> Release C. B is still held.
-              // When B is released later, it enters here.
-              // active_combo_idx is 255. B is not part of active combo.
-              // It goes to "buffer processing".
-              // But B was already "consummed" physically.
-              // If we forward Release B, and B was never Registered, it's fine (unregister is safe).
-          }
-          return true; // Consume event
-      } else {
-          // Key press not part of combo.
-          // Allow it to pass through?
-          // Yes.
-          return false;
-      }
-  }
+static void queue_pop(void) {
+  if (queue_count == 0) return;
+  queue_head = (queue_head + 1) % COMBO_QUEUE_SIZE;
+  queue_count--;
+}
 
-  // If buffer is full, process immediately (fallback)
-  if (combo_buffer_count >= COMBO_BUFFER_SIZE) {
-    process_buffered_keys();
-    // Fall through to process current key normally?
-    // No, current key should probably start a new buffer if pressed.
-    // For simplicity, just return false (process immediately).
-    return false;
-  }
-
-  if (!combo_active && pressed) {
-    combo_active = true;
-    combo_timer = time;
-  }
-
-  if (combo_active) {
-    combo_buffer[combo_buffer_count++] = (combo_event_t){.key = key, .pressed = pressed, .time = time};
+// Flush unconsumed events up to a certain point
+static void flush_events(uint8_t count_to_flush) {
+  for (uint8_t i = 0; i < count_to_flush && queue_count > 0; i++) {
+    combo_event_t *ev = queue_peek(0);
     
-    const uint8_t current_layer = layout_get_current_layer();
-    // Check for combos
-    for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
-        const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
-        if (ak->type != AK_TYPE_COMBO) continue;
-        if (ak->layer != current_layer) continue;
-        
-        // Check if all combo keys are pressed in the buffer
-        // And ensure no defined keys are missing
-        
-        int match_count = 0;
-        int required_count = 0;
-        
-        for (int k=0; k<4; k++) {
-            uint8_t c_key = ak->combo.keys[k];
-            // Assuming 0 is a valid key, we need a way to mark empty. 
-            // In C initialization, 0 is often default.
-            // But 0 is KC_A usually or similar? No, key index 0.
-            // Let's assume keys are dense packed and we check all 4.
-            // But user might only define 2 keys.
-            // Since we can't easily distinguish "Key 0" from "Empty", 
-            // maybe we should use a specific value or count?
-            // HMK_MAX_NUM_KEYS is 256. key is uint8_t.
-            // So we can't use 255 as empty if 255 is a valid key.
-            // But typically keyboards have < 255 keys. MAX_KEYS define check?
-            // checking common.h: NUM_KEYS <= 256. 
-            // If NUM_KEYS < 255, we can use 255.
-            // Safest: Check against NUM_KEYS.
-            
-            if (c_key < NUM_KEYS && c_key != 255) {
-                required_count++;
-                bool found = false;
-                for(int j=0; j<combo_buffer_count; j++) {
-                    if (combo_buffer[j].pressed && combo_buffer[j].key == c_key) {
-                        found = true;
-                        break;
-                    }
+    if (!ev->consumed) {
+       if (layout_process_key(ev->key, ev->pressed)) {
+           pending_activity = true;
+       }
+    }
+    
+    queue_pop();
+  }
+}
+
+// Helper: Check if a key is part of ANY combo in the current layer
+static bool is_key_in_any_combo(uint8_t key) {
+  const uint8_t current_layer = layout_get_current_layer();
+  
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+    if (ak->type != AK_TYPE_COMBO || ak->layer != current_layer)
+      continue;
+      
+    for (int k = 0; k < 4; k++) {
+      if (ak->combo.keys[k] == key) return true;
+    }
+  }
+  return false;
+}
+
+// Evaluate status of a specific combo definition against the buffer
+// Returns: 
+// 0 = No match
+// 1 = Candidate (Partial match)
+// 2 = Full Match (All keys pressed within term)
+static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
+  uint32_t first_press_time = 0;
+  int keys_found = 0;
+  int keys_required = 0;
+  bool active_part[4] = {0};
+  uint32_t key_times[4] = {0};
+  
+  // Count required keys
+  for (int k = 0; k < 4; k++) {
+      if (ak->combo.keys[k] != 255 && ak->combo.keys[k] < NUM_KEYS) {
+          keys_required++;
+      }
+  }
+  if (keys_required == 0) return 0;
+
+  for (uint8_t i = 0; i < queue_count; i++) {
+    combo_event_t *ev = queue_peek(i);
+    if (!ev || ev->consumed) continue; 
+    
+    bool is_part = false;
+    for (int k = 0; k < 4; k++) {
+        if (ak->combo.keys[k] == ev->key) {
+            is_part = true;
+            if (ev->pressed) {
+                if (!active_part[k]) {
+                   active_part[k] = true;
+                   key_times[k] = ev->time;
+                   if (first_press_time == 0) first_press_time = ev->time;
                 }
-                if (found) match_count++;
+            } else {
+                active_part[k] = false;
             }
-        }
-        
-        if (required_count > 0 && match_count == required_count) {
-             // Match found!
-             active_combo_idx = i;
-             layout_register(255, ak->combo.output_keycode);
-             
-             // Clear buffer (events consumed)
-             combo_buffer_count = 0;
-             combo_active = false;
-             return true; 
+            break;
         }
     }
     
-    return true; // Buffer and consume
+    if (!is_part && ev->pressed) {
+        // Foreign key press detected
+        // Interrupt the combo candidate
+        return 0;
+    }
+  }
+  
+  keys_found = 0;
+  for (int k=0; k<4; k++) {
+      if (ak->combo.keys[k] < NUM_KEYS && active_part[k]) keys_found++;
+  }
+  
+  uint16_t term = ak->combo.term > 0 ? ak->combo.term : DEFAULT_COMBO_TERM;
+
+  if (keys_found == keys_required) {
+      uint32_t min_t = key_times[0];
+      uint32_t max_t = key_times[0];
+      bool first = true;
+      for (int k=0; k<4; k++) {
+           if (active_part[k]) {
+               if (first) { min_t = max_t = key_times[k]; first = false; }
+               else {
+                   if (key_times[k] < min_t) min_t = key_times[k];
+                   if (key_times[k] > max_t) max_t = key_times[k];
+               }
+           }
+      }
+       
+      if ((max_t - min_t) <= term) {
+           return 2; // Full Match
+      }
+      return 0; // Timing failed
+  }
+  
+  if (keys_found > 0) {
+      uint32_t min_t = 0;
+      bool first = true;
+      for (int k=0; k<4; k++) {
+          if (active_part[k]) {
+             if (first) { min_t = key_times[k]; first = false; }
+             else if (key_times[k] < min_t) min_t = key_times[k];
+          }
+      }
+      
+      if (!first && (current_time - min_t) <= term) {
+          return 1; // Candidate
+      }
+  }
+  
+  return 0;
+}
+
+static void process_combo_logic(uint32_t current_time) {
+  const uint8_t current_layer = layout_get_current_layer();
+  
+  int best_match_idx = -1;
+  int best_match_len = 0;
+  bool pending_candidates = false;
+  
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+    if (ak->type != AK_TYPE_COMBO || ak->layer != current_layer)
+      continue;
+      
+    int status = check_combo_match(ak, current_time);
+    
+    if (status == 2) { 
+        int len = 0;
+        for(int k=0; k<4; k++) if(ak->combo.keys[k] < NUM_KEYS) len++;
+        
+        if (len > best_match_len) {
+            best_match_idx = (int)i;
+            best_match_len = len;
+        } else if (len == best_match_len) {
+            if (best_match_idx == -1 || (int)i < best_match_idx) {
+                best_match_idx = (int)i;
+                best_match_len = len;
+            }
+        }
+    } else if (status == 1) {
+        pending_candidates = true;
+    }
+  }
+  
+  if (best_match_idx != -1) {
+      if (pending_candidates) {
+          combo_event_t *head = queue_peek(0);
+          if (head && (current_time - head->time) > DEFAULT_COMBO_TERM) {
+             goto execute_match;
+          }
+          return; 
+      }
+      
+      execute_match:
+      {
+          const advanced_key_t *match_ak = &CURRENT_PROFILE.advanced_keys[best_match_idx];
+          
+          for (uint8_t q = 0; q < queue_count; q++) {
+              combo_event_t *ev = queue_peek(q);
+              if (!ev || ev->consumed) continue;
+              
+              for (int k=0; k<4; k++) {
+                  if (match_ak->combo.keys[k] == ev->key) {
+                      ev->consumed = true;
+                      break; 
+                  }
+              }
+          }
+          
+          layout_register(255, match_ak->combo.output_keycode);
+          
+          deferred_action_t da = {
+              .type = DEFERRED_ACTION_TYPE_RELEASE,
+              .key = 255,
+              .keycode = match_ak->combo.output_keycode,
+          };
+          deferred_action_push(&da);
+
+          pending_activity = true;
+          
+          flush_events(queue_count);
+      }
+  } else {
+      if (pending_candidates) {
+          combo_event_t *head = queue_peek(0);
+          if (head && (current_time - head->time) > DEFAULT_COMBO_TERM) {
+             flush_events(1);
+          }
+      } else {
+          flush_events(queue_count);
+      }
+  }
+}
+
+bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time) {
+  if (queue_count == 0 && !is_key_in_any_combo(key)) {
+      return false; 
   }
 
-  return false;
+  queue_push(key, pressed, time);
+  process_combo_logic(time);
+  
+  return true;
 }
 
 bool advanced_key_combo_task(void) {
-  if (combo_active && timer_elapsed(combo_timer) > DEFAULT_COMBO_TERM) {
-    return process_buffered_keys();
+  pending_activity = false;
+  
+  if (queue_count > 0) {
+      process_combo_logic(timer_read());
   }
-  return false;
+  
+  return pending_activity;
 }
