@@ -358,6 +358,8 @@ static uint8_t queue_count = 0;
 // Track if any activity occurred during processing (for layout task return)
 static bool pending_activity = false;
 
+static void flush_events(uint8_t count_to_flush);
+
 static void queue_push(uint8_t key, bool pressed, uint32_t time) {
   if (queue_count >= COMBO_QUEUE_SIZE) {
     // Queue full: Force flush the oldest event to make room
