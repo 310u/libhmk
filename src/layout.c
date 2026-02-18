@@ -111,6 +111,15 @@ static uint8_t active_advanced_keys[NUM_KEYS];
 
 void layout_init(void) { layout_load_advanced_keys(); }
 
+/**
+ * @brief Reload advanced key indices from the current profile.
+ *
+ * DESIGN INVARIANT: All code paths that modify CURRENT_PROFILE.advanced_keys
+ * (profile switch, reset, duplicate, hmkconf update) MUST call this function.
+ * This is the sole gateway for config changes that affect combo bitmap cache.
+ * If a new config-change path is added without calling this function,
+ * the combo bitmap cache will become stale and produce incorrect behavior.
+ */
 void layout_load_advanced_keys(void) {
   memset(advanced_key_indices, 0, sizeof(advanced_key_indices));
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
@@ -126,7 +135,10 @@ void layout_load_advanced_keys(void) {
       advanced_key_indices[ak->layer][ak->null_bind.secondary_key] = i + 1;
   }
   
-  // Invalidate combo bitmap cache so it's rebuilt with updated definitions
+  // Invalidate combo bitmap cache so it's rebuilt with updated definitions.
+  // Layer changes are handled lazily by combo_key_bitmap_rebuild() checking
+  // combo_key_bitmap_layer != current_layer. This invalidation covers the
+  // case where definitions change but the layer stays the same.
   advanced_key_combo_invalidate_cache();
 }
 

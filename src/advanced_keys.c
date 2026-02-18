@@ -419,9 +419,15 @@ static void queue_pop(void) {
   queue_count--;
 }
 
-// Flush unconsumed events up to a certain point
+// Flush unconsumed events up to a certain point.
+// 
+// SAFETY: The recursion guard (flush_in_progress) may cause a flush call to
+// be skipped if re-entered (e.g. queue_push overflow during flush).
+// This is safe because skipped events remain in the queue and will be
+// processed on the next advanced_key_combo_task() tick or the next key
+// event, so no input is permanently lost.
 static void flush_events(uint8_t count_to_flush) {
-  if (flush_in_progress) return; // Prevent recursion
+  if (flush_in_progress) return; // Prevent recursion (events stay in queue)
   flush_in_progress = true;
   
   for (uint8_t i = 0; i < count_to_flush && queue_count > 0; i++) {
