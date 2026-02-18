@@ -360,7 +360,10 @@ static bool pending_activity = false;
 
 static void queue_push(uint8_t key, bool pressed, uint32_t time) {
   if (queue_count >= COMBO_QUEUE_SIZE) {
-    return;
+    // Queue full: Force flush the oldest event to make room
+    flush_events(1);
+    // If flush failed (e.g. recursion guard or logic error), we might still be full.
+    // In this simple implementation, flush_events always pops, so space is guaranteed.
   }
   
   event_queue[queue_tail] = (combo_event_t){
@@ -514,6 +517,7 @@ static void process_combo_logic(uint32_t current_time) {
   int best_match_idx = -1;
   int best_match_len = 0;
   bool pending_candidates = false;
+  uint16_t max_pending_term = DEFAULT_COMBO_TERM;
   
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
     const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
@@ -537,13 +541,15 @@ static void process_combo_logic(uint32_t current_time) {
         }
     } else if (status == 1) {
         pending_candidates = true;
+        uint16_t term = ak->combo.term > 0 ? ak->combo.term : DEFAULT_COMBO_TERM;
+        if (term > max_pending_term) max_pending_term = term;
     }
   }
   
   if (best_match_idx != -1) {
       if (pending_candidates) {
           combo_event_t *head = queue_peek(0);
-          if (head && (current_time - head->time) > DEFAULT_COMBO_TERM) {
+          if (head && (current_time - head->time) > max_pending_term) {
              goto execute_match;
           }
           return; 
@@ -581,7 +587,7 @@ static void process_combo_logic(uint32_t current_time) {
   } else {
       if (pending_candidates) {
           combo_event_t *head = queue_peek(0);
-          if (head && (current_time - head->time) > DEFAULT_COMBO_TERM) {
+          if (head && (current_time - head->time) > max_pending_term) {
              flush_events(1);
           }
       } else {
