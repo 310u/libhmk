@@ -125,6 +125,9 @@ void layout_load_advanced_keys(void) {
       // Null Bind advanced keys also have a secondary key
       advanced_key_indices[ak->layer][ak->null_bind.secondary_key] = i + 1;
   }
+  
+  // Invalidate combo bitmap cache so it's rebuilt with updated definitions
+  advanced_key_combo_invalidate_cache();
 }
 
 bool layout_process_key(uint8_t key, bool pressed) {
