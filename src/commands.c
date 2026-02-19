@@ -158,8 +158,12 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->keymap) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    success = EECONFIG_WRITE_N(profiles[p->profile].keymap[p->layer][p->offset],
-                               p->keymap, sizeof(uint8_t) * p->len);
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, keymap) +
+                    p->layer * sizeof(eeconfig->profiles[0].keymap[0]) +
+                    p->offset * sizeof(uint8_t);
+    success = wear_leveling_write(addr, p->keymap, sizeof(uint8_t) * p->len);
     break;
   }
   case COMMAND_GET_ACTUATION_MAP: {
@@ -183,8 +187,11 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->actuation_map) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    success = EECONFIG_WRITE_N(profiles[p->profile].actuation_map[p->offset],
-                               p->actuation_map, sizeof(actuation_t) * p->len);
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, actuation_map) +
+                    p->offset * sizeof(actuation_t);
+    success = wear_leveling_write(addr, p->actuation_map, sizeof(actuation_t) * p->len);
     break;
   }
   case COMMAND_GET_ADVANCED_KEYS: {
@@ -210,9 +217,12 @@ void command_process(const uint8_t *buf) {
 
     if (p->profile == eeconfig->current_profile)
       advanced_key_clear();
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, advanced_keys) +
+                    p->offset * sizeof(advanced_key_t);
     success =
-        EECONFIG_WRITE_N(profiles[p->profile].advanced_keys[p->offset],
-                         p->advanced_keys, sizeof(advanced_key_t) * p->len);
+        wear_leveling_write(addr, p->advanced_keys, sizeof(advanced_key_t) * p->len);
     if (p->profile == eeconfig->current_profile)
       layout_load_advanced_keys();
     break;
@@ -230,7 +240,10 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
 
-    success = EECONFIG_WRITE(profiles[p->profile].tick_rate, &p->tick_rate);
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, tick_rate);
+    success = wear_leveling_write(addr, &p->tick_rate, sizeof(p->tick_rate));
     break;
   }
   case COMMAND_GET_GAMEPAD_BUTTONS: {
@@ -254,8 +267,11 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->gamepad_buttons) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    success = EECONFIG_WRITE_N(profiles[p->profile].gamepad_buttons[p->offset],
-                               p->gamepad_buttons, sizeof(uint8_t) * p->len);
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, gamepad_buttons) +
+                    p->offset * sizeof(uint8_t);
+    success = wear_leveling_write(addr, p->gamepad_buttons, sizeof(uint8_t) * p->len);
     break;
   }
   case COMMAND_GET_GAMEPAD_OPTIONS: {
@@ -271,8 +287,40 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
 
-    success = EECONFIG_WRITE(profiles[p->profile].gamepad_options,
-                             &p->gamepad_options);
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, gamepad_options);
+    success = wear_leveling_write(addr, &p->gamepad_options, sizeof(p->gamepad_options));
+    break;
+  }
+  case COMMAND_GET_MACROS: {
+    const command_in_macros_t *p = &in->macros;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < NUM_MACROS);
+
+    memcpy(out->macros, eeconfig->profiles[p->profile].macros + p->offset,
+           M_MIN(M_ARRAY_SIZE(out->macros),
+                 (uint32_t)(NUM_MACROS - p->offset)) *
+               sizeof(macro_t));
+    break;
+  }
+  case COMMAND_SET_MACROS: {
+    const command_in_macros_t *p = &in->macros;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < NUM_MACROS);
+    COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->macros) &&
+                   p->len <= NUM_MACROS - p->offset);
+
+    // EECONFIG_WRITE_N cannot be used here because the field contains variables
+    // (p->profile, p->offset), which are not allowed in offsetof().
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, macros) +
+                    p->offset * sizeof(macro_t);
+
+    success = wear_leveling_write(addr, p->macros, sizeof(macro_t) * p->len);
     break;
   }
   default: {

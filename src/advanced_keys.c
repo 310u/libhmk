@@ -339,6 +339,20 @@ void advanced_key_process(const advanced_key_event_t *event) {
     advanced_key_toggle(event);
     break;
 
+  case AK_TYPE_MACRO: {
+    ak_state_macro_t *state = &ak_states[event->ak_index].macro;
+    if (event->type == AK_EVENT_TYPE_PRESS && !state->is_playing) {
+      const macro_key_t *mk =
+          &CURRENT_PROFILE.advanced_keys[event->ak_index].macro_key;
+      if (mk->macro_index < NUM_MACROS) {
+        state->event_index = 0;
+        state->delay_until = 0;
+        state->is_playing = true;
+      }
+    }
+    break;
+  }
+
   default:
     break;
   }
@@ -428,6 +442,63 @@ void advanced_key_tick(bool has_non_tap_hold_press,
         state->toggle.is_toggled = false;
       }
       break;
+
+    case AK_TYPE_MACRO: {
+      if (!state->macro.is_playing)
+        break;
+
+      // If waiting for a delay, check if it has elapsed
+      if (state->macro.delay_until > 0) {
+        if (timer_read() < state->macro.delay_until)
+          break;
+        state->macro.delay_until = 0;
+      }
+
+      const macro_key_t *mk = &ak->macro_key;
+      if (mk->macro_index >= NUM_MACROS) {
+        state->macro.is_playing = false;
+        break;
+      }
+
+      const macro_t *macro = &CURRENT_PROFILE.macros[mk->macro_index];
+      const macro_event_t *evt =
+          &macro->events[state->macro.event_index];
+
+      if (evt->action == MACRO_ACTION_END ||
+          state->macro.event_index >= MAX_MACRO_EVENTS) {
+        state->macro.is_playing = false;
+        break;
+      }
+
+      switch (evt->action) {
+      case MACRO_ACTION_TAP: {
+        static deferred_action_t macro_deferred = {0};
+        macro_deferred = (deferred_action_t){
+            .type = DEFERRED_ACTION_TYPE_RELEASE,
+            .key = ak->key,
+            .keycode = evt->keycode,
+        };
+        if (deferred_action_push(&macro_deferred))
+          layout_register(ak->key, evt->keycode);
+        break;
+      }
+      case MACRO_ACTION_PRESS:
+        layout_register(ak->key, evt->keycode);
+        break;
+      case MACRO_ACTION_RELEASE:
+        layout_unregister(ak->key, evt->keycode);
+        break;
+      case MACRO_ACTION_DELAY:
+        state->macro.delay_until =
+            timer_read() + (uint32_t)evt->keycode * 10;
+        break;
+      default:
+        break;
+      }
+
+      state->macro.event_index++;
+      break;
+    }
 
     default:
       break;

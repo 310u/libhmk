@@ -310,6 +310,9 @@ void layout_task(void) {
           pending_count < MAX_PENDING_EVENTS) {
         pending_events[pending_count++] = (typeof(pending_events[0])){
             .key = key, .pressed = true};
+        // Still signal that a non-hold-tap key was pressed so that
+        // advanced_key_tick can set the 'interrupted' flag correctly.
+        has_non_tap_hold_press = true;
         goto update_event_state;
       }
 
@@ -318,6 +321,22 @@ void layout_task(void) {
     } else {
       if (advanced_key_combo_process(key, false, events[i].event_time))
         goto update_event_state;
+
+      // If this key was buffered as a press, also buffer its release
+      // to maintain correct ordering.
+      bool is_pending = false;
+      for (uint8_t p = 0; p < pending_count; p++) {
+        if (pending_events[p].key == key && pending_events[p].pressed) {
+          is_pending = true;
+          break;
+        }
+      }
+      if (is_pending && pending_count < MAX_PENDING_EVENTS) {
+        pending_events[pending_count++] = (typeof(pending_events[0])){
+            .key = key, .pressed = false};
+        has_non_tap_hold_release = true;
+        goto update_event_state;
+      }
 
       if (layout_process_key(key, false))
         has_non_tap_hold_release = true;

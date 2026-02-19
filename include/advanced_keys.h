@@ -97,6 +97,20 @@ typedef struct {
 } ak_state_combo_t;
 
 //--------------------------------------------------------------------+
+// Macro State
+//--------------------------------------------------------------------+
+
+// Macro state
+typedef struct {
+  // Current event index in the macro sequence
+  uint8_t event_index;
+  // Timestamp for delay tracking
+  uint32_t delay_until;
+  // Whether the macro is currently playing
+  bool is_playing;
+} ak_state_macro_t;
+
+//--------------------------------------------------------------------+
 // Advanced Key State
 //--------------------------------------------------------------------+
 
@@ -107,6 +121,7 @@ typedef union {
   ak_state_tap_hold_t tap_hold;
   ak_state_toggle_t toggle;
   ak_state_combo_t combo;
+  ak_state_macro_t macro;
 } advanced_key_state_t;
 
 //--------------------------------------------------------------------+

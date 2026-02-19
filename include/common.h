@@ -115,6 +115,7 @@ typedef enum {
   AK_TYPE_TAP_HOLD,
   AK_TYPE_TOGGLE,
   AK_TYPE_COMBO,
+  AK_TYPE_MACRO,
   AK_TYPE_COUNT,
 } ak_type_t;
 
@@ -197,6 +198,7 @@ typedef struct __attribute__((packed)) {
   uint16_t tapping_term;
   // Bit 0-1: flavor (tap_hold_flavor_t)
   // Bit 2:   retro_tapping
+  // Bit 3:   hold_while_undecided
   uint8_t flags;
   // If re-pressed within this time of the last tap, always produce tap (0 =
   // disabled)
@@ -223,6 +225,34 @@ typedef struct __attribute__((packed)) {
   uint16_t term;
 } combo_t;
 
+// Macro event actions
+typedef enum {
+  MACRO_ACTION_END = 0,     // End of sequence
+  MACRO_ACTION_TAP,         // Press + release
+  MACRO_ACTION_PRESS,       // Press only
+  MACRO_ACTION_RELEASE,     // Release only
+  MACRO_ACTION_DELAY,       // Delay (keycode field = delay in 10ms units)
+} macro_action_t;
+
+// Macro event (2 bytes)
+typedef struct __attribute__((packed)) {
+  uint8_t keycode;
+  uint8_t action;
+} macro_event_t;
+
+// Macro sequence
+#define MAX_MACRO_EVENTS 16
+typedef struct __attribute__((packed)) {
+  macro_event_t events[MAX_MACRO_EVENTS];
+} macro_t;
+
+#define NUM_MACROS 16
+
+// Macro key configuration (references a macro by index)
+typedef struct __attribute__((packed)) {
+  uint8_t macro_index;
+} macro_key_t;
+
 // Advanced key configuration
 typedef struct __attribute__((packed)) {
   uint8_t layer;
@@ -234,6 +264,7 @@ typedef struct __attribute__((packed)) {
     tap_hold_t tap_hold;
     toggle_t toggle;
     combo_t combo;
+    macro_key_t macro_key;
   };
 } advanced_key_t;
 
