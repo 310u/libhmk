@@ -179,11 +179,15 @@ typedef enum {
 // Tap-Hold flags bit layout
 #define TH_FLAVOR_MASK 0x03
 #define TH_RETRO_TAPPING_BIT 2
+#define TH_HOLD_WHILE_UNDECIDED_BIT 3
 
 #define TH_GET_FLAVOR(flags) ((flags) & TH_FLAVOR_MASK)
 #define TH_GET_RETRO_TAPPING(flags) (((flags) >> TH_RETRO_TAPPING_BIT) & 1)
-#define TH_MAKE_FLAGS(flavor, retro) \
-  (((flavor) & TH_FLAVOR_MASK) | ((retro) ? (1 << TH_RETRO_TAPPING_BIT) : 0))
+#define TH_GET_HOLD_WHILE_UNDECIDED(flags) \
+  (((flags) >> TH_HOLD_WHILE_UNDECIDED_BIT) & 1)
+#define TH_MAKE_FLAGS(flavor, retro, hwu) \
+  (((flavor) & TH_FLAVOR_MASK) | ((retro) ? (1 << TH_RETRO_TAPPING_BIT) : 0) | \
+   ((hwu) ? (1 << TH_HOLD_WHILE_UNDECIDED_BIT) : 0))
 
 // Tap-Hold configuration
 typedef struct __attribute__((packed)) {

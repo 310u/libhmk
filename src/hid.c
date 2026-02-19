@@ -117,13 +117,9 @@ void hid_keycode_add(uint8_t keycode) {
       }
     }
 
-    if (!found) {
-      if (num_6kro_keys == 6) {
-        // If the 6KRO report is full, remove the oldest key
-        for (uint32_t i = 0; i < 5; i++)
-          kb_report.keycodes[i] = kb_report.keycodes[i + 1];
-        num_6kro_keys--;
-      }
+    if (!found && num_6kro_keys < 6) {
+      // Only add to 6KRO array if there's room. The NKRO bitmap below
+      // always tracks all pressed keys regardless of 6KRO capacity.
       kb_report.keycodes[num_6kro_keys++] = hid_code;
     }
     kb_report.bitmap[hid_code / 8] |= 1 << (hid_code & 7);

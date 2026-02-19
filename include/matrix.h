@@ -73,6 +73,8 @@ typedef struct {
   uint8_t key_dir;
   // Whether the key is pressed
   bool is_pressed;
+  // Timestamp when is_pressed last changed (used for event ordering)
+  uint32_t event_time;
 } key_state_t;
 
 // Key matrix

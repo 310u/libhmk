@@ -119,13 +119,6 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 }
 
 void matrix_scan(void) {
-  // Buffer for keys that are pressed in this scan cycle
-  struct {
-    uint8_t key;
-    uint16_t distance_delta;
-  } pressed_keys[NUM_KEYS];
-  uint8_t pressed_keys_count = 0;
-
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     const uint16_t new_adc_filtered =
         EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
@@ -205,101 +198,14 @@ void matrix_scan(void) {
       }
     }
 
-    if (!was_pressed && key_matrix[i].is_pressed) {
-      // Key was just pressed, add to buffer
-      // Calculate how far past the actuation point the key is
-      uint16_t actuation_point = actuation->actuation_point;
-      // If valid RT press, estimation might need extremum, but for now simple
-      // distance - actuation is good enough proxy for "how early it was pressed"
-      // If we are in RT mode and pressed from UP, actuation is dynamic.
-      // But standard static actuation point is a safe baseline for comparison.
-      if (key_matrix[i].distance > actuation_point) {
-          pressed_keys[pressed_keys_count].key = i;
-          pressed_keys[pressed_keys_count].distance_delta = key_matrix[i].distance - actuation_point;
-          pressed_keys_count++;
-      } else {
-          // Edge case where distance == actuation_point or RT trigger logic differs
-          // Just add with delta 0
-          pressed_keys[pressed_keys_count].key = i;
-          pressed_keys[pressed_keys_count].distance_delta = 0;
-          pressed_keys_count++;
-      }
-    }
-  }
-  
-  // Sort pressed keys by distance_delta (descending)
-  // Deepest press = pressed earliest -> process first
-  for (uint8_t i = 0; i < pressed_keys_count; i++) {
-      for (uint8_t j = i + 1; j < pressed_keys_count; j++) {
-          if (pressed_keys[j].distance_delta > pressed_keys[i].distance_delta) {
-              // Swap
-              uint8_t temp_key = pressed_keys[i].key;
-              uint16_t temp_delta = pressed_keys[i].distance_delta;
-              pressed_keys[i] = pressed_keys[j];
-              pressed_keys[j].key = temp_key;
-              pressed_keys[j].distance_delta = temp_delta;
-          }
-      }
+    // Record the time when the key state changes. This is used by
+    // layout_task to process key events in chronological order instead of
+    // index order, preventing key input swapping on simultaneous presses.
+    if (key_matrix[i].is_pressed != was_pressed)
+      key_matrix[i].event_time = timer_read();
   }
 
-  // Iterate to register keys in sorted order?
-  // No, we already updated key_matrix[i].is_pressed state above.
-  // BUT the layout task reads key_matrix sequentially!
-  // We need to influence the layout task?
-  // Layout task iterates NUM_KEYS.
-  // Changing key_matrix state here is fine, but layout.c will still see Key 0 then Key 1.
-  
-  // Wait, layout.c consumes key_matrix.
-  // If we want layout processing to happen in order A then B, we need layout.c to know.
-  // OR we simply DON'T set is_pressed for the "later" key in this frame?
-  // Delay the "later" key (shallower press) to the next frame?
-  // Yes! "Defer" the shallower key.
-  
-  // If we have multiple pressed keys, only allow the N deepest?
-  // Or just allow them all?
-  // If we allow all, layout.c iterates 0..N.
-  // If H(10) and I(20) are both pressed.
-  // If I is deeper (pressed earlier), we want I then H.
-  // But layout scans 10 then 20.
-  // So we must HIDE H from this frame.
-  
-  // Logic:
-  // If multiple keys are pressed in this frame,
-  // Sort them.
-  // The "earliest" (deepest) one should be processed.
-  // The others should be artificially "unpressed" (reverted) for this frame?
-  // No, that delays them by 1 scan cycle (e.g. 1ms? 0.1ms?).
-  // With 8kHz USB, we want to send reports as fast as possible.
-  // If we delay H, it will be sent in the next report.
-  // 1 scan cycle delay is acceptable to fix ordering.
-  
-  // So:
-  // 1. Identify all NEWLY pressed keys.
-  // 2. Sort them by depth.
-  // 3. Keep the Top 1 (or Top N?) deep keys as "pressed".
-  // 4. Revert the state of others to "not pressed" (only for this frame's matrix state output).
-  //    Actually we just set key_matrix[i].is_pressed = false back.
-  //    Next scan they will likely be deeper and get picked up.
-  
-  // Refined Logic (Implemented):
-  // If count > 1:
-  // Sort.
-  // Keep index 0 (deepest) as is.
-  // For index 1..count-1 (shallower keys):
-  //   Reset is_pressed to false and key_dir to KEY_DIR_INACTIVE.
-  //   This effectively "cancels" the press for this frame.
-  //   In the next frame, distance will still be > actuation, so it will trigger a "new press" again.
-  //   This ensures the deeper key is registered first.
-  
-  for (uint8_t i = 1; i < pressed_keys_count; i++) {
-       uint8_t key_idx = pressed_keys[i].key;
-       // Force unpress to defer to next scan
-       key_matrix[key_idx].is_pressed = false;
-       // Reset key_dir to force re-evaluation of "new press" logic next frame
-       key_matrix[key_idx].key_dir = KEY_DIR_INACTIVE;
-  }
-
-   // Update persistent storage logic (unchanged)
+  // Update persistent storage logic
   if (eeconfig->options.save_bottom_out_threshold &&
       timer_elapsed(last_bottom_out_threshold_changed) >=
           MATRIX_INACTIVITY_TIMEOUT)

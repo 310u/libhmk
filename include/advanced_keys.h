@@ -211,3 +211,10 @@ void advanced_key_combo_invalidate_cache(void);
  * @return None
  */
 void advanced_key_update_last_key_time(uint32_t time);
+
+/**
+ * @brief Check if any Tap-Hold key is in undecided (TAP) stage
+ *
+ * @return true if any Tap-Hold key is undecided
+ */
+bool advanced_key_has_undecided(void);

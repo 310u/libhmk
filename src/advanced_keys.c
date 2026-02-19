@@ -208,11 +208,20 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
     state->stage = TAP_HOLD_STAGE_TAP;
     state->interrupted = false;
     state->other_key_released = false;
+    // If hold-while-undecided is enabled, immediately register the hold
+    // keycode. It will be unregistered if the key resolves as tap.
+    if (TH_GET_HOLD_WHILE_UNDECIDED(tap_hold->flags))
+      layout_register(event->key, tap_hold->hold_keycode);
     break;
   }
 
   case AK_EVENT_TYPE_RELEASE:
     if (state->stage == TAP_HOLD_STAGE_TAP) {
+      // If hold-while-undecided was active, unregister the hold keycode
+      // before registering the tap keycode.
+      if (TH_GET_HOLD_WHILE_UNDECIDED(tap_hold->flags))
+        layout_unregister(event->key, tap_hold->hold_keycode);
+
       const bool retro = TH_GET_RETRO_TAPPING(tap_hold->flags);
       if (retro && !state->interrupted &&
           timer_elapsed(state->since) >= tap_hold->tapping_term) {
@@ -240,8 +249,11 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
       }
       // Record the tap time for quick_tap_ms feature
       last_tap_hold_tap_time[event->ak_index] = timer_read();
-    } else if (state->stage == TAP_HOLD_STAGE_HOLD)
+    } else if (state->stage == TAP_HOLD_STAGE_HOLD) {
+      // If hold-while-undecided was active, the hold keycode is already
+      // registered, so we just need to unregister it.
       layout_unregister(event->key, tap_hold->hold_keycode);
+    }
     state->stage = TAP_HOLD_STAGE_NONE;
     break;
 
@@ -377,8 +389,31 @@ void advanced_key_tick(bool has_non_tap_hold_press,
       }
 
       if (should_hold) {
-        layout_register(ak->key, ak->tap_hold.hold_keycode);
+        // If hold-while-undecided is NOT active, register the hold keycode
+        // now. If it IS active, the hold keycode was already registered
+        // on press.
+        if (!TH_GET_HOLD_WHILE_UNDECIDED(ak->tap_hold.flags))
+          layout_register(ak->key, ak->tap_hold.hold_keycode);
         state->tap_hold.stage = TAP_HOLD_STAGE_HOLD;
+      } else if (flavor == TAP_HOLD_FLAVOR_TAP_UNLESS_INTERRUPTED && expired &&
+                 !state->tap_hold.interrupted) {
+        // Eagerly resolve as tap when tapping term expires without
+        // interruption. This avoids the key staying in TAP stage until
+        // release, which would cause noticeable input latency.
+        // If hold-while-undecided is active, unregister the hold keycode
+        // first.
+        if (TH_GET_HOLD_WHILE_UNDECIDED(ak->tap_hold.flags))
+          layout_unregister(ak->key, ak->tap_hold.hold_keycode);
+        static deferred_action_t deferred = {0};
+        deferred = (deferred_action_t){
+            .type = DEFERRED_ACTION_TYPE_RELEASE,
+            .key = ak->key,
+            .keycode = ak->tap_hold.tap_keycode,
+        };
+        if (deferred_action_push(&deferred))
+          layout_register(ak->key, ak->tap_hold.tap_keycode);
+        last_tap_hold_tap_time[i] = timer_read();
+        state->tap_hold.stage = TAP_HOLD_STAGE_NONE;
       }
       break;
     }
@@ -402,6 +437,15 @@ void advanced_key_tick(bool has_non_tap_hold_press,
 
 void advanced_key_update_last_key_time(uint32_t time) {
   last_non_mod_key_time = time;
+}
+
+bool advanced_key_has_undecided(void) {
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    if (CURRENT_PROFILE.advanced_keys[i].type == AK_TYPE_TAP_HOLD &&
+        ak_states[i].tap_hold.stage == TAP_HOLD_STAGE_TAP)
+      return true;
+  }
+  return false;
 }
 
 //--------------------------------------------------------------------+
