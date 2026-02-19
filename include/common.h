@@ -164,21 +164,42 @@ typedef struct __attribute__((packed)) {
   uint8_t bottom_out_point;
 } dynamic_keystroke_t;
 
+// Tap-Hold interrupt flavors (ZMK-style)
+typedef enum {
+  // Hold if tapping term expired OR another key is pressed
+  TAP_HOLD_FLAVOR_HOLD_PREFERRED = 0,
+  // Hold if tapping term expired OR another key is pressed AND released
+  TAP_HOLD_FLAVOR_BALANCED,
+  // Hold only if tapping term expired
+  TAP_HOLD_FLAVOR_TAP_PREFERRED,
+  // Hold only if another key is pressed BEFORE tapping term expires
+  TAP_HOLD_FLAVOR_TAP_UNLESS_INTERRUPTED,
+} tap_hold_flavor_t;
+
+// Tap-Hold flags bit layout
+#define TH_FLAVOR_MASK 0x03
+#define TH_RETRO_TAPPING_BIT 2
+
+#define TH_GET_FLAVOR(flags) ((flags) & TH_FLAVOR_MASK)
+#define TH_GET_RETRO_TAPPING(flags) (((flags) >> TH_RETRO_TAPPING_BIT) & 1)
+#define TH_MAKE_FLAGS(flavor, retro) \
+  (((flavor) & TH_FLAVOR_MASK) | ((retro) ? (1 << TH_RETRO_TAPPING_BIT) : 0))
+
 // Tap-Hold configuration
 typedef struct __attribute__((packed)) {
   uint8_t tap_keycode;
   uint8_t hold_keycode;
   // Tapping term in milliseconds
   uint16_t tapping_term;
-  // Whether to immediately register the hold action if another non-Tap-Hold key
-  // is pressed, regardless of the tapping term
-  bool hold_on_other_key_press;
-  // Whether to immediately register the hold action if another non-Tap-Hold key
-  // is tapped (pressed and then released), regardless of the tapping term
-  bool permissive_hold;
-  // Whether to register the tap action if the key is held longer than the
-  // tapping term, and released without any other key being pressed
-  bool retro_tapping;
+  // Bit 0-1: flavor (tap_hold_flavor_t)
+  // Bit 2:   retro_tapping
+  uint8_t flags;
+  // If re-pressed within this time of the last tap, always produce tap (0 =
+  // disabled)
+  uint16_t quick_tap_ms;
+  // If pressed within this time of another non-modifier key, always produce tap
+  // (0 = disabled). Useful for home-row mods.
+  uint16_t require_prior_idle_ms;
 } tap_hold_t;
 
 // Toggle configuration

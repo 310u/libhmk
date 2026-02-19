@@ -24,6 +24,11 @@
 
 static advanced_key_state_t ak_states[NUM_ADVANCED_KEYS];
 
+// Global state for quick_tap_ms: last tap release time per advanced key
+static uint32_t last_tap_hold_tap_time[NUM_ADVANCED_KEYS];
+// Global state for require_prior_idle_ms: last non-modifier key press time
+static uint32_t last_non_mod_key_time;
+
 static void advanced_key_null_bind(const advanced_key_event_t *event) {
   const null_bind_t *null_bind =
       &CURRENT_PROFILE.advanced_keys[event->ak_index].null_bind;
@@ -170,15 +175,46 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
   ak_state_tap_hold_t *state = &ak_states[event->ak_index].tap_hold;
 
   switch (event->type) {
-  case AK_EVENT_TYPE_PRESS:
+  case AK_EVENT_TYPE_PRESS: {
+    // require_prior_idle: if pressed too soon after another key, always tap
+    if (tap_hold->require_prior_idle_ms > 0 &&
+        (timer_read() - last_non_mod_key_time) <
+            tap_hold->require_prior_idle_ms) {
+      deferred_action = (deferred_action_t){
+          .type = DEFERRED_ACTION_TYPE_RELEASE,
+          .key = event->key,
+          .keycode = tap_hold->tap_keycode,
+      };
+      if (deferred_action_push(&deferred_action))
+        layout_register(event->key, tap_hold->tap_keycode);
+      state->stage = TAP_HOLD_STAGE_NONE;
+      break;
+    }
+    // quick_tap: if re-pressed within quick_tap_ms of last tap, always tap
+    if (tap_hold->quick_tap_ms > 0 &&
+        (timer_read() - last_tap_hold_tap_time[event->ak_index]) <
+            tap_hold->quick_tap_ms) {
+      deferred_action = (deferred_action_t){
+          .type = DEFERRED_ACTION_TYPE_RELEASE,
+          .key = event->key,
+          .keycode = tap_hold->tap_keycode,
+      };
+      if (deferred_action_push(&deferred_action))
+        layout_register(event->key, tap_hold->tap_keycode);
+      state->stage = TAP_HOLD_STAGE_NONE;
+      break;
+    }
     state->since = timer_read();
     state->stage = TAP_HOLD_STAGE_TAP;
     state->interrupted = false;
+    state->other_key_released = false;
     break;
+  }
 
   case AK_EVENT_TYPE_RELEASE:
     if (state->stage == TAP_HOLD_STAGE_TAP) {
-      if (tap_hold->retro_tapping && !state->interrupted &&
+      const bool retro = TH_GET_RETRO_TAPPING(tap_hold->flags);
+      if (retro && !state->interrupted &&
           timer_elapsed(state->since) >= tap_hold->tapping_term) {
         // Retro Tapping: If the key is held longer than the tapping term, and
         // released without any other key being pressed, register the tap
@@ -190,17 +226,20 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
         };
         if (deferred_action_push(&deferred_action))
           layout_register(event->key, tap_hold->tap_keycode);
-      } else {
+      } else if (!retro ||
+                 timer_elapsed(state->since) < tap_hold->tapping_term) {
+        // Normal tap: released before tapping term or retro tapping not
+        // applicable
         deferred_action = (deferred_action_t){
             .type = DEFERRED_ACTION_TYPE_RELEASE,
             .key = event->key,
             .keycode = tap_hold->tap_keycode,
         };
         if (deferred_action_push(&deferred_action))
-          // We only perform the tap action if the release action was
-          // successfully.
           layout_register(event->key, tap_hold->tap_keycode);
       }
+      // Record the tap time for quick_tap_ms feature
+      last_tap_hold_tap_time[event->ak_index] = timer_read();
     } else if (state->stage == TAP_HOLD_STAGE_HOLD)
       layout_unregister(event->key, tap_hold->hold_keycode);
     state->stage = TAP_HOLD_STAGE_NONE;
@@ -251,6 +290,7 @@ void advanced_key_clear(void) {
     case AK_TYPE_TAP_HOLD:
       if (state->tap_hold.stage == TAP_HOLD_STAGE_HOLD)
         layout_unregister(ak->key, ak->tap_hold.hold_keycode);
+      memset(last_tap_hold_tap_time, 0, sizeof(last_tap_hold_tap_time));
       break;
 
     case AK_TYPE_TOGGLE:
@@ -299,23 +339,49 @@ void advanced_key_tick(bool has_non_tap_hold_press,
     advanced_key_state_t *state = &ak_states[i];
 
     switch (ak->type) {
-    case AK_TYPE_TAP_HOLD:
+    case AK_TYPE_TAP_HOLD: {
       if (has_non_tap_hold_press)
         state->tap_hold.interrupted = true;
+      if (has_non_tap_hold_release)
+        state->tap_hold.other_key_released = true;
 
-      if (state->tap_hold.stage == TAP_HOLD_STAGE_TAP &&
-          // If hold on other key press is enabled, immediately register the
-          // hold key when another non-Tap-Hold key is pressed.
-          ((has_non_tap_hold_press & ak->tap_hold.hold_on_other_key_press) ||
-           // If permissive hold is enabled, immediately register the hold key
-           // when another non-Tap-Hold key is tapped (released).
-           (has_non_tap_hold_release & ak->tap_hold.permissive_hold) ||
-           // Otherwise, the key must be held for the tapping term.
-           timer_elapsed(state->tap_hold.since) >= ak->tap_hold.tapping_term)) {
+      if (state->tap_hold.stage != TAP_HOLD_STAGE_TAP)
+        break;
+
+      bool should_hold = false;
+      const uint8_t flavor = TH_GET_FLAVOR(ak->tap_hold.flags);
+      const bool expired =
+          timer_elapsed(state->tap_hold.since) >= ak->tap_hold.tapping_term;
+
+      switch (flavor) {
+      case TAP_HOLD_FLAVOR_HOLD_PREFERRED:
+        // Hold if tapping term expired OR another key is pressed
+        should_hold = expired || has_non_tap_hold_press;
+        break;
+      case TAP_HOLD_FLAVOR_BALANCED:
+        // Hold if tapping term expired OR another key is pressed AND released
+        should_hold =
+            expired || (state->tap_hold.interrupted &&
+                        state->tap_hold.other_key_released);
+        break;
+      case TAP_HOLD_FLAVOR_TAP_PREFERRED:
+        // Hold only if tapping term expired
+        should_hold = expired;
+        break;
+      case TAP_HOLD_FLAVOR_TAP_UNLESS_INTERRUPTED:
+        // Hold only if another key is pressed BEFORE tapping term expires
+        should_hold = state->tap_hold.interrupted && !expired;
+        break;
+      default:
+        break;
+      }
+
+      if (should_hold) {
         layout_register(ak->key, ak->tap_hold.hold_keycode);
         state->tap_hold.stage = TAP_HOLD_STAGE_HOLD;
       }
       break;
+    }
 
     case AK_TYPE_TOGGLE:
       if (state->toggle.stage == TOGGLE_STAGE_TOGGLE &&
@@ -332,6 +398,10 @@ void advanced_key_tick(bool has_non_tap_hold_press,
       break;
     }
   }
+}
+
+void advanced_key_update_last_key_time(uint32_t time) {
+  last_non_mod_key_time = time;
 }
 
 //--------------------------------------------------------------------+

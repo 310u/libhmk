@@ -166,6 +166,9 @@ bool layout_process_key(uint8_t key, bool pressed) {
       active_keycodes[key] = keycode;
       layout_register(key, keycode);
       has_non_tap_hold_press |= (keycode != KC_NO);
+      // Update last key time for require_prior_idle_ms feature
+      if (keycode != KC_NO)
+        advanced_key_update_last_key_time(timer_read());
     }
   } else {
     const uint8_t keycode = active_keycodes[key];

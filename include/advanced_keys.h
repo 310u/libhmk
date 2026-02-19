@@ -59,6 +59,8 @@ typedef struct {
   uint8_t stage;
   // Whether another key was pressed during the hold
   bool interrupted;
+  // Whether another key was released during the hold (for balanced flavor)
+  bool other_key_released;
 } ak_state_tap_hold_t;
 
 //--------------------------------------------------------------------+
@@ -196,3 +198,16 @@ bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time);
  */
 bool advanced_key_combo_task(void);
 void advanced_key_combo_invalidate_cache(void);
+
+/**
+ * @brief Update the last non-modifier key press time
+ *
+ * This function should be called when a non-modifier key is pressed. It is used
+ * by the Tap-Hold `require_prior_idle_ms` feature to determine if the hold-tap
+ * should be bypassed.
+ *
+ * @param time Time of the key press
+ *
+ * @return None
+ */
+void advanced_key_update_last_key_time(uint32_t time);
