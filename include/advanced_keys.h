@@ -104,10 +104,14 @@ typedef struct {
 
 // Macro state
 typedef struct {
-  // Current event index in the macro sequence
-  uint8_t event_index;
   // Timestamp for delay tracking
   uint32_t delay_until;
+  // Current event index in the macro sequence
+  uint8_t event_index;
+  // Keycode currently being tapped
+  uint8_t tap_keycode;
+  // Whether we are waiting to release the tapped key
+  bool is_tapping;
   // Whether the macro is currently playing
   bool is_playing;
 } ak_state_macro_t;

@@ -376,8 +376,9 @@ void advanced_key_process(const advanced_key_event_t *event) {
           &CURRENT_PROFILE.advanced_keys[event->ak_index].macro_key;
       if (mk->macro_index < NUM_MACROS) {
         state->event_index = 0;
-        state->delay_until = 0;
+        state->delay_until = timer_read(); // Start immediately (no initial delay)
         state->is_playing = true;
+        state->is_tapping = false;
       }
     }
     break;
@@ -491,6 +492,67 @@ void advanced_key_tick(bool has_non_tap_hold_press,
         state->toggle.is_toggled = false;
       }
       break;
+
+    case AK_TYPE_MACRO: {
+      if (!state->macro.is_playing)
+        break;
+
+      // Check if we are still in a delay period
+      if (timer_read() < state->macro.delay_until)
+        break;
+        
+      // If we are waiting to release a key from a TAP action
+      if (state->macro.is_tapping) {
+        layout_unregister(255, state->macro.tap_keycode);
+        state->macro.is_tapping = false;
+        // Require a 15ms gap before the next keystroke starts
+        state->macro.delay_until = timer_read() + 15;
+        break;
+      }
+
+      const macro_key_t *mk = &ak->macro_key;
+      if (mk->macro_index >= NUM_MACROS) {
+        state->macro.is_playing = false;
+        break;
+      }
+      const macro_t *macro = &CURRENT_PROFILE.macros[mk->macro_index];
+
+      // Process actions until we hit a delay, end, or out of bounds
+      while (state->macro.is_playing) {
+        if (state->macro.event_index >= MAX_MACRO_EVENTS) {
+          state->macro.is_playing = false;
+          break;
+        }
+
+        const macro_event_t *ev = &macro->events[state->macro.event_index];
+        state->macro.event_index++;
+
+        if (ev->action == MACRO_ACTION_END) {
+          state->macro.is_playing = false;
+          break;
+        } else if (ev->action == MACRO_ACTION_TAP) {
+          layout_register(255, ev->keycode);
+          state->macro.tap_keycode = ev->keycode;
+          state->macro.is_tapping = true;
+          // Hold the key for 30ms to ensure the OS recognizes the key press
+          state->macro.delay_until = timer_read() + 30;
+          break; // Stop loop and await release delay
+        } else if (ev->action == MACRO_ACTION_PRESS) {
+          layout_register(255, ev->keycode);
+          state->macro.delay_until = timer_read() + 30; // Native multi-press delay
+          break;
+        } else if (ev->action == MACRO_ACTION_RELEASE) {
+          layout_unregister(255, ev->keycode);
+          state->macro.delay_until = timer_read() + 15; // Small gap after release
+          break;
+        } else if (ev->action == MACRO_ACTION_DELAY) {
+          // Delay value is in 10ms units; set the absolute deadline
+          state->macro.delay_until = timer_read() + ((uint32_t)ev->keycode * 10U);
+          break; // Stop processing and wait for next tick
+        }
+      }
+      break;
+    }
 
     default:
       break;
