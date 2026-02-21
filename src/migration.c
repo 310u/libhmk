@@ -38,6 +38,14 @@ static bool v1_5_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
+static bool v1_7_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -115,7 +123,7 @@ static const migration_t migrations[] = {
         ,
         .profile_config_size = NUM_LAYERS * NUM_KEYS     // Keymap
                                + NUM_KEYS * 4            // Actuation map
-                               + NUM_ADVANCED_KEYS * 12  // Advanced keys
+                               + NUM_ADVANCED_KEYS * 12  // Advanced keys (12 bytes each)
                                + NUM_KEYS                // Gamepad buttons
                                + 9                       // Gamepad options
                                + 1                       // Tick rate
@@ -123,6 +131,41 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_5_global_config_func,
         .profile_config_func = v1_5_profile_config_func,
+    },
+    {
+        // v1.5 -> v1.6: Added TAP_DANCE (same advanced_key size = 12 bytes)
+        .version = 0x0106,
+        .global_config_size = 14             // Other fields
+                              + NUM_KEYS * 2 // Bottom-out threshold
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS     // Keymap
+                               + NUM_KEYS * 4            // Actuation map
+                               + NUM_ADVANCED_KEYS * 12  // Advanced keys (12 bytes each, unchanged)
+                               + NUM_KEYS                // Gamepad buttons
+                               + 9                       // Gamepad options
+                               + 1                       // Tick rate
+                               + NUM_MACROS * sizeof(macro_t) // Macros
+        ,
+        .global_config_func = v1_6_global_config_func,
+        .profile_config_func = v1_6_profile_config_func,
+    },
+    {
+        // v1.6 -> v1.7: Removed TAP_DANCE, added double_tap_keycode to tap_hold.
+        //               Each advanced_key grew from 12 to 13 bytes.
+        .version = 0x0107,
+        .global_config_size = 14             // Other fields
+                              + NUM_KEYS * 2 // Bottom-out threshold
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS     // Keymap
+                               + NUM_KEYS * 4            // Actuation map
+                               + NUM_ADVANCED_KEYS * 13  // Advanced keys (13 bytes each)
+                               + NUM_KEYS                // Gamepad buttons
+                               + 9                       // Gamepad options
+                               + 1                       // Tick rate
+                               + NUM_MACROS * sizeof(macro_t) // Macros
+        ,
+        .global_config_func = v1_7_global_config_func,
+        .profile_config_func = v1_7_profile_config_func,
     },
 };
 
@@ -379,5 +422,62 @@ bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
   // Initialize macros to zero (MACRO_ACTION_END)
   migration_memset(&dst, 0, NUM_MACROS * sizeof(macro_t));
 
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.5 -> v1.6 Migration
+//--------------------------------------------------------------------+
+
+bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0105)
+    return false;
+
+  // Global config unchanged
+  migration_memcpy(&dst, &src, 14 + NUM_KEYS * 2);
+  return true;
+}
+
+bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  // Profile layout unchanged: advanced_key size is still 12 bytes
+  migration_memcpy(&dst, &src,
+                   NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +
+                       NUM_ADVANCED_KEYS * 12 + NUM_KEYS + 9 + 1 +
+                       NUM_MACROS * sizeof(macro_t));
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.6 -> v1.7 Migration
+//--------------------------------------------------------------------+
+
+bool v1_7_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0106)
+    return false;
+
+  // Global config unchanged
+  migration_memcpy(&dst, &src, 14 + NUM_KEYS * 2);
+  return true;
+}
+
+bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  // Copy keymap and actuation map (unchanged)
+  migration_memcpy(&dst, &src, NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4);
+
+  // Expand each advanced key from 12 bytes to 13 bytes.
+  // The extra byte is double_tap_keycode (appended at the end of tap_hold data),
+  // defaulted to 0 (KC_NO).
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    // Copy 12 bytes of old entry as-is
+    migration_memcpy(&dst, &src, 12);
+    // Append 1 byte of zero for the new double_tap_keycode field
+    migration_memset(&dst, 0, 1);
+  }
+
+  // Copy remaining profile data unchanged
+  migration_memcpy(&dst, &src,
+                   NUM_KEYS + 9 + 1 + NUM_MACROS * sizeof(macro_t));
   return true;
 }

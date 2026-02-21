@@ -49,6 +49,8 @@ typedef enum {
   TAP_HOLD_STAGE_NONE = 0,
   TAP_HOLD_STAGE_TAP,
   TAP_HOLD_STAGE_HOLD,
+  TAP_HOLD_STAGE_QUICK_TAP,
+  TAP_HOLD_STAGE_DOUBLE_TAP_WAIT, // After first tap, waiting to see if re-pressed for double tap
 } ak_tap_hold_stage_t;
 
 // Tap-Hold state
@@ -109,10 +111,6 @@ typedef struct {
   // Whether the macro is currently playing
   bool is_playing;
 } ak_state_macro_t;
-
-//--------------------------------------------------------------------+
-// Advanced Key State
-//--------------------------------------------------------------------+
 
 // Advanced key state
 typedef union {

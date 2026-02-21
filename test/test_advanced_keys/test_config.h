@@ -1,0 +1,20 @@
+#pragma once
+
+#define NUM_KEYS 10
+#define NUM_LAYERS 4
+#define NUM_PROFILES 3
+#define NUM_ADVANCED_KEYS 16
+#define NUM_MACROS 8
+#define MAX_MACRO_EVENTS 16
+
+#define WL_VIRTUAL_SIZE 4096
+#define WL_WRITE_LOG_SIZE 1024
+#define FLASH_SIZE 65536
+
+#define DEFAULT_CALIBRATION {0}
+#define DEFAULT_KEYMAPS {{{0}}}
+
+#define ADC_NUM_RAW_INPUTS 1
+#define ADC_RAW_INPUT_CHANNELS {1}
+#define ADC_RAW_INPUT_VECTOR {1}
+#define ADC_NUM_CHANNELS 1

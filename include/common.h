@@ -206,6 +206,9 @@ typedef struct __attribute__((packed)) {
   // If pressed within this time of another non-modifier key, always produce tap
   // (0 = disabled). Useful for home-row mods.
   uint16_t require_prior_idle_ms;
+  // Keycode to send on double tap (0 = disabled; uses quick_tap_ms window if
+  // set, otherwise uses tapping_term as detection window)
+  uint8_t double_tap_keycode;
 } tap_hold_t;
 
 // Toggle configuration

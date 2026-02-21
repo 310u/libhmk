@@ -174,8 +174,23 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
       &CURRENT_PROFILE.advanced_keys[event->ak_index].tap_hold;
   ak_state_tap_hold_t *state = &ak_states[event->ak_index].tap_hold;
 
+  // Whether double tap is configured
+  const bool has_double_tap = tap_hold->double_tap_keycode != KC_NO;
+
   switch (event->type) {
   case AK_EVENT_TYPE_PRESS: {
+    // Double tap: re-press during DOUBLE_TAP_WAIT window
+    if (state->stage == TAP_HOLD_STAGE_DOUBLE_TAP_WAIT) {
+      deferred_action = (deferred_action_t){
+          .type = DEFERRED_ACTION_TYPE_RELEASE,
+          .key = event->key,
+          .keycode = tap_hold->double_tap_keycode,
+      };
+      if (deferred_action_push(&deferred_action))
+        layout_register(event->key, tap_hold->double_tap_keycode);
+      state->stage = TAP_HOLD_STAGE_QUICK_TAP; // Reuse: hold until release
+      break;
+    }
     // require_prior_idle: if pressed too soon after another key, always tap
     if (tap_hold->require_prior_idle_ms > 0 &&
         (timer_read() - last_non_mod_key_time) <
@@ -191,17 +206,12 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
       break;
     }
     // quick_tap: if re-pressed within quick_tap_ms of last tap, always tap
-    if (tap_hold->quick_tap_ms > 0 &&
+    // (only when double_tap is NOT configured, otherwise double_tap takes over)
+    if (!has_double_tap && tap_hold->quick_tap_ms > 0 &&
         (timer_read() - last_tap_hold_tap_time[event->ak_index]) <
             tap_hold->quick_tap_ms) {
-      deferred_action = (deferred_action_t){
-          .type = DEFERRED_ACTION_TYPE_RELEASE,
-          .key = event->key,
-          .keycode = tap_hold->tap_keycode,
-      };
-      if (deferred_action_push(&deferred_action))
-        layout_register(event->key, tap_hold->tap_keycode);
-      state->stage = TAP_HOLD_STAGE_NONE;
+      layout_register(event->key, tap_hold->tap_keycode);
+      state->stage = TAP_HOLD_STAGE_QUICK_TAP;
       break;
     }
     state->since = timer_read();
@@ -235,10 +245,18 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
         };
         if (deferred_action_push(&deferred_action))
           layout_register(event->key, tap_hold->tap_keycode);
+        last_tap_hold_tap_time[event->ak_index] = timer_read();
       } else if (!retro ||
                  timer_elapsed(state->since) < tap_hold->tapping_term) {
         // Normal tap: released before tapping term or retro tapping not
         // applicable
+        if (has_double_tap) {
+          // Enter DOUBLE_TAP_WAIT: don't emit yet, wait to see if re-pressed
+          state->stage = TAP_HOLD_STAGE_DOUBLE_TAP_WAIT;
+          state->since = timer_read();
+          last_tap_hold_tap_time[event->ak_index] = timer_read();
+          break; // Don't fall through to NONE
+        }
         deferred_action = (deferred_action_t){
             .type = DEFERRED_ACTION_TYPE_RELEASE,
             .key = event->key,
@@ -246,13 +264,20 @@ static void advanced_key_tap_hold(const advanced_key_event_t *event) {
         };
         if (deferred_action_push(&deferred_action))
           layout_register(event->key, tap_hold->tap_keycode);
+        // Record the tap time for quick_tap_ms feature
+        last_tap_hold_tap_time[event->ak_index] = timer_read();
       }
-      // Record the tap time for quick_tap_ms feature
-      last_tap_hold_tap_time[event->ak_index] = timer_read();
     } else if (state->stage == TAP_HOLD_STAGE_HOLD) {
       // If hold-while-undecided was active, the hold keycode is already
       // registered, so we just need to unregister it.
       layout_unregister(event->key, tap_hold->hold_keycode);
+    } else if (state->stage == TAP_HOLD_STAGE_QUICK_TAP) {
+      // In quick tap / double tap stage, release the held keycode.
+      layout_unregister(event->key, tap_hold->double_tap_keycode != KC_NO
+                                        ? tap_hold->double_tap_keycode
+                                        : tap_hold->tap_keycode);
+      // Update the tap time so subsequent spams keep triggering quick tap
+      last_tap_hold_tap_time[event->ak_index] = timer_read();
     }
     state->stage = TAP_HOLD_STAGE_NONE;
     break;
@@ -302,6 +327,11 @@ void advanced_key_clear(void) {
     case AK_TYPE_TAP_HOLD:
       if (state->tap_hold.stage == TAP_HOLD_STAGE_HOLD)
         layout_unregister(ak->key, ak->tap_hold.hold_keycode);
+      if (state->tap_hold.stage == TAP_HOLD_STAGE_QUICK_TAP)
+        layout_unregister(ak->key,
+                          ak->tap_hold.double_tap_keycode != KC_NO
+                              ? ak->tap_hold.double_tap_keycode
+                              : ak->tap_hold.tap_keycode);
       memset(last_tap_hold_tap_time, 0, sizeof(last_tap_hold_tap_time));
       break;
 
@@ -370,6 +400,25 @@ void advanced_key_tick(bool has_non_tap_hold_press,
         state->tap_hold.interrupted = true;
       if (has_non_tap_hold_release)
         state->tap_hold.other_key_released = true;
+
+      // Handle DOUBLE_TAP_WAIT timeout: resolve as single tap
+      if (state->tap_hold.stage == TAP_HOLD_STAGE_DOUBLE_TAP_WAIT) {
+        const uint16_t double_tap_window =
+            ak->tap_hold.quick_tap_ms > 0 ? ak->tap_hold.quick_tap_ms
+                                          : ak->tap_hold.tapping_term;
+        if (timer_elapsed(state->tap_hold.since) >= double_tap_window) {
+          static deferred_action_t deferred_dt = {0};
+          deferred_dt = (deferred_action_t){
+              .type = DEFERRED_ACTION_TYPE_RELEASE,
+              .key = ak->key,
+              .keycode = ak->tap_hold.tap_keycode,
+          };
+          if (deferred_action_push(&deferred_dt))
+            layout_register(ak->key, ak->tap_hold.tap_keycode);
+          state->tap_hold.stage = TAP_HOLD_STAGE_NONE;
+        }
+        break;
+      }
 
       if (state->tap_hold.stage != TAP_HOLD_STAGE_TAP)
         break;
@@ -442,63 +491,6 @@ void advanced_key_tick(bool has_non_tap_hold_press,
         state->toggle.is_toggled = false;
       }
       break;
-
-    case AK_TYPE_MACRO: {
-      if (!state->macro.is_playing)
-        break;
-
-      // If waiting for a delay, check if it has elapsed
-      if (state->macro.delay_until > 0) {
-        if (timer_read() < state->macro.delay_until)
-          break;
-        state->macro.delay_until = 0;
-      }
-
-      const macro_key_t *mk = &ak->macro_key;
-      if (mk->macro_index >= NUM_MACROS) {
-        state->macro.is_playing = false;
-        break;
-      }
-
-      const macro_t *macro = &CURRENT_PROFILE.macros[mk->macro_index];
-      const macro_event_t *evt =
-          &macro->events[state->macro.event_index];
-
-      if (evt->action == MACRO_ACTION_END ||
-          state->macro.event_index >= MAX_MACRO_EVENTS) {
-        state->macro.is_playing = false;
-        break;
-      }
-
-      switch (evt->action) {
-      case MACRO_ACTION_TAP: {
-        static deferred_action_t macro_deferred = {0};
-        macro_deferred = (deferred_action_t){
-            .type = DEFERRED_ACTION_TYPE_RELEASE,
-            .key = ak->key,
-            .keycode = evt->keycode,
-        };
-        if (deferred_action_push(&macro_deferred))
-          layout_register(ak->key, evt->keycode);
-        break;
-      }
-      case MACRO_ACTION_PRESS:
-        layout_register(ak->key, evt->keycode);
-        break;
-      case MACRO_ACTION_RELEASE:
-        layout_unregister(ak->key, evt->keycode);
-        break;
-      case MACRO_ACTION_DELAY:
-        state->macro.delay_until =
-            timer_read() + (uint32_t)evt->keycode * 10;
-        break;
-      default:
-        break;
-      }
-
-      state->macro.event_index++;
-      break;
-    }
 
     default:
       break;
@@ -575,12 +567,27 @@ static void flush_events(uint8_t count_to_flush);
 // Recursion guard for flush_events
 static bool flush_in_progress = false;
 
+static combo_event_t *queue_peek(uint8_t offset) {
+  if (offset >= queue_count) return NULL;
+  return &event_queue[(queue_head + offset) % COMBO_QUEUE_SIZE];
+}
+
+static void queue_pop(void) {
+  if (queue_count == 0) return;
+  queue_head = (queue_head + 1) % COMBO_QUEUE_SIZE;
+  queue_count--;
+}
+
 static void queue_push(uint8_t key, bool pressed, uint32_t time) {
   if (queue_count >= COMBO_QUEUE_SIZE) {
-    // Queue full: Force flush the oldest event to make room
+    // Queue full: Try to flush the oldest event to make room
     flush_events(1);
-    // If flush failed (e.g. recursion guard or logic error), we might still be full.
-    // In this simple implementation, flush_events always pops, so space is guaranteed.
+    
+    // If flush failed (e.g. recursion guard or logic error), we are still full.
+    // Forcefully drop the oldest event to guarantee space and prevent buffer overflow.
+    if (queue_count >= COMBO_QUEUE_SIZE) {
+        queue_pop();
+    }
   }
   
   event_queue[queue_tail] = (combo_event_t){
@@ -593,16 +600,7 @@ static void queue_push(uint8_t key, bool pressed, uint32_t time) {
   queue_count++;
 }
 
-static combo_event_t *queue_peek(uint8_t offset) {
-  if (offset >= queue_count) return NULL;
-  return &event_queue[(queue_head + offset) % COMBO_QUEUE_SIZE];
-}
 
-static void queue_pop(void) {
-  if (queue_count == 0) return;
-  queue_head = (queue_head + 1) % COMBO_QUEUE_SIZE;
-  queue_count--;
-}
 
 // Flush unconsumed events up to a certain point.
 // 

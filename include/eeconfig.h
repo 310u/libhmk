@@ -52,8 +52,10 @@ typedef union __attribute__((packed)) {
     // Whether 8kHz polling rate is enabled. Only applicable if USB HS is
     // enabled. If disabled, the 1kHz polling rate is used instead.
     bool high_polling_rate_enabled : 1;
+    // Whether to continuously auto-calibrate the resting baseline
+    bool continuous_calibration : 1;
     // Reserved bits for future use
-    uint16_t reserved : 13;
+    uint16_t reserved : 12;
   };
   uint16_t raw;
 } eeconfig_options_t;
@@ -75,7 +77,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0105
+#define EECONFIG_VERSION 0x0107
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -131,6 +133,7 @@ extern const eeconfig_t *eeconfig;
       .xinput_enabled = false,                                                 \
       .save_bottom_out_threshold = true,                                       \
       .high_polling_rate_enabled = true,                                       \
+      .continuous_calibration = true,                                          \
   }
 #endif
 
