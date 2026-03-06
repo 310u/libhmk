@@ -16,6 +16,7 @@
 #include "hid.h"
 
 #include "commands.h"
+#include "hardware/hardware.h"
 #include "keycodes.h"
 #include "matrix.h"
 #include "tusb.h"
@@ -44,8 +45,10 @@ static void hid_send_keyboard_report(void) {
     // Don't send the report if it hasn't changed
     return;
 
-  prev_kb_report = kb_report;
-  tud_hid_n_report(USB_ITF_KEYBOARD, 0, &kb_report, sizeof(kb_report));
+  // Only update prev_kb_report after successful send to ensure the report
+  // is retried on the next cycle if the send fails.
+  if (tud_hid_n_report(USB_ITF_KEYBOARD, 0, &kb_report, sizeof(kb_report)))
+    prev_kb_report = kb_report;
 }
 #endif
 
@@ -68,18 +71,18 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
       if (system_report == prev_system_report)
         // Don't send the report if it hasn't changed
         break;
-      prev_system_report = system_report;
-      tud_hid_n_report(USB_ITF_HID, report_id, &system_report,
-                       sizeof(system_report));
+      if (tud_hid_n_report(USB_ITF_HID, report_id, &system_report,
+                           sizeof(system_report)))
+        prev_system_report = system_report;
       return;
 
     case REPORT_ID_CONSUMER_CONTROL:
       if (consumer_report == prev_consumer_report)
         // Don't send the report if it hasn't changed
         break;
-      prev_consumer_report = consumer_report;
-      tud_hid_n_report(USB_ITF_HID, report_id, &consumer_report,
-                       sizeof(consumer_report));
+      if (tud_hid_n_report(USB_ITF_HID, report_id, &consumer_report,
+                           sizeof(consumer_report)))
+        prev_consumer_report = consumer_report;
       return;
 
     case REPORT_ID_MOUSE:
@@ -87,9 +90,9 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
                  sizeof(prev_mouse_report)) == 0)
         // Don't send the report if it hasn't changed
         break;
-      prev_mouse_report = mouse_report;
-      tud_hid_n_report(USB_ITF_HID, report_id, &mouse_report,
-                       sizeof(mouse_report));
+      if (tud_hid_n_report(USB_ITF_HID, report_id, &mouse_report,
+                           sizeof(mouse_report)))
+        prev_mouse_report = mouse_report;
       return;
 
     default:
@@ -146,6 +149,12 @@ void hid_keycode_add(uint8_t keycode) {
   }
 }
 
+void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons) {
+  mouse_report.x = x;
+  mouse_report.y = y;
+  mouse_report.buttons |= buttons;
+}
+
 void hid_keycode_remove(uint8_t keycode) {
   const uint16_t hid_code = keycode_to_hid[keycode];
 
@@ -160,6 +169,7 @@ void hid_keycode_remove(uint8_t keycode) {
         for (uint32_t j = i; j < 5; j++)
           kb_report.keycodes[j] = kb_report.keycodes[j + 1];
         num_6kro_keys--;
+        kb_report.keycodes[num_6kro_keys] = 0;
         break;
       }
     }
@@ -197,15 +207,21 @@ void hid_send_reports(void) {
     // Wake up the host if it's suspended
     tud_remote_wakeup();
 
-  while (!tud_hid_n_ready(USB_ITF_KEYBOARD))
-    // Wait for the keyboard interface to be ready
+  // Wait for keyboard interface with timeout to prevent blocking the main loop
+  for (uint32_t t = timer_read(); !tud_hid_n_ready(USB_ITF_KEYBOARD);) {
     tud_task();
+    if (timer_elapsed(t) > 5)
+      return;
+  }
 
   hid_send_keyboard_report();
 
-  while (!tud_hid_n_ready(USB_ITF_HID))
-    // Wait for the HID interface to be ready
+  // Wait for HID interface with timeout
+  for (uint32_t t = timer_read(); !tud_hid_n_ready(USB_ITF_HID);) {
     tud_task();
+    if (timer_elapsed(t) > 5)
+      return;
+  }
 
   // Start from the first report ID
   hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);

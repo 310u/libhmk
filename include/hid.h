@@ -47,6 +47,17 @@ void hid_keycode_add(uint8_t keycode);
 void hid_keycode_remove(uint8_t keycode);
 
 /**
+ * @brief Move the mouse cursor
+ * 
+ * @param x X axis offset
+ * @param y Y axis offset
+ * @param buttons Mouse buttons bitmask
+ * 
+ * @return None
+ */
+void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons);
+
+/**
  * @brief Send all HID reports
  *
  * This function will block until the device is ready to send the reports.

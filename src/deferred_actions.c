@@ -92,15 +92,27 @@ void deferred_action_process(void) {
     // Make sure the ticks are not greater than the tick rate
     action->ticks = M_MIN(action->ticks, CURRENT_PROFILE.tick_rate);
     if (action->ticks > 0) {
-      // Decrement the ticks and skip the action if it is not ready yet
+      // Decrement the ticks
       action->ticks--;
-      continue;
+      // Stop extracting actions here to maintain FIFO order. Subsequent 
+      // actions will wait behind this one even if their ticks reach 0 later.
+      break;
     }
     buffer[action_count++] = *action;
   }
   // Move the head of the queue forward by the number of actions processed
   queue_head = (queue_head + action_count) & (MAX_DEFERRED_ACTIONS - 1);
   queue_size -= action_count;
+
+  // We still need to decrement ticks for the rest of the queue
+  for (uint32_t i = action_count + 1; i < queue_size + action_count; i++) {
+    deferred_action_t *action =
+        &queue[(queue_head + i - action_count) & (MAX_DEFERRED_ACTIONS - 1)];
+    action->ticks = M_MIN(action->ticks, CURRENT_PROFILE.tick_rate);
+    if (action->ticks > 0) {
+      action->ticks--;
+    }
+  }
 
   queue_lock = false;
 

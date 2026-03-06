@@ -20,6 +20,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "joystick.h"
 #include "layout.h"
 #include "matrix.h"
 #include "tusb.h"
@@ -45,6 +46,9 @@ int main(void) {
   advanced_key_init();
   xinput_init();
   layout_init();
+#if defined(JOYSTICK_ENABLED)
+  joystick_init();
+#endif
   command_init();
 
   tud_init(BOARD_TUD_RHPORT);
@@ -55,6 +59,9 @@ int main(void) {
     analog_task();
     matrix_scan();
     layout_task();
+#if defined(JOYSTICK_ENABLED)
+    joystick_task();
+#endif
     xinput_task();
   }
 

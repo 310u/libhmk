@@ -1,0 +1,15 @@
+#pragma once
+
+// RGB config
+#define RGB_ENABLED 1
+#define RGB_DATA_PIN GPIO_PINS_10
+#define RGB_DATA_PORT GPIOA
+
+// Joystick config
+#define JOYSTICK_ENABLED 1
+#define JOYSTICK_SW_PIN GPIO_PINS_9
+#define JOYSTICK_SW_PORT GPIOA
+
+#define JOYSTICK_X_ADC_INDEX 0
+#define JOYSTICK_Y_ADC_INDEX 1
+#define JOYSTICK_SW_KEY_INDEX 40

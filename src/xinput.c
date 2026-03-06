@@ -17,6 +17,7 @@
 
 #include "device/usbd_pvt.h"
 #include "eeconfig.h"
+#include "joystick.h"
 #include "lib/bitmap.h"
 #include "lib/usqrt.h"
 #include "matrix.h"
@@ -237,6 +238,24 @@ void xinput_task(void) {
       report.joysticks[i] = -joystick_state;
   }
 
+#if defined(JOYSTICK_ENABLED)
+  joystick_state_t j_state = joystick_get_state();
+  joystick_config_t j_config = joystick_get_config();
+  
+  // XInput axes are scaled to -32768..32767. Our joystick outputs -128..127.
+  // Scale out_x/out_y by << 8 to fit the XInput int16_t range roughly.
+  if (j_config.mode == JOYSTICK_MODE_XINPUT_LS) {
+      report.joysticks[0] = (int16_t)j_state.out_x << 8;
+      // Depending on hardware, Y axis might be inverted. Usually up is positive in XInput.
+      report.joysticks[1] = -(int16_t)j_state.out_y << 8;
+      if (j_state.sw) report.buttons |= XINPUT_BUTTON_LS;
+  } else if (j_config.mode == JOYSTICK_MODE_XINPUT_RS) {
+      report.joysticks[2] = (int16_t)j_state.out_x << 8;
+      report.joysticks[3] = -(int16_t)j_state.out_y << 8;
+      if (j_state.sw) report.buttons |= XINPUT_BUTTON_RS;
+  }
+#endif
+
   if (tud_ready() && endpoint_in != 0 && !usbd_edpt_busy(0, endpoint_in) &&
       // Only send report if it has changed
       memcmp(&report, &last_report, sizeof(xinput_report_t)) != 0) {
@@ -249,6 +268,83 @@ void xinput_task(void) {
 
   // Reset analog states for the next scan
   memset(analog_states, 0, sizeof(analog_states));
+
+  // ---------------------------------------------------------------
+  // HID Gamepad Report (Xbox-compatible)
+  // ---------------------------------------------------------------
+  // Only send HID gamepad report when XInput is disabled.
+  // On Windows, XInput is used natively; sending both XInput and HID
+  // gamepad reports would cause dual gamepad recognition.
+  // On Linux/macOS where XInput is unavailable, the HID gamepad
+  // provides native gamepad support.
+  if (!eeconfig->options.xinput_enabled) {
+    static hid_gamepad_xbox_report_t gp_report;
+    static hid_gamepad_xbox_report_t prev_gp_report;
+
+    // Joystick axes (same values as XInput report)
+    gp_report.lx = report.joysticks[0];
+    gp_report.ly = report.joysticks[1];
+    gp_report.rx = report.joysticks[2];
+    gp_report.ry = report.joysticks[3];
+
+    // Triggers (same values as XInput report)
+    gp_report.lt = report.lz;
+    gp_report.rt = report.rz;
+
+    // Hat switch: convert D-pad buttons to 8-direction hat
+    {
+      const bool up = report.buttons & XINPUT_BUTTON_UP;
+      const bool down = report.buttons & XINPUT_BUTTON_DOWN;
+      const bool left = report.buttons & XINPUT_BUTTON_LEFT;
+      const bool right = report.buttons & XINPUT_BUTTON_RIGHT;
+
+      if (up && right)
+        gp_report.hat = 2;
+      else if (up && left)
+        gp_report.hat = 8;
+      else if (down && right)
+        gp_report.hat = 4;
+      else if (down && left)
+        gp_report.hat = 6;
+      else if (up)
+        gp_report.hat = 1;
+      else if (right)
+        gp_report.hat = 3;
+      else if (down)
+        gp_report.hat = 5;
+      else if (left)
+        gp_report.hat = 7;
+      else
+        gp_report.hat = 0; // Neutral (null state)
+    }
+
+    // Button mapping: XInput → HID buttons 1-16
+    // HID Button 1=A, 2=B, 3=X, 4=Y, 5=LB, 6=RB, 7=Back, 8=Start,
+    //            9=LS, 10=RS, 11=Home
+    {
+      uint16_t hid_buttons = 0;
+      if (report.buttons & XINPUT_BUTTON_A)     hid_buttons |= (1 << 0);
+      if (report.buttons & XINPUT_BUTTON_B)     hid_buttons |= (1 << 1);
+      if (report.buttons & XINPUT_BUTTON_X)     hid_buttons |= (1 << 2);
+      if (report.buttons & XINPUT_BUTTON_Y)     hid_buttons |= (1 << 3);
+      if (report.buttons & XINPUT_BUTTON_LB)    hid_buttons |= (1 << 4);
+      if (report.buttons & XINPUT_BUTTON_RB)    hid_buttons |= (1 << 5);
+      if (report.buttons & XINPUT_BUTTON_BACK)  hid_buttons |= (1 << 6);
+      if (report.buttons & XINPUT_BUTTON_START) hid_buttons |= (1 << 7);
+      if (report.buttons & XINPUT_BUTTON_LS)    hid_buttons |= (1 << 8);
+      if (report.buttons & XINPUT_BUTTON_RS)    hid_buttons |= (1 << 9);
+      if (report.buttons & XINPUT_BUTTON_HOME)  hid_buttons |= (1 << 10);
+      gp_report.buttons = hid_buttons;
+    }
+
+    // Send HID gamepad report if it changed
+    if (tud_hid_n_ready(USB_ITF_HID) &&
+        memcmp(&gp_report, &prev_gp_report, sizeof(gp_report)) != 0) {
+      tud_hid_n_report(USB_ITF_HID, REPORT_ID_GAMEPAD, &gp_report,
+                       sizeof(gp_report));
+      memcpy(&prev_gp_report, &gp_report, sizeof(gp_report));
+    }
+  }
 }
 
 //---------------------------------------------------------------------+

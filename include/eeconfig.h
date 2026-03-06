@@ -17,6 +17,8 @@
 
 #include "common.h"
 #include "wear_leveling.h"
+#include "rgb.h"
+#include "joystick.h"
 
 //--------------------------------------------------------------------+
 // Keyboard Persistent Configuration
@@ -72,12 +74,18 @@ typedef struct __attribute__((packed)) {
   gamepad_options_t gamepad_options;
   uint8_t tick_rate;
   macro_t macros[NUM_MACROS];
+#if defined(RGB_ENABLED)
+  rgb_config_t rgb_config;
+#endif
+#if defined(JOYSTICK_ENABLED)
+  joystick_config_t joystick_config;
+#endif
 } eeconfig_profile_t;
 
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0107
+#define EECONFIG_VERSION 0x0109
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -159,6 +167,17 @@ extern const eeconfig_t *eeconfig;
 #if !defined(DEFAULT_TICK_RATE)
 // Default tick rate
 #define DEFAULT_TICK_RATE 30
+#endif
+
+#if !defined(DEFAULT_RGB_CONFIG)
+#define DEFAULT_RGB_CONFIG                                                     \
+  {                                                                            \
+      .enabled = 1,                                                            \
+      .global_brightness = 51,                                                 \
+      .current_effect = 1,                                                     \
+      .solid_color = {255, 0, 0},                                              \
+      .effect_speed = 128,                                                     \
+  }
 #endif
 
 //--------------------------------------------------------------------+

@@ -189,6 +189,7 @@
                 "h": { "type": "number", "minimum": 1 },
                 "x": { "type": "number" },
                 "y": { "type": "number" },
+                "r": { "type": "number", "description": "Rotation angle in degrees" },
                 "option": {
                   "type": "array",
                   "description": "Option key and value pairs for the corresponding labels",

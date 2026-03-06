@@ -846,14 +846,14 @@ static void process_combo_logic(uint32_t current_time) {
               }
           }
           
-          layout_register(255, match_ak->combo.output_keycode);
-          
           deferred_action_t da = {
               .type = DEFERRED_ACTION_TYPE_RELEASE,
               .key = 255,
               .keycode = match_ak->combo.output_keycode,
           };
-          deferred_action_push(&da);
+          if (deferred_action_push(&da)) {
+              layout_register(255, match_ak->combo.output_keycode);
+          }
 
           pending_activity = true;
           

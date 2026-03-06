@@ -16,7 +16,9 @@
 #include "commands.h"
 
 #include "advanced_keys.h"
+#include "eeconfig.h"
 #include "hardware/hardware.h"
+#include "joystick.h"
 #include "layout.h"
 #include "matrix.h"
 #include "metadata.h"
@@ -323,6 +325,40 @@ void command_process(const uint8_t *buf) {
     success = wear_leveling_write(addr, p->macros, sizeof(macro_t) * p->len);
     break;
   }
+#if defined(JOYSTICK_ENABLED)
+  case COMMAND_GET_JOYSTICK_STATE: {
+    joystick_state_t state = joystick_get_state();
+    out->joystick_state.profile = eeconfig->current_profile;
+    out->joystick_state.raw_x = state.raw_x;
+    out->joystick_state.raw_y = state.raw_y;
+    out->joystick_state.out_x = state.out_x;
+    out->joystick_state.out_y = state.out_y;
+    out->joystick_state.sw = state.sw;
+    break;
+  }
+  case COMMAND_GET_JOYSTICK_CONFIG: {
+    const command_in_joystick_config_t *p = &in->joystick_config;
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    joystick_config_t config = eeconfig->profiles[p->profile].joystick_config;
+    memcpy(out->joystick_config.data, &config, sizeof(joystick_config_t));
+    break;
+  }
+  case COMMAND_SET_JOYSTICK_CONFIG: {
+    const command_in_joystick_config_t *p = &in->joystick_config;
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, joystick_config);
+    
+    success = wear_leveling_write(addr, &p->joystick_config, sizeof(joystick_config_t));
+    
+    if (success && p->profile == eeconfig->current_profile) {
+      joystick_set_config(p->joystick_config);
+    }
+    break;
+  }
+#endif
   default: {
     // Unknown command
     success = false;

@@ -113,3 +113,14 @@ void analog_task(void);
  * @return Raw ADC value
  */
 uint16_t analog_read(uint8_t key);
+
+#if ADC_NUM_RAW_INPUTS > 0
+/**
+ * @brief Read the raw ADC value of the specified raw input index
+ *
+ * @param index Raw input index
+ *
+ * @return Raw ADC value
+ */
+uint16_t analog_read_raw(uint8_t index);
+#endif

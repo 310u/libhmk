@@ -1,0 +1,424 @@
+{
+    "name": "Mochiko40HE",
+    "manufacturer": "Lady Tortie",
+    "maintainer": "satoyu",
+    "usb": {
+        "vid": "0x0108",
+        "pid": "0x0111",
+        "port": "hs"
+    },
+    "keyboard": {
+        "num_profiles": 4,
+        "num_layers": 4,
+        "num_keys": 41,
+        "num_advanced_keys": 32
+    },
+    "features": {
+        "rgb": true,
+        "joystick": true
+    },
+    "hardware": {
+        "hse_value": 12000000,
+        "driver": "at32f405xx"
+    },
+    "analog": {
+        "invert_adc": false,
+        "mux": {
+            "select": [
+                "C1",
+                "C2",
+                "C3"
+            ],
+            "input": [
+                "A3",
+                "A4",
+                "A5",
+                "A6",
+                "A7"
+            ],
+            "matrix": [
+                [
+                    0,
+                    1,
+                    10,
+                    11,
+                    20,
+                    21,
+                    30,
+                    31
+                ],
+                [
+                    2,
+                    3,
+                    12,
+                    13,
+                    22,
+                    23,
+                    32,
+                    33
+                ],
+                [
+                    4,
+                    5,
+                    14,
+                    15,
+                    24,
+                    25,
+                    34,
+                    35
+                ],
+                [
+                    6,
+                    7,
+                    16,
+                    17,
+                    26,
+                    27,
+                    36,
+                    37
+                ],
+                [
+                    8,
+                    9,
+                    18,
+                    19,
+                    28,
+                    29,
+                    38,
+                    39
+                ]
+            ]
+        },
+        "raw": {
+            "input": [
+                "A0",
+                "A1"
+            ],
+            "vector": [
+                41,
+                42
+            ]
+        }
+    },
+    "calibration": {
+        "initial_rest_value": 2400,
+        "initial_bottom_out_threshold": 650
+    },
+    "layout": {
+        "labels": [
+            "default"
+        ],
+        "keymap": [
+            [
+                {
+                    "key": 0
+                },
+                {
+                    "key": 1
+                },
+                {
+                    "key": 2
+                },
+                {
+                    "key": 3
+                },
+                {
+                    "key": 4
+                },
+                {
+                    "key": 5
+                },
+                {
+                    "key": 6
+                },
+                {
+                    "key": 7
+                },
+                {
+                    "key": 8
+                },
+                {
+                    "key": 9
+                }
+            ],
+            [
+                {
+                    "key": 10
+                },
+                {
+                    "key": 11
+                },
+                {
+                    "key": 12
+                },
+                {
+                    "key": 13
+                },
+                {
+                    "key": 14
+                },
+                {
+                    "key": 15
+                },
+                {
+                    "key": 16
+                },
+                {
+                    "key": 17
+                },
+                {
+                    "key": 18
+                },
+                {
+                    "key": 19
+                }
+            ],
+            [
+                {
+                    "key": 20
+                },
+                {
+                    "key": 21
+                },
+                {
+                    "key": 22
+                },
+                {
+                    "key": 23
+                },
+                {
+                    "key": 24
+                },
+                {
+                    "key": 25
+                },
+                {
+                    "key": 26
+                },
+                {
+                    "key": 27
+                },
+                {
+                    "key": 28
+                },
+                {
+                    "key": 29
+                }
+            ],
+            [
+                {
+                    "key": 30
+                },
+                {
+                    "key": 31
+                },
+                {
+                    "key": 32
+                },
+                {
+                    "key": 33
+                },
+                {
+                    "key": 34
+                },
+                {
+                    "key": 35
+                },
+                {
+                    "key": 36
+                },
+                {
+                    "key": 37
+                },
+                {
+                    "key": 38
+                },
+                {
+                    "key": 39
+                }
+            ],
+            [
+                {
+                    "key": 40,
+                    "x": 4.5,
+                    "y": 4.5,
+                    "label": "STICK"
+                }
+            ]
+        ]
+    },
+    "keymap": [
+        [
+            "KC_Q",
+            "KC_W",
+            "KC_E",
+            "KC_R",
+            "KC_T",
+            "KC_Y",
+            "KC_U",
+            "KC_I",
+            "KC_O",
+            "KC_P",
+            "KC_A",
+            "KC_S",
+            "KC_D",
+            "KC_F",
+            "KC_G",
+            "KC_H",
+            "KC_J",
+            "KC_K",
+            "KC_L",
+            "KC_ENT",
+            "KC_Z",
+            "KC_X",
+            "KC_C",
+            "KC_V",
+            "KC_B",
+            "KC_N",
+            "KC_M",
+            "KC_COMM",
+            "KC_DOT",
+            "KC_SLSH",
+            "KC_LGUI",
+            "KC_LALT",
+            "KC_SPC",
+            "MO(1)",
+            "MO(2)",
+            "KC_BSPC",
+            "KC_RALT",
+            "KC_RCTL",
+            "KC_UP",
+            "KC_DOWN",
+            "MS_BTN1"
+        ],
+        [
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS"
+        ],
+        [
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS"
+        ],
+        [
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS"
+        ]
+    ]
+}

@@ -19,6 +19,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
+#include "rgb.h"
 
 // Exponential moving average (EMA) filter
 #define EMA(x, y)                                                              \
@@ -211,8 +212,14 @@ void matrix_scan(void) {
     // Record the time when the key state changes. This is used by
     // layout_task to process key events in chronological order instead of
     // index order, preventing key input swapping on simultaneous presses.
-    if (key_matrix[i].is_pressed != was_pressed)
+    if (key_matrix[i].is_pressed != was_pressed) {
       key_matrix[i].event_time = timer_read();
+#if defined(RGB_ENABLED)
+      if (key_matrix[i].is_pressed) {
+        rgb_matrix_record_keypress(i);
+      }
+#endif
+    }
   }
 
   // Update persistent storage logic

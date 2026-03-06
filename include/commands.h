@@ -54,6 +54,12 @@ typedef enum {
   COMMAND_SET_GAMEPAD_OPTIONS,
   COMMAND_GET_MACROS,
   COMMAND_SET_MACROS,
+  COMMAND_GET_RGB_CONFIG,
+  COMMAND_SET_RGB_CONFIG,
+  
+  COMMAND_GET_JOYSTICK_STATE,
+  COMMAND_GET_JOYSTICK_CONFIG,
+  COMMAND_SET_JOYSTICK_CONFIG,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -129,6 +135,18 @@ typedef struct __attribute__((packed)) {
   macro_t macros[1];
 } command_in_macros_t;
 
+typedef struct __attribute__((packed)) {
+  uint8_t profile;
+  uint8_t offset;
+  uint8_t len;
+  uint8_t data[59];
+} command_in_rgb_config_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t profile;
+  joystick_config_t joystick_config;
+} command_in_joystick_config_t;
+
 // Command input buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -147,6 +165,8 @@ typedef struct __attribute__((packed)) {
     command_in_gamepad_buttons_t gamepad_buttons;
     command_in_gamepad_options_t gamepad_options;
     command_in_macros_t macros;
+    command_in_rgb_config_t rgb_config;
+    command_in_joystick_config_t joystick_config;
   };
 } command_in_buffer_t;
 
@@ -166,6 +186,19 @@ typedef struct __attribute__((packed)) {
   uint32_t len;
   uint8_t metadata[59];
 } command_out_metadata_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t profile;
+  uint16_t raw_x;
+  uint16_t raw_y;
+  int8_t out_x;
+  int8_t out_y;
+  bool sw;
+} command_out_joystick_state_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t data[sizeof(joystick_config_t)];
+} command_out_joystick_config_t;
 
 // Command output buffer type
 typedef struct __attribute__((packed)) {
@@ -200,6 +233,12 @@ typedef struct __attribute__((packed)) {
     gamepad_options_t gamepad_options;
     // For `COMMAND_GET_MACROS`
     macro_t macros[1];
+    // For `COMMAND_GET_RGB_CONFIG`
+    uint8_t rgb_config_data[63];
+    // For `COMMAND_GET_JOYSTICK_STATE`
+    command_out_joystick_state_t joystick_state;
+    // For `COMMAND_GET_JOYSTICK_CONFIG`
+    command_out_joystick_config_t joystick_config;
   };
 } command_out_buffer_t;
 

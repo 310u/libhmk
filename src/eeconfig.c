@@ -26,8 +26,11 @@ static eeconfig_calibration_t default_calibration = DEFAULT_CALIBRATION;
 static const uint8_t
     default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] = DEFAULT_KEYMAPS;
 static eeconfig_profile_t default_profile = {
-    .gamepad_options = DEFAULT_GAMEPAD_OPTIONS,
-    .tick_rate = DEFAULT_TICK_RATE,
+  .gamepad_options = DEFAULT_GAMEPAD_OPTIONS,
+  .tick_rate = DEFAULT_TICK_RATE,
+#if defined(RGB_ENABLED)
+  .rgb_config = DEFAULT_RGB_CONFIG,
+#endif
 };
 
 static bool eeconfig_write_default_profile(uint8_t profile) {

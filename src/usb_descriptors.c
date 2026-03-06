@@ -79,11 +79,76 @@ static const uint8_t desc_keyboard_report[] = {
 
 };
 
-// HID report descriptor for other HID interfaces
+// HID report descriptor for other HID interfaces (without gamepad)
 static const uint8_t desc_hid_report[] = {
     TUD_HID_REPORT_DESC_SYSTEM_CONTROL(HID_REPORT_ID(REPORT_ID_SYSTEM_CONTROL)),
     TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(REPORT_ID_CONSUMER_CONTROL)),
     TUD_HID_REPORT_DESC_MOUSE(HID_REPORT_ID(REPORT_ID_MOUSE)),
+};
+
+// HID report descriptor for other HID interfaces (with gamepad)
+// Used when XInput is disabled (e.g., on Linux where XInput is unavailable)
+static const uint8_t desc_hid_report_with_gamepad[] = {
+    TUD_HID_REPORT_DESC_SYSTEM_CONTROL(HID_REPORT_ID(REPORT_ID_SYSTEM_CONTROL)),
+    TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(REPORT_ID_CONSUMER_CONTROL)),
+    TUD_HID_REPORT_DESC_MOUSE(HID_REPORT_ID(REPORT_ID_MOUSE)),
+
+    // Xbox-compatible HID Gamepad
+    HID_USAGE_PAGE(HID_USAGE_PAGE_DESKTOP),
+    HID_USAGE(HID_USAGE_DESKTOP_GAMEPAD),
+    HID_COLLECTION(HID_COLLECTION_APPLICATION),
+
+    HID_REPORT_ID(REPORT_ID_GAMEPAD)
+
+    // Left Stick: X, Y (int16, -32768 to 32767)
+    HID_USAGE_PAGE(HID_USAGE_PAGE_DESKTOP),
+    HID_USAGE(HID_USAGE_DESKTOP_X),
+    HID_USAGE(HID_USAGE_DESKTOP_Y),
+    HID_LOGICAL_MIN_N(0x8000, 2),
+    HID_LOGICAL_MAX_N(0x7FFF, 2),
+    HID_REPORT_COUNT(2),
+    HID_REPORT_SIZE(16),
+    HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
+
+    // Right Stick: Z, Rz (int16, -32768 to 32767)
+    HID_USAGE(HID_USAGE_DESKTOP_Z),
+    HID_USAGE(HID_USAGE_DESKTOP_RZ),
+    HID_REPORT_COUNT(2),
+    HID_REPORT_SIZE(16),
+    HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
+
+    // Triggers: Rx (left), Ry (right) (uint8, 0 to 255)
+    HID_USAGE(HID_USAGE_DESKTOP_RX),
+    HID_USAGE(HID_USAGE_DESKTOP_RY),
+    HID_LOGICAL_MIN(0),
+    HID_LOGICAL_MAX_N(0x00FF, 2),
+    HID_REPORT_COUNT(2),
+    HID_REPORT_SIZE(8),
+    HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
+
+    // Hat Switch / D-Pad (8 directions + null)
+    HID_USAGE(HID_USAGE_DESKTOP_HAT_SWITCH),
+    HID_LOGICAL_MIN(1),
+    HID_LOGICAL_MAX(8),
+    HID_PHYSICAL_MIN(0),
+    HID_PHYSICAL_MAX_N(315, 2),
+    HID_REPORT_COUNT(1),
+    HID_REPORT_SIZE(8),
+    HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE | 0x40 /* Null State */),
+
+    // 16 Buttons
+    HID_USAGE_PAGE(HID_USAGE_PAGE_BUTTON),
+    HID_USAGE_MIN(1),
+    HID_USAGE_MAX(16),
+    HID_LOGICAL_MIN(0),
+    HID_LOGICAL_MAX(1),
+    HID_PHYSICAL_MIN(0),
+    HID_PHYSICAL_MAX(1),
+    HID_REPORT_COUNT(16),
+    HID_REPORT_SIZE(1),
+    HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
+
+    HID_COLLECTION_END
 };
 
 // HID report descriptor for the raw HID interface
@@ -104,6 +169,8 @@ static const uint8_t desc_raw_hid_report[] = {
 
 };
 
+// Maximum possible configuration descriptor length (with both gamepad and
+// XInput). The actual length may be smaller depending on the configuration.
 #define CONFIG_TOTAL_LEN                                                       \
   (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN + TUD_HID_INOUT_DESC_LEN +       \
    XINPUT_DESC_LEN)
@@ -240,12 +307,27 @@ _Static_assert(M_ARRAY_SIZE(desc_ms_os_20) == MS_OS_20_DESC_LEN,
 static void generate_desc_configuration(uint8_t *dst) {
   uint8_t num_interfaces = USB_ITF_COUNT;
   uint16_t total_length = CONFIG_TOTAL_LEN;
+
+  // Select HID report descriptor size based on XInput state:
+  // - XInput enabled (Windows): use base descriptor without gamepad to avoid
+  //   dual gamepad recognition (XInput + HID)
+  // - XInput disabled (Linux): use descriptor with HID gamepad
+  const uint16_t hid_report_desc_len = eeconfig->options.xinput_enabled
+                                           ? sizeof(desc_hid_report)
+                                           : sizeof(desc_hid_report_with_gamepad);
+
   if (!eeconfig->options.xinput_enabled) {
     // If XInput is not enabled, subtract the XInput descriptor length
     // from the total configuration length.
     num_interfaces--;
     total_length -= XINPUT_DESC_LEN;
   }
+
+  // Adjust total length for the HID report descriptor size difference.
+  // CONFIG_TOTAL_LEN is calculated with desc_hid_report (without gamepad),
+  // so add the extra bytes when using the gamepad descriptor.
+  total_length +=
+      (int16_t)hid_report_desc_len - (int16_t)sizeof(desc_hid_report);
 
   uint8_t polling_interval = 1;
 #if defined(BOARD_USB_HS)
@@ -265,7 +347,7 @@ static void generate_desc_configuration(uint8_t *dst) {
                          CFG_TUD_HID_EP_BUFSIZE, polling_interval),
       // HID interface descriptor
       TUD_HID_DESCRIPTOR(USB_ITF_HID, 0, HID_ITF_PROTOCOL_NONE,
-                         sizeof(desc_hid_report), EP_IN_ADDR_HID,
+                         hid_report_desc_len, EP_IN_ADDR_HID,
                          CFG_TUD_HID_EP_BUFSIZE, polling_interval),
       // Raw HID interface descriptor
       TUD_HID_INOUT_DESCRIPTOR(USB_ITF_RAW_HID, 0, HID_ITF_PROTOCOL_NONE,
@@ -280,7 +362,9 @@ static void generate_desc_configuration(uint8_t *dst) {
   _Static_assert(sizeof(src) == CONFIG_TOTAL_LEN,
                  "Invalid configuration descriptor size");
 
-  memcpy(dst, src, sizeof(src));
+  // Copy only the actual total_length bytes (which may be less than sizeof(src)
+  // when XInput is disabled)
+  memcpy(dst, src, total_length);
 }
 
 const uint8_t *tud_descriptor_device_cb(void) {
@@ -293,7 +377,11 @@ const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance) {
     return desc_keyboard_report;
 
   case USB_ITF_HID:
-    return desc_hid_report;
+    // Return the appropriate HID report descriptor based on XInput state:
+    // - XInput enabled: without gamepad (avoid dual XInput + HID recognition)
+    // - XInput disabled: with HID gamepad (for Linux/macOS)
+    return eeconfig->options.xinput_enabled ? desc_hid_report
+                                           : desc_hid_report_with_gamepad;
 
   case USB_ITF_RAW_HID:
     return desc_raw_hid_report;

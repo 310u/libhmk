@@ -92,6 +92,10 @@ __attribute__((aligned(8))) static volatile uint16_t
     adc_buffer[ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS];
 // ADC values for each key
 static volatile uint16_t adc_values[NUM_KEYS];
+// ADC values for raw inputs (like joystick)
+#if ADC_NUM_RAW_INPUTS > 0
+static volatile uint16_t adc_raw_values[ADC_NUM_RAW_INPUTS];
+#endif
 
 void analog_init(void) {
   // Enable peripheral clocks
@@ -220,7 +224,18 @@ void analog_init(void) {
 
 void analog_task(void) {}
 
-uint16_t analog_read(uint8_t key) { return adc_values[key]; }
+uint16_t analog_read(uint8_t key) { 
+#if defined(JOYSTICK_SW_KEY_INDEX) && defined(JOYSTICK_SW_PIN) && defined(JOYSTICK_SW_PORT)
+  if (key == JOYSTICK_SW_KEY_INDEX) {
+    return gpio_input_data_bit_read(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == RESET ? ADC_MAX_VALUE : 0;
+  }
+#endif
+  return adc_values[key]; 
+}
+
+#if ADC_NUM_RAW_INPUTS > 0
+uint16_t analog_read_raw(uint8_t index) { return adc_raw_values[index]; }
+#endif
 
 //--------------------------------------------------------------------+
 // Interrupt Handlers
@@ -245,8 +260,9 @@ void DMA1_Channel1_IRQHandler(void) {
 
 #if ADC_NUM_RAW_INPUTS > 0
     for (uint32_t i = 0; i < ADC_NUM_RAW_INPUTS; i++) {
+      adc_raw_values[i] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
       const uint16_t key = raw_input_vector[i];
-      if (key)
+      if (key && key <= NUM_KEYS)
         adc_values[key - 1] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
     }
 #endif

@@ -62,6 +62,7 @@ enum {
   REPORT_ID_SYSTEM_CONTROL = 1,
   REPORT_ID_CONSUMER_CONTROL,
   REPORT_ID_MOUSE,
+  REPORT_ID_GAMEPAD,
   REPORT_ID_COUNT,
 };
 
@@ -95,6 +96,24 @@ typedef struct __attribute__((packed)) {
 // reports, so the first byte is reserved for the report ID
 _Static_assert(sizeof(hid_nkro_kb_report_t) < CFG_TUD_HID_EP_BUFSIZE,
                "Invalid NKRO report size");
+
+//--------------------------------------------------------------------+
+// HID Gamepad Report (Xbox-compatible)
+//--------------------------------------------------------------------+
+
+typedef struct __attribute__((packed)) {
+  int16_t lx;       // Left stick X  (-32768..32767)
+  int16_t ly;       // Left stick Y  (-32768..32767)
+  int16_t rx;       // Right stick X (-32768..32767)
+  int16_t ry;       // Right stick Y (-32768..32767)
+  uint8_t lt;       // Left trigger  (0..255)
+  uint8_t rt;       // Right trigger (0..255)
+  uint8_t hat;      // Hat switch (0=neutral, 1-8=directions)
+  uint16_t buttons; // 16 buttons
+} hid_gamepad_xbox_report_t;
+
+_Static_assert(sizeof(hid_gamepad_xbox_report_t) < CFG_TUD_HID_EP_BUFSIZE,
+               "Invalid gamepad report size");
 
 //--------------------------------------------------------------------+
 // Raw HID Report
