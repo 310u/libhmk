@@ -152,7 +152,16 @@ void hid_keycode_add(uint8_t keycode) {
 void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons) {
   mouse_report.x = x;
   mouse_report.y = y;
+  mouse_report.wheel = 0;
+  mouse_report.pan = 0;
   mouse_report.buttons |= buttons;
+}
+
+void hid_mouse_scroll(int8_t wheel, int8_t pan) {
+  mouse_report.x = 0;
+  mouse_report.y = 0;
+  mouse_report.wheel = wheel;
+  mouse_report.pan = pan;
 }
 
 void hid_keycode_remove(uint8_t keycode) {

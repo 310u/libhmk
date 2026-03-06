@@ -6,9 +6,11 @@
 // 1: XInput Left Stick
 // 2: XInput Right Stick
 typedef enum {
-    JOYSTICK_MODE_MOUSE = 0,
-    JOYSTICK_MODE_XINPUT_LS = 1,
-    JOYSTICK_MODE_XINPUT_RS = 2,
+    JOYSTICK_MODE_DISABLED = 0,
+    JOYSTICK_MODE_MOUSE = 1,
+    JOYSTICK_MODE_XINPUT_LS = 2,
+    JOYSTICK_MODE_XINPUT_RS = 3,
+    JOYSTICK_MODE_SCROLL = 4,
 } joystick_mode_t;
 
 typedef struct __attribute__((packed)) {

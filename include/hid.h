@@ -48,14 +48,24 @@ void hid_keycode_remove(uint8_t keycode);
 
 /**
  * @brief Move the mouse cursor
- * 
+ *
  * @param x X axis offset
  * @param y Y axis offset
  * @param buttons Mouse buttons bitmask
- * 
+ *
  * @return None
  */
 void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons);
+
+/**
+ * @brief Scroll the mouse wheel
+ *
+ * @param wheel Vertical scroll amount
+ * @param pan Horizontal scroll amount
+ *
+ * @return None
+ */
+void hid_mouse_scroll(int8_t wheel, int8_t pan);
 
 /**
  * @brief Send all HID reports

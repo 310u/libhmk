@@ -143,7 +143,7 @@ void joystick_task(void) {
     // Apply smoothing
     current_state.raw_x = smooth_adc(current_state.raw_x, x_raw);
     current_state.raw_y = smooth_adc(current_state.raw_y, y_raw);
-    current_state.sw = false;
+    current_state.sw = (gpio_input_data_bit_read(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == RESET);
 
     // Apply calibration
     current_state.out_x = apply_calibration(current_state.raw_x, &config_cache.x, config_cache.deadzone);
@@ -175,9 +175,30 @@ void joystick_task(void) {
                 uint8_t buttons = 0;
                 if (current_state.sw) buttons |= 1; // Left click
 
-                // hid_mouse_move is not standard in libhmk hid API yet, we need to add it to hid.c
-                // hid_mouse_move((int8_t)dx, (int8_t)dy, buttons);
+                // Call hid_mouse_move which is now available in hid.c
+                hid_mouse_move((int8_t)dx, (int8_t)dy, buttons);
             }
+            last_mouse_tick = tick;
+        }
+    } else if (config_cache.mode == JOYSTICK_MODE_SCROLL) {
+        uint32_t tick = system_get_ms();
+        if (tick - last_mouse_tick >= 25) { // 40Hz for scrolling to avoid going too fast
+            if (current_state.out_x != 0 || current_state.out_y != 0) {
+                // Non-linear scaling
+                int32_t dx = (int32_t)current_state.out_x * current_state.out_x * current_state.out_x / 16384;
+                int32_t dy = (int32_t)current_state.out_y * current_state.out_y * current_state.out_y / 16384;
+
+                dx = (dx * config_cache.mouse_speed) / 250;
+                dy = (dy * config_cache.mouse_speed) / 250;
+
+                // Typical orientation: up joystick = positive scroll (up)
+                // Right joystick = positive pan (right)
+                hid_mouse_scroll((int8_t)dy, (int8_t)dx);
+            }
+            uint8_t buttons = 0;
+            if (current_state.sw) buttons |= 1; // Allows click while scrolling
+            // If we just clicked, send a move with 0 dx/dy to register the click quickly
+            if (current_state.sw) hid_mouse_move(0, 0, buttons);
             last_mouse_tick = tick;
         }
     }

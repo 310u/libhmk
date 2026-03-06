@@ -20,6 +20,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "joystick.h"
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
@@ -438,6 +439,15 @@ void layout_register(uint8_t key, uint8_t keycode) {
   case SP_BOOT:
     board_enter_bootloader();
     break;
+
+  case SP_JOY_MODE_NEXT: {
+#if defined(JOYSTICK_ENABLED)
+    joystick_config_t jc = joystick_get_config();
+    jc.mode = (jc.mode + 1) % 5; // Cycles through 0, 1, 2, 3, 4
+    joystick_set_config(jc);
+#endif
+    break;
+  }
 
   default:
     break;
