@@ -93,8 +93,7 @@ uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
   return CURRENT_PROFILE.keymap[default_layer][key];
 }
 
-// Only send reports if they changed
-static bool should_send_reports;
+
 // Whether the key is disabled by `SP_KEY_LOCK`
 static bitmap_t key_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
@@ -369,10 +368,7 @@ void layout_task(void) {
     pending_count = 0;
   }
 
-  if (should_send_reports) {
-    hid_send_reports();
-    should_send_reports = false;
-  }
+  hid_send_reports();
 
   // Process deferred actions for the next matrix scan
   deferred_action_process();
@@ -408,7 +404,7 @@ void layout_register(uint8_t key, uint8_t keycode) {
   switch (keycode) {
   case HID_KEYCODE_RANGE:
     hid_keycode_add(keycode);
-    should_send_reports = true;
+
     break;
 
   case MOMENTARY_LAYER_RANGE:
@@ -461,7 +457,7 @@ void layout_unregister(uint8_t key, uint8_t keycode) {
   switch (keycode) {
   case HID_KEYCODE_RANGE:
     hid_keycode_remove(keycode);
-    should_send_reports = true;
+
     break;
 
   case MOMENTARY_LAYER_RANGE:
