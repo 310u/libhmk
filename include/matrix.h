@@ -122,3 +122,10 @@ void matrix_scan(void);
  * @return None
  */
 void matrix_disable_rapid_trigger(uint8_t key, bool disable);
+
+/**
+ * @brief Get the duration in milliseconds since the keyboard was last active
+ *
+ * @return Idle time in milliseconds, or 0 if any key is currently pressed
+ */
+uint32_t matrix_get_idle_time(void);

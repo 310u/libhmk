@@ -25,9 +25,9 @@
 //--------------------------------------------------------------------+
 
 // Magic number to identify the start of the configuration
-#define EECONFIG_MAGIC_START 0x0A42494C
+#define EECONFIG_MAGIC_START 0x0B42494C
 // Magic number to identify the end of the configuration
-#define EECONFIG_MAGIC_END 0x0A4B4D48
+#define EECONFIG_MAGIC_END 0x0B4B4D48
 
 // Keyboard calibration configuration
 typedef struct __attribute__((packed)) {
@@ -48,20 +48,27 @@ typedef struct __attribute__((packed)) {
 typedef union __attribute__((packed)) {
   struct __attribute__((packed)) {
     // Whether the XInput interface is enabled
-    bool xinput_enabled : 1;
-    bool _unused0 : 1;
+    uint32_t xinput_enabled : 1;
+    uint32_t _unused0 : 1;
     // Whether 8kHz polling rate is enabled. Only applicable if USB HS is
     // enabled. If disabled, the 1kHz polling rate is used instead.
-    bool high_polling_rate_enabled : 1;
+    uint32_t high_polling_rate_enabled : 1;
     // Whether to continuously auto-calibrate the resting baseline
-    bool continuous_calibration : 1;
-    // Reserved bits for future use
-    uint16_t reserved : 12;
+    uint32_t continuous_calibration : 1;
+    // Sniper mode speed multiplier (e.g., 128 = 50%, 0 = 0%)
+    uint32_t sniper_mode_multiplier : 8;
+    // Reserved bits
+    uint32_t reserved : 4;
+
+    // Slider configuration
+    uint32_t slider_mode : 2;   // 0: Disabled, 1: Volume, 2: Gamepad
+    uint32_t slider_action : 4; // Gamepad Axis / Action mapping
+    uint32_t _reserved32 : 10;
   };
-  uint16_t raw;
+  uint32_t raw;
 } eeconfig_options_t;
 
-_Static_assert(sizeof(eeconfig_options_t) == sizeof(uint16_t),
+_Static_assert(sizeof(eeconfig_options_t) == sizeof(uint32_t),
                "Invalid eeconfig_options_t size");
 
 // Keyboard profile configuration
@@ -84,7 +91,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0109
+#define EECONFIG_VERSION 0x010C
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -140,6 +147,9 @@ extern const eeconfig_t *eeconfig;
       .xinput_enabled = false,                                                 \
       .high_polling_rate_enabled = true,                                       \
       .continuous_calibration = true,                                          \
+      .sniper_mode_multiplier = 128, /* 50% speed */                           \
+      .slider_mode = 0,                                                        \
+      .slider_action = 0,                                                      \
   }
 #endif
 

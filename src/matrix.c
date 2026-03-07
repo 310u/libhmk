@@ -49,6 +49,9 @@ key_state_t key_matrix[NUM_KEYS];
 // Bitmap for tracking which keys have Rapid Trigger disabled
 static bitmap_t rapid_trigger_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
+// Tracks the last time any key state changed
+static uint32_t matrix_last_activity_time = 0;
+
 void matrix_init(void) { matrix_recalibrate(false); }
 
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
@@ -186,9 +189,10 @@ void matrix_scan(void) {
 
     // Record the time when the key state changes. This is used by
     // layout_task to process key events in chronological order instead of
-    // index order, preventing key input swapping on simultaneous presses.
+    // preventing key input swapping on simultaneous presses.
     if (key_matrix[i].is_pressed != was_pressed) {
       key_matrix[i].event_time = timer_read();
+      matrix_last_activity_time = timer_read();
 #if defined(RGB_ENABLED)
       if (key_matrix[i].is_pressed) {
         rgb_matrix_record_keypress(i);
@@ -201,3 +205,13 @@ void matrix_scan(void) {
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
   bitmap_set(rapid_trigger_disabled, key, disable);
 }
+
+uint32_t matrix_get_idle_time(void) {
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    if (key_matrix[i].is_pressed) {
+      return 0; // Not idle if any key is held
+    }
+  }
+  return timer_elapsed(matrix_last_activity_time);
+}
+

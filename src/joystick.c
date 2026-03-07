@@ -3,6 +3,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "layout.h"
 
 #if defined(JOYSTICK_ENABLED)
 
@@ -168,6 +169,11 @@ void joystick_task(void) {
                 dx = (dx * config_cache.mouse_speed) / 50;
                 dy = (dy * config_cache.mouse_speed) / 50;
 
+                if (is_sniper_active) {
+                    dx = (dx * eeconfig->options.sniper_mode_multiplier) / 255;
+                    dy = (dy * eeconfig->options.sniper_mode_multiplier) / 255;
+                }
+
                 // For some reason Y axis might be inverted depending on hardware orientation, adjust here if needed
                 // Usually up is negative Y in mouse coordinates
                 dy = -dy; 
@@ -190,6 +196,11 @@ void joystick_task(void) {
 
                 dx = (dx * config_cache.mouse_speed) / 250;
                 dy = (dy * config_cache.mouse_speed) / 250;
+
+                if (is_sniper_active) {
+                    dx = (dx * eeconfig->options.sniper_mode_multiplier) / 255;
+                    dy = (dy * eeconfig->options.sniper_mode_multiplier) / 255;
+                }
 
                 // Typical orientation: up joystick = positive scroll (up)
                 // Right joystick = positive pan (right)

@@ -164,6 +164,13 @@ typedef struct {
 void advanced_key_init(void);
 
 /**
+ * @brief Abort all currently playing macros
+ *
+ * @return None
+ */
+void advanced_key_abort_macros(void);
+
+/**
  * @brief Clear advanced key states
  *
  * This function clears the advanced key states. It should be called before the

@@ -323,12 +323,6 @@ static void generate_desc_configuration(uint8_t *dst) {
     total_length -= XINPUT_DESC_LEN;
   }
 
-  // Adjust total length for the HID report descriptor size difference.
-  // CONFIG_TOTAL_LEN is calculated with desc_hid_report (without gamepad),
-  // so add the extra bytes when using the gamepad descriptor.
-  total_length +=
-      (int16_t)hid_report_desc_len - (int16_t)sizeof(desc_hid_report);
-
   uint8_t polling_interval = 1;
 #if defined(BOARD_USB_HS)
   if (!eeconfig->options.high_polling_rate_enabled)

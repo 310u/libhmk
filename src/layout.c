@@ -119,6 +119,8 @@ static struct {
 } pending_events[MAX_PENDING_EVENTS];
 static uint8_t pending_count;
 
+bool is_sniper_active = false;
+
 void layout_init(void) { layout_load_advanced_keys(); }
 
 /**
@@ -157,6 +159,9 @@ bool layout_process_key(uint8_t key, bool pressed) {
   bool has_non_tap_hold_press = false;
 
   if (pressed) {
+    // Abort playing macros whenever a new key is pressed
+    advanced_key_abort_macros();
+
     const uint8_t keycode = layout_get_keycode(current_layer, key);
     const uint8_t ak_index = advanced_key_indices[current_layer][key];
 
@@ -445,6 +450,10 @@ void layout_register(uint8_t key, uint8_t keycode) {
     break;
   }
 
+  case SP_SNIPER:
+    is_sniper_active = true;
+    break;
+
   default:
     break;
   }
@@ -462,6 +471,10 @@ void layout_unregister(uint8_t key, uint8_t keycode) {
 
   case MOMENTARY_LAYER_RANGE:
     layout_layer_off(MO_GET_LAYER(keycode));
+    break;
+
+  case SP_SNIPER:
+    is_sniper_active = false;
     break;
 
   default:

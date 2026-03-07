@@ -9,6 +9,8 @@
 #endif
 
 #include "hardware/hardware.h"
+#include "matrix.h"
+#include "layout.h"
 #include "rgb_coords.h"
 
 // We need an array to hold the current LED colors
@@ -140,6 +142,31 @@ void rgb_task(void) {
     if (timer_elapsed(last_render_tick) < 16) return;
     last_render_tick = current_tick;
 
+    uint8_t effective_brightness = rgb_config.global_brightness;
+    uint32_t idle_time = matrix_get_idle_time();
+    uint32_t timeout_ms = rgb_config.sleep_timeout * 60000;
+    
+    static bool was_asleep = false;
+    if (timeout_ms > 0 && idle_time > timeout_ms) {
+        uint32_t fade_duration = 2000; // 2 seconds to fade out
+        if (idle_time >= timeout_ms + fade_duration) {
+            effective_brightness = 0;
+        } else {
+            uint32_t passed = idle_time - timeout_ms;
+            effective_brightness = (effective_brightness * (fade_duration - passed)) / fade_duration;
+        }
+    }
+
+    if (effective_brightness == 0) {
+        if (!was_asleep) {
+            rgb_set_all_color(0, 0, 0);
+            rgb_update();
+            was_asleep = true;
+        }
+        return;
+    }
+    was_asleep = false;
+
     // A generic rolling timer based on system ticks and effect_speed
     // effect_speed = 128 is "normal". 255 is approx double. 0 is paused.
     static uint32_t anim_timer = 0;
@@ -168,7 +195,7 @@ void rgb_task(void) {
                 hsv_t hsv = {
                     .h = (uint8_t)((anim_timer / 4) + x),
                     .s = 255,
-                    .v = rgb_config.global_brightness
+                    .v = effective_brightness
                 };
                 rgb_color_t c = hsv_to_rgb(hsv);
                 rgb_set_color(i, c.r, c.g, c.b);
@@ -184,8 +211,8 @@ void rgb_task(void) {
                 // we set base glow if desired, or just pitch black.
                 // Let's do dark blue for 0 heat, bright red/white for 255
                 uint8_t h = 170 - ((temp * 170) / 255); // 170 down to 0
-                uint8_t v = (temp > 0) ? (temp / 2 + rgb_config.global_brightness / 2) : 0; 
-                if (v > rgb_config.global_brightness) v = rgb_config.global_brightness;
+                uint8_t v = (temp > 0) ? (temp / 2 + effective_brightness / 2) : 0; 
+                if (v > effective_brightness) v = effective_brightness;
                 if (temp == 0) {
                     rgb_set_color(i, 0, 0, 0);
                 } else {
@@ -197,10 +224,62 @@ void rgb_task(void) {
             break;
         }
 
+        case RGB_EFFECT_ANALOG: {
+            for (uint8_t i = 0; i < NUM_LEDS; i++) {
+                uint8_t dist = key_matrix[i].distance;
+                if (dist == 0) {
+                    rgb_set_color(i, 0, 0, 0);
+                } else {
+                    // Hue: 85 (Green) -> 0 (Red)
+                    uint8_t h = 85 - ((dist * 85) / 255);
+                    // Brightness: scales up to effective_brightness
+                    uint32_t v = ((uint32_t)dist * effective_brightness) / 255;
+                    hsv_t hsv = { .h = h, .s = 255, .v = (uint8_t)v };
+                    rgb_color_t c = hsv_to_rgb(hsv);
+                    rgb_set_color(i, c.r, c.g, c.b);
+                }
+            }
+            break;
+        }
+
         default:
             // Fallback for unimplemented effects
             rgb_set_all_color(0, 0, 0);
             break;
+    }
+
+    // Layer Indicator Override
+    static uint8_t previous_layer = 0;
+    static uint32_t layer_switch_time = 0;
+    uint8_t current_layer = layout_get_current_layer();
+    
+    if (current_layer != previous_layer) {
+        layer_switch_time = timer_read();
+        previous_layer = current_layer;
+    }
+
+    if (current_layer > 0 && current_layer < NUM_LAYERS) {
+        rgb_color_t layer_color = rgb_config.layer_colors[current_layer];
+        if (layer_color.r > 0 || layer_color.g > 0 || layer_color.b > 0) {
+            uint8_t r = ((uint32_t)layer_color.r * effective_brightness) / 255;
+            uint8_t g = ((uint32_t)layer_color.g * effective_brightness) / 255;
+            uint8_t b = ((uint32_t)layer_color.b * effective_brightness) / 255;
+
+            if (rgb_config.layer_indicator_mode == 0) {
+                // Mode 0: Fill entire keyboard
+                rgb_set_all_color(r, g, b);
+            } else if (rgb_config.layer_indicator_mode == 1) {
+                // Mode 1: Flash entire keyboard for 500ms
+                if (timer_elapsed(layer_switch_time) < 500) {
+                    rgb_set_all_color(r, g, b);
+                }
+            } else if (rgb_config.layer_indicator_mode == 2) {
+                // Mode 2: Illuminate a specific key
+                if (rgb_config.layer_indicator_key < NUM_LEDS) {
+                    rgb_set_color(rgb_config.layer_indicator_key, r, g, b);
+                }
+            }
+        }
     }
 
     rgb_update();

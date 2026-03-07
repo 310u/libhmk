@@ -26,6 +26,7 @@
 #include "tusb.h"
 #include "wear_leveling.h"
 #include "xinput.h"
+#include "slider.h"
 
 int main(void) {
   // Initialize the hardware
@@ -49,6 +50,7 @@ int main(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_init();
 #endif
+  slider_init();
   command_init();
 
   tud_init(BOARD_TUD_RHPORT);
@@ -62,6 +64,7 @@ int main(void) {
 #if defined(JOYSTICK_ENABLED)
     joystick_task();
 #endif
+    slider_task();
     xinput_task();
   }
 

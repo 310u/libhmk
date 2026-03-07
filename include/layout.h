@@ -21,6 +21,8 @@
 // Layout API
 //--------------------------------------------------------------------+
 
+extern bool is_sniper_active;
+
 /**
  * @brief Initialize the layout module
  *

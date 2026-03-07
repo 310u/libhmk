@@ -179,7 +179,7 @@ def generate_ts(structs: Dict[str, dict], macros: Dict[str, str]) -> str:
                 out.append("  const options = reader.uint8()")
                 out.append("  return { options } as any")
             elif name == "eeconfig_options_t":
-                out.append("  const raw = reader.uint16()")
+                out.append("  const raw = reader.uint32()")
                 out.append("  return { raw } as any")
             else:
                 out.append("  return {} as any // Generic Union fallback")

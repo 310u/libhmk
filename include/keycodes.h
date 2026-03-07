@@ -204,6 +204,7 @@ typedef enum {
   SP_PROFILE_NEXT = 0xD3,
   SP_BOOT = 0xD4,
   SP_JOY_MODE_NEXT = 0xD5,
+  SP_SNIPER = 0xD6,
 
   XXXXXXX = KC_NO,
   _______ = KC_TRANSPARENT,

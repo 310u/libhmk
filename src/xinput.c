@@ -18,6 +18,7 @@
 #include "device/usbd_pvt.h"
 #include "eeconfig.h"
 #include "joystick.h"
+#include "layout.h"
 #include "lib/bitmap.h"
 #include "lib/usqrt.h"
 #include "matrix.h"
@@ -153,6 +154,28 @@ void xinput_process(uint8_t key) {
 void xinput_task(void) {
   static xinput_report_t last_report = {.report_size = sizeof(xinput_report_t)};
 
+  // Inject slider override if Gamepad Mode is active
+  if (eeconfig->options.slider_mode == 2) {
+    uint8_t slider_val = key_matrix[NUM_KEYS - 1].distance;
+    uint8_t gp_btn = GP_BUTTON_NONE;
+    switch (eeconfig->options.slider_action) {
+      case 0: gp_btn = GP_BUTTON_LS_UP; break;
+      case 1: gp_btn = GP_BUTTON_LS_DOWN; break;
+      case 2: gp_btn = GP_BUTTON_LS_LEFT; break;
+      case 3: gp_btn = GP_BUTTON_LS_RIGHT; break;
+      case 4: gp_btn = GP_BUTTON_RS_UP; break;
+      case 5: gp_btn = GP_BUTTON_RS_DOWN; break;
+      case 6: gp_btn = GP_BUTTON_RS_LEFT; break;
+      case 7: gp_btn = GP_BUTTON_RS_RIGHT; break;
+      case 8: gp_btn = GP_BUTTON_LT; break;
+      case 9: gp_btn = GP_BUTTON_RT; break;
+      default: break;
+    }
+    if (gp_btn != GP_BUTTON_NONE) {
+      ANALOG_STATE(gp_btn) = M_MAX(ANALOG_STATE(gp_btn), slider_val);
+    }
+  }
+
   bool is_key_end_deadzone = false;
   // Update trigger states in the report
   report.lz =
@@ -219,6 +242,11 @@ void xinput_task(void) {
       // Otherwise, use the original values
       state[0] = x;
       state[1] = y;
+    }
+
+    if (is_sniper_active) {
+      state[0] = (uint16_t)state[0] * eeconfig->options.sniper_mode_multiplier / 255;
+      state[1] = (uint16_t)state[1] * eeconfig->options.sniper_mode_multiplier / 255;
     }
   }
 

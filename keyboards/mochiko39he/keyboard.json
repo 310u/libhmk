@@ -10,7 +10,7 @@
   "keyboard": {
     "num_profiles": 4,
     "num_layers": 4,
-    "num_keys": 39,
+    "num_keys": 40,
     "num_advanced_keys": 32
   },
   "hardware": {
@@ -83,6 +83,14 @@
           37,
           38
         ]
+      ]
+    },
+    "raw": {
+      "input": [
+        "A0"
+      ],
+      "vector": [
+        40
       ]
     }
   },
@@ -272,7 +280,8 @@
       "MO(2)",
       "KC_BSPC",
       "KC_RALT",
-      "KC_RCTL"
+      "KC_RCTL",
+      "KC_NO"
     ],
     [
       "KC_1",
@@ -313,7 +322,8 @@
       "MO(2)",
       "KC_BSPC",
       "KC_RALT",
-      "KC_RCTL"
+      "KC_RCTL",
+      "KC_NO"
     ],
     [
       "KC_VOLD",
@@ -354,9 +364,11 @@
       "MO(2)",
       "KC_BSPC",
       "KC_RALT",
-      "KC_RCTL"
+      "KC_RCTL",
+      "KC_NO"
     ],
     [
+      "_______",
       "_______",
       "_______",
       "_______",

@@ -69,6 +69,7 @@ typedef enum {
     RGB_EFFECT_STARLIGHT_DUAL_HUE,
     RGB_EFFECT_STARLIGHT_DUAL_SAT,
     RGB_EFFECT_RIVERFLOW,
+    RGB_EFFECT_ANALOG,
     RGB_EFFECT_MAX
 } rgb_effect_t;
 
@@ -78,6 +79,10 @@ typedef struct {
     uint8_t current_effect;
     rgb_color_t solid_color;
     uint8_t effect_speed;
+    uint8_t sleep_timeout; // in minutes, 0 = disabled
+    uint8_t layer_indicator_mode; // 0=Fill, 1=Flash, 2=Specific Key
+    uint8_t layer_indicator_key;  // LED index for mode 2
+    rgb_color_t layer_colors[NUM_LAYERS];
     rgb_color_t per_key_colors[NUM_KEYS];
 } rgb_config_t;
 

@@ -317,6 +317,22 @@ static void advanced_key_toggle(const advanced_key_event_t *event) {
 
 void advanced_key_init(void) {}
 
+void advanced_key_abort_macros(void) {
+  for (uint8_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+    if (ak->type == AK_TYPE_MACRO) {
+      ak_state_macro_t *state = &ak_states[i].macro;
+      if (state->is_playing) {
+        state->is_playing = false;
+        if (state->is_tapping) {
+          layout_unregister(255, state->tap_keycode);
+          state->is_tapping = false;
+        }
+      }
+    }
+  }
+}
+
 void advanced_key_clear(void) {
   // Release any keys that are currently pressed
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
