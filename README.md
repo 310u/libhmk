@@ -1,11 +1,13 @@
 # libhmk
 
-This repository contains libraries for building a Hall-effect keyboard firmware.
+Fork of [peppapighs/libhmk](https://github.com/peppapighs/libhmk) — Libraries for building a Hall-effect keyboard firmware.
+
+This fork adds joystick support, RGB lighting, combo/macro keys, and various improvements for custom keyboard builds.
 
 ## Table of Contents
 
 - [Features](#features)
-- [Limitations](#limitations)
+- [Fork Additions](#fork-additions)
 - [Getting Started](#getting-started)
 - [Development](#development)
 - [Porting](#porting)
@@ -13,24 +15,72 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
 
 ## Features
 
-- [x] **Analog Input**: Customizable actuation point for each key and many other features.
-- [x] **Rapid Trigger**: Register a key press or release based on the change in key position and the direction of that change
-- [x] **Continuous Rapid Trigger**: Deactivate Rapid Trigger only when the key is fully released.
-- [x] **Null Bind (SOCD + Rappy Snappy)**: Monitor 2 keys and select which one is active based on the chosen behavior.
-- [x] **Dynamic Keystroke**: Assign up to 4 keycodes to a single key. Each keycode can be assigned up to 4 actions for 4 different parts of the keystroke.
-- [x] **Tap-Hold**: Send a different keycode depending on whether the key is tapped or held.
-- [x] **Toggle**: Toggle between key press and key release. Hold the key for normal behavior.
-- [x] **N-Key Rollover**: Support for N-Key Rollover and automatically fall back to 6-Key Rollover in BIOS.
-- [x] **Automatic Calibration**: Automatically calibrate the analog input without requiring user intervention.
-- [x] **EEPROM Emulation**: No external EEPROM required. Emulate EEPROM using the internal flash memory.
-- [x] **Web Configurator**: Configure the firmware using [hmkconf](https://github.com/peppapighs/hmkconf) without needing to recompile the firmware.
-- [x] **Tick Rate**: Customizable tick rate for Tap-Hold and Dynamic Keystroke.
-- [x] **8kHz Polling Rate**: Support for 8kHz polling rate on some microcontrollers (e.g., AT32F405xx).
-- [x] **Gamepad**: Support for XInput gamepad mode, allowing the keyboard to be used as a game controller.
+### Core (from upstream)
 
-## Limitations
+- **Analog Input**: Customizable actuation point for each key and many other features.
+- **Rapid Trigger**: Register a key press or release based on the change in key position and the direction of that change.
+- **Continuous Rapid Trigger**: Deactivate Rapid Trigger only when the key is fully released.
+- **Null Bind (SOCD + Rappy Snappy)**: Monitor 2 keys and select which one is active based on the chosen behavior.
+- **Dynamic Keystroke**: Assign up to 4 keycodes to a single key with up to 4 actions for different parts of the keystroke.
+- **Tap-Hold**: Send a different keycode depending on whether the key is tapped or held.
+- **Toggle**: Toggle between key press and key release. Hold the key for normal behavior.
+- **N-Key Rollover**: Support for N-Key Rollover with automatic fallback to 6-Key Rollover in BIOS.
+- **Automatic Calibration**: Automatically calibrate the analog input without requiring user intervention.
+- **EEPROM Emulation**: No external EEPROM required. Emulate EEPROM using internal flash memory.
+- **Web Configurator**: Configure the firmware using [hmkconf](https://github.com/310u/hmkconf) without recompiling.
+- **Tick Rate**: Customizable tick rate for Tap-Hold and Dynamic Keystroke.
+- **8kHz Polling Rate**: Support for 8kHz polling rate on some microcontrollers (e.g., AT32F405xx).
+- **Gamepad**: XInput gamepad mode, allowing the keyboard to be used as a game controller.
 
-- **RGB Lighting**: The firmware does not support RGB lighting.
+### Fork Additions
+
+> [!WARNING]
+> Hardware features like **Joystick Support** and **RGB Lighting** have been implemented in software but are not yet fully tested on physical hardware.
+
+#### Joystick Support
+On-board analog joystick support with 5 operating modes:
+
+| Mode | Description |
+|------|-------------|
+| Disabled | Joystick input is ignored |
+| Mouse | Joystick controls the mouse cursor |
+| XInput Left Stick | Maps to left analog stick in gamepad mode |
+| XInput Right Stick | Maps to right analog stick in gamepad mode |
+| Scroll | Joystick controls scroll wheel / horizontal scroll |
+
+- Configurable deadzone, mouse speed, and axis calibration
+- Joystick switch (click) is mapped as the 41st key and fully remappable
+- Mode cycling via `SP_JOY_MODE_NEXT` keycode
+
+#### RGB Lighting
+Per-key RGB backlighting via SK6812MINI-E LEDs with 50+ effects:
+
+- Static effects: Solid Color, Alphas/Mods, Gradients
+- Animated effects: Breathing, Rainbow, Cycle, Spiral, Pinwheel, and more
+- Reactive effects: Typing Heatmap, Reactive, Splash, Nexus
+- Ambient effects: Digital Rain, Pixel Rain, Raindrops, Starlight, Riverflow
+- Per-key color configuration and adjustable global brightness / speed
+
+#### Combo Keys
+Press multiple keys simultaneously to trigger a different keycode:
+
+- Up to 4 trigger keys per combo
+- Configurable combo term (timing window)
+- Layer-aware combo detection
+
+#### Macro Keys
+Record and playback key sequences:
+
+- Press, Release, Tap, and Delay actions
+- Configurable timing for natural playback
+
+#### Additional Improvements
+- **Event Chronological Sorting**: Key events are sorted by actual event time for correct ordering during rapid input.
+- **Hold-Tap Input Buffering**: Keys pressed during undecided Tap-Hold are buffered and replayed after resolution, preventing missed modifiers.
+- **Double-Tap**: Optional double-tap keycode for Tap-Hold keys.
+- **HID Gamepad Descriptor**: Custom HID report descriptor for gamepad compatibility on Linux and other OS without XInput support.
+- **Stuck Key Bug Fix**: Fixed a race condition where key release reports could be permanently lost due to USB send timeout handling.
+- **Upstream Sync**: Ported STM32F446 timer adjustments and EEPROM flash wear reduction optimizations (on-demand bottom-out threshold saving).
 
 ## Getting Started
 
@@ -44,7 +94,7 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/peppapighs/libhmk.git
+   git clone https://github.com/310u/libhmk.git
    ```
 
 2. Open the project in PlatformIO, such as through Visual Studio Code.
@@ -61,8 +111,6 @@ This repository contains libraries for building a Hall-effect keyboard firmware.
 6. Flash the firmware to your keyboard using your preferred method (e.g., DFU, ISP). If your keyboard has a DFU bootloader, you can set `upload_protocol = dfu` in `platformio.ini` and use the command `pio run --target upload` or the PlatformIO IDE's "Upload" option while the keyboard is in DFU mode. If your browser supports WebUSB, you can also use [WebUSB DFU](https://devanlai.github.io/webdfu/dfu-util/) (Recommended method).
 
 ## Development
-
-The development branch is `dev`, which contains the latest features and bug fixes. The corresponding `dev` branch of [hmkconf](https://github.com/peppapighs/hmkconf/tree/dev) deployed at [https://dev.hmkconf.com](https://dev.hmkconf.com) is required to configure the `dev` branch of the firmware. To contribute, please create a pull request against the `dev` branch.
 
 ### Developing a New Keyboard
 
@@ -89,6 +137,7 @@ You can refer to existing hardware drivers as examples when implementing support
 
 ## Acknowledgements
 
+- [peppapighs/libhmk](https://github.com/peppapighs/libhmk) — Original project this fork is based on.
 - [hathach/tinyusb](https://github.com/hathach/tinyusb) for the USB stack.
 - [qmk/qmk_firmware](https://github.com/qmk/qmk_firmware) for inspiration, including EEPROM emulation and matrix scanning.
 - [@riskable](https://github.com/riskable) for pioneering custom Hall-effect keyboard firmware development.
