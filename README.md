@@ -35,7 +35,21 @@ This fork adds joystick support, RGB lighting, combo/macro keys, and various imp
 ### Fork Additions
 
 > [!WARNING]
-> Hardware features like **Joystick Support** and **RGB Lighting** have been implemented in software but are not yet fully tested on physical hardware.
+> Hardware features like **Joystick Support**, **Slider Support**, and **RGB Lighting** have been implemented in software but are not yet fully tested on physical hardware.
+
+#### Analog RGB
+New lighting effects that react to key press depth:
+- **Depth-Reactive Lighting**: LEDs change color or brightness based on how far each key is pressed, providing immediate visual feedback for analog input.
+- **Wooting-style Effects**: Implementation of reactive layers that blend with background effects.
+
+#### Slider Support
+On-board analog slider support with 2 operating modes:
+
+| Mode | Description |
+|------|-------------|
+| Disabled | Slider input is ignored |
+| Volume | Controls system audio volume (Relative HID keys) |
+| Gamepad | Maps to a gamepad axis (e.g., Left Trigger or Right Stick Y) |
 
 #### Joystick Support
 On-board analog joystick support with 5 operating modes:
@@ -79,6 +93,7 @@ Record and playback key sequences:
 - **Hold-Tap Input Buffering**: Keys pressed during undecided Tap-Hold are buffered and replayed after resolution, preventing missed modifiers.
 - **Double-Tap**: Optional double-tap keycode for Tap-Hold keys.
 - **HID Gamepad Descriptor**: Custom HID report descriptor for gamepad compatibility on Linux and other OS without XInput support.
+- **XInput/HID Conflict Fix**: The HID gamepad functionality is now intelligently deactivated when XInput mode is active to prevent dual-input conflicts on Windows.
 - **Stuck Key Bug Fix**: Fixed a race condition where key release reports could be permanently lost due to USB send timeout handling.
 - **Upstream Sync**: Ported STM32F446 timer adjustments and EEPROM flash wear reduction optimizations (on-demand bottom-out threshold saving).
 
@@ -118,6 +133,8 @@ To develop a new keyboard, create a new directory under `keyboards/` with your k
 
 - `keyboard.json`: A JSON file containing metadata about your keyboard, used for both firmware compilation and the web configurator. Refer to [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json) for the schema.
 - `config.h` (Optional): Additional configuration header for your keyboard to define custom configurations beyond what's specified in `keyboard.json`.
+
+For a step-by-step guide on creating a new keyboard definition, see the [New Keyboard Setup Guide](docs/new_keyboard_setup.md).
 
 You can use an existing keyboard implementation as a reference. If your keyboard hardware isn't currently supported by the firmware, you'll need to implement the necessary drivers and features. See the [Porting](#porting) section for more details.
 
