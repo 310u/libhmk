@@ -29,18 +29,7 @@ static eeconfig_profile_t default_profile = {
   .gamepad_options = DEFAULT_GAMEPAD_OPTIONS,
   .tick_rate = DEFAULT_TICK_RATE,
 #if defined(RGB_ENABLED)
-  .rgb_config = {
-      .enabled = true,
-      .global_brightness = 255,
-      .current_effect = 0,
-      .solid_color = {255, 0, 0},
-      .effect_speed = 128,
-      .sleep_timeout = 0,
-      .layer_indicator_mode = 0, // 0 = Fill
-      .layer_indicator_key = 0,
-      .layer_colors = {0},
-      .per_key_colors = {0},
-  },
+  .rgb_config = DEFAULT_RGB_CONFIG,
 #endif
 };
 

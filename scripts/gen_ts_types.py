@@ -167,6 +167,18 @@ def generate_ts(structs: Dict[str, dict], macros: Dict[str, str]) -> str:
     out.append("export function parseBool(reader: DataViewReader): boolean {")
     out.append("  return reader.uint8() !== 0")
     out.append("}\n")
+    out.append("export function parseInt8(reader: DataViewReader): number {")
+    out.append("  const v = reader.uint8()")
+    out.append("  return v >= 0x80 ? v - 0x100 : v")
+    out.append("}\n")
+    out.append("export function parseInt16(reader: DataViewReader): number {")
+    out.append("  const v = reader.uint16()")
+    out.append("  return v >= 0x8000 ? v - 0x10000 : v")
+    out.append("}\n")
+    out.append("export function parseInt32(reader: DataViewReader): number {")
+    out.append("  const v = reader.uint32()")
+    out.append("  return v >= 0x80000000 ? v - 0x100000000 : v")
+    out.append("}\n")
     
     for name, info in structs.items():
         ts_name = pascal_case(name)

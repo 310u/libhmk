@@ -58,6 +58,10 @@ static bool v1_C_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_C_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_D_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_D_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -248,6 +252,20 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_C_global_config_func,
         .profile_config_func = v1_C_profile_config_func,
+    },
+    {
+        .version = 0x010D,
+        .global_config_size = 16 + NUM_KEYS * 2,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 + NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1 + NUM_MACROS * sizeof(macro_t)
+#if defined(RGB_ENABLED)
+                               + 7 + 3 + 1 + 2 + 3 * NUM_LAYERS + 3 * NUM_KEYS
+#endif
+#if defined(JOYSTICK_ENABLED)
+                               + 20
+#endif
+        ,
+        .global_config_func = v1_D_global_config_func,
+        .profile_config_func = v1_D_profile_config_func,
     },
 };
 
@@ -674,5 +692,48 @@ bool v1_C_profile_config_func(uint8_t profile, uint8_t *dst,
 #endif
 
   migration_memcpy(&dst, &src, profile_size);
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.C -> v1.D Migration
+//--------------------------------------------------------------------+
+
+bool v1_D_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x010C)
+    return false;
+
+  // Global config unchanged
+  migration_memcpy(&dst, &src, 16 + NUM_KEYS * 2);
+  return true;
+}
+
+bool v1_D_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  // Profile fields before rgb_config are unchanged.
+  uint32_t pre_rgb_size = NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +
+                          NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1 +
+                          NUM_MACROS * sizeof(macro_t);
+  migration_memcpy(&dst, &src, pre_rgb_size);
+
+#if defined(RGB_ENABLED)
+  // v1.C RGB layout:
+  // enabled(1), brightness(1), effect(1), solid(3), effect_speed(1),
+  // sleep_timeout(1), layer_indicator_mode(1), layer_indicator_key(1),
+  // layer_colors(3*NUM_LAYERS), per_key_colors(3*NUM_KEYS)
+  //
+  // v1.D inserts secondary_color(3) after solid_color.
+  migration_memcpy(&dst, &src, 6); // enabled..solid_color
+  migration_assign_uint8_t(&dst, 255);
+  migration_assign_uint8_t(&dst, 255);
+  migration_assign_uint8_t(&dst, 255);
+  migration_memcpy(&dst, &src, 4 + 3 * NUM_LAYERS + 3 * NUM_KEYS);
+#endif
+
+#if defined(JOYSTICK_ENABLED)
+  // Joystick config unchanged.
+  migration_memcpy(&dst, &src, 20);
+#endif
+
   return true;
 }

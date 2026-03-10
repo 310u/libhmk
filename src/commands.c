@@ -22,6 +22,7 @@
 #include "layout.h"
 #include "matrix.h"
 #include "metadata.h"
+#include "rgb.h"
 #include "tusb.h"
 
 // Helper macro to verify command parameters
@@ -338,6 +339,41 @@ void command_process(const uint8_t *buf) {
     success = wear_leveling_write(addr, p->macros, sizeof(macro_t) * p->len);
     break;
   }
+#if defined(RGB_ENABLED)
+  case COMMAND_GET_RGB_CONFIG: {
+    const command_in_rgb_config_t *p = &in->rgb_config;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < sizeof(rgb_config_t));
+
+    const rgb_config_t *config = &eeconfig->profiles[p->profile].rgb_config;
+    memcpy(out->rgb_config_data, ((const uint8_t *)config) + p->offset,
+           M_MIN(M_ARRAY_SIZE(out->rgb_config_data),
+                 (uint32_t)(sizeof(rgb_config_t) - p->offset)));
+    break;
+  }
+  case COMMAND_SET_RGB_CONFIG: {
+    const command_in_rgb_config_t *p = &in->rgb_config;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < sizeof(rgb_config_t));
+    COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->data) &&
+                   p->len <= sizeof(rgb_config_t) - p->offset);
+
+    uint32_t addr = offsetof(eeconfig_t, profiles) +
+                    p->profile * sizeof(eeconfig_profile_t) +
+                    offsetof(eeconfig_profile_t, rgb_config) +
+                    p->offset * sizeof(uint8_t);
+    success = wear_leveling_write(addr, p->data, sizeof(uint8_t) * p->len);
+
+    if (success && p->profile == eeconfig->current_profile) {
+      memcpy(rgb_get_config(), &eeconfig->profiles[p->profile].rgb_config,
+             sizeof(rgb_config_t));
+      rgb_apply_config();
+    }
+    break;
+  }
+#endif
 #if defined(JOYSTICK_ENABLED)
   case COMMAND_GET_JOYSTICK_STATE: {
     joystick_state_t state = joystick_get_state();

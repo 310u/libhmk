@@ -233,6 +233,22 @@
           "maximum": 255
         }
       }
+    },
+    "rgb": {
+      "type": "object",
+      "description": "RGB configuration",
+      "properties": {
+        "led_map": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "mod_keys": {
+          "type": "array",
+          "description": "Key indices that should be treated as modifiers in ALPHAS_MODS.",
+          "items": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "required": ["led_map"]
     }
   },
   "required": [
