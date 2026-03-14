@@ -11,9 +11,19 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
+import importlib.util
+
 Import("env")
 
-PIP_PACKAGES = ["pip", "jsonschema"]
+REQUIRED_MODULES = {
+    "jsonschema": "jsonschema",
+}
 
-for package in PIP_PACKAGES:
-    env.Execute(f"$PYTHONEXE -m pip install {package} --upgrade")
+for module_name, package_name in REQUIRED_MODULES.items():
+    if importlib.util.find_spec(module_name) is not None:
+        continue
+
+    result = env.Execute(f"$PYTHONEXE -m pip install {package_name} --upgrade")
+    if result != 0:
+        print(f"Failed to install required Python package: {package_name}")
+        Exit(1)

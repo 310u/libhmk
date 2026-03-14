@@ -11,17 +11,22 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import utils
 from drivers import *
+from gen_rgb_coords import gen_rgb_coords
 
 Import("env")
 
-keyboard = env["PIOENV"]
+keyboard = utils.get_keyboard_name(env)
 
 # Load JSON files and driver. We assume that they have been validated in `get_deps.py`.
 kb_json = utils.get_kb_json(keyboard)
 driver = utils.get_driver(keyboard)
 driver_name = kb_json["hardware"]["driver"]
+
+if kb_json.get("features", {}).get("rgb", False):
+    gen_rgb_coords(os.path.join("keyboards", keyboard))
 
 # Add source filter for driver source files
 env.Append(SRC_FILTER=["-<hardware/>", f"+<hardware/{driver_name}/>"])
@@ -33,6 +38,8 @@ build_flags = utils.CompilerFlags()
 build_flags.include(f"hardware/{driver_name}")
 build_flags.include(f"keyboards/{keyboard}")
 build_flags.include("include")
+build_flags.define("DRIVER_BOARD_DEF_HEADER", f"\"../hardware/{driver_name}/board_def.h\"")
+build_flags.define("KEYBOARD_BOARD_DEF_HEADER", f"\"../keyboards/{keyboard}/board_def.h\"")
 
 # Bootloader Configuration
 build_flags.define("BOOTLOADER_ADDR", driver.metadata.bootloader.address)

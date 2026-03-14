@@ -444,7 +444,11 @@ void layout_register(uint8_t key, uint8_t keycode) {
   case SP_JOY_MODE_NEXT: {
 #if defined(JOYSTICK_ENABLED)
     joystick_config_t jc = joystick_get_config();
-    jc.mode = (jc.mode + 1) % 5; // Cycles through 0, 1, 2, 3, 4
+    if (jc.mode == JOYSTICK_MODE_SCROLL) {
+      jc.mode = JOYSTICK_MODE_MOUSE;
+    } else {
+      jc.mode = JOYSTICK_MODE_SCROLL;
+    }
     joystick_set_config(jc);
 #endif
     break;

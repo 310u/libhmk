@@ -11,10 +11,22 @@
 #endif
 
 #include "hardware/hardware.h"
+#include "hardware/rgb_api.h"
 #include "matrix.h"
 #include "layout.h"
 #include "eeconfig.h"
 #include "rgb_coords.h"
+
+/*
+ * Attribution:
+ * Many effects in this file are adapted from QMK's RGB Matrix / RGB Light
+ * effect set. libhmk keeps the QMK-aligned effect names where possible and
+ * adds board-specific LED mapping/clipping around them.
+ *
+ * Local libhmk-only effects in this file are:
+ *   - RGB_EFFECT_ANALOG
+ *   - RGB_EFFECT_PER_KEY
+ */
 
 // Simple PRNG for effects
 static uint32_t random_state = 0x12345678;
@@ -109,12 +121,19 @@ typedef struct {
 static rgb_hit_t rgb_last_hits[RGB_LAST_HITS] = {0};
 static uint8_t rgb_last_hits_count = 0;
 
+static uint8_t reactive_clip_scale(uint8_t source_led, uint8_t target_led, uint8_t value);
+static uint8_t reactive_clip_effect(uint8_t target_led, const rgb_hit_t *hit, uint8_t effect);
+
 void rgb_matrix_record_keypress(uint8_t index) {
-    if (index < NUM_LEDS) {
+    if (index < NUM_KEYS) {
+        uint8_t led_index = rgb_key_to_led[index];
+        if (led_index >= NUM_LEDS) {
+            return;
+        }
         rgb_hit_t hit = {
-            .index = index,
-            .x = rgb_led_coords[index].x,
-            .y = rgb_led_coords[index].y,
+            .index = led_index,
+            .x = rgb_led_coords[led_index].x,
+            .y = rgb_led_coords[led_index].y,
             .time_ms = timer_read(),
         };
         if (rgb_last_hits_count < RGB_LAST_HITS) {
@@ -127,12 +146,12 @@ void rgb_matrix_record_keypress(uint8_t index) {
         }
 
         // QMK-like heatmap increase step
-        rgb_heatmap[index] = qadd8(rgb_heatmap[index], 32);
+        rgb_heatmap[led_index] = qadd8(rgb_heatmap[led_index], 32);
         
         // Slightly heat up neighbors based on coordinate proximity
-        led_point_t p1 = rgb_led_coords[index];
+        led_point_t p1 = rgb_led_coords[led_index];
         for (uint8_t i = 0; i < NUM_LEDS; i++) {
-            if (i == index) continue;
+            if (i == led_index) continue;
             led_point_t p2 = rgb_led_coords[i];
             int dx = p1.x - p2.x;
             int dy = p1.y - p2.y;
@@ -140,6 +159,7 @@ void rgb_matrix_record_keypress(uint8_t index) {
             if (distance <= 40) {
                 uint8_t amount = qsub8(40, distance);
                 if (amount > 16) amount = 16;
+                amount = reactive_clip_scale(led_index, i, amount);
                 rgb_heatmap[i] = qadd8(rgb_heatmap[i], amount);
             }
         }
@@ -147,7 +167,9 @@ void rgb_matrix_record_keypress(uint8_t index) {
 }
 
 void rgb_init(void) {
+    rgb_driver_init();
     memcpy(&rgb_config, &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
+    rgb_update();
 }
 
 rgb_config_t* rgb_get_config(void) {
@@ -175,8 +197,16 @@ void rgb_set_all_color(uint8_t r, uint8_t g, uint8_t b) {
 
 // Function to trigger the DMA transfer of the PWM data buffer
 static void rgb_transmit_dma(void) {
-    // Logic to convert current_colors to PWM duty cycles and start DMA
-    // (Stubbed out hardware specifics)
+    uint8_t grb_data[NUM_LEDS * 3];
+    uint16_t offset = 0;
+
+    for (uint8_t i = 0; i < NUM_LEDS; i++) {
+        grb_data[offset++] = current_colors[i].g;
+        grb_data[offset++] = current_colors[i].r;
+        grb_data[offset++] = current_colors[i].b;
+    }
+
+    rgb_driver_write(grb_data, offset);
 }
 
 void rgb_update(void) {
@@ -242,6 +272,16 @@ static uint8_t hit_elapsed_tick(const rgb_hit_t *hit, uint8_t speed) {
     return (t > 255) ? 255 : (uint8_t)t;
 }
 
+static uint8_t reactive_clip_scale(uint8_t source_led, uint8_t target_led, uint8_t value) {
+    return scale8(value, rgb_reactive_clip[source_led][target_led]);
+}
+
+static uint8_t reactive_clip_effect(uint8_t target_led, const rgb_hit_t *hit, uint8_t effect) {
+    uint8_t visible = (uint8_t)(255u - effect);
+    visible = reactive_clip_scale(hit->index, target_led, visible);
+    return (uint8_t)(255u - visible);
+}
+
 static uint8_t reactive_strength_for_hit(uint8_t led, const rgb_hit_t *hit, reactive_mode_t mode, uint8_t speed) {
     uint8_t tick = hit_elapsed_tick(hit, speed);
     int16_t dx = (int16_t)rgb_led_coords[led].x - (int16_t)hit->x;
@@ -270,9 +310,12 @@ static uint8_t reactive_strength_for_hit(uint8_t led, const rgb_hit_t *hit, reac
             if (dist > 72) effect = 255;
             if ((dx > 8 || dx < -8) && (dy > 8 || dy < -8)) effect = 255;
             break;
+        default:
+            effect = tick;
+            break;
     }
     if (effect > 255) effect = 255;
-    return (uint8_t)effect;
+    return reactive_clip_effect(led, hit, (uint8_t)effect);
 }
 
 static uint8_t splash_strength_for_hit(uint8_t led, const rgb_hit_t *hit, uint8_t speed) {
@@ -283,7 +326,7 @@ static uint8_t splash_strength_for_hit(uint8_t led, const rgb_hit_t *hit, uint8_
     int16_t effect = (int16_t)tick - dist;
     if (effect < 0) effect = 255;
     if (effect > 255) effect = 255;
-    return (uint8_t)effect;
+    return reactive_clip_effect(led, hit, (uint8_t)effect);
 }
 
 static uint8_t compute_reactive_intensity(uint8_t led, uint8_t effect, uint8_t speed) {
@@ -365,7 +408,7 @@ void rgb_task(void) {
 
     uint8_t effective_brightness = rgb_config.global_brightness;
     uint32_t idle_time = matrix_get_idle_time();
-    uint32_t timeout_ms = rgb_config.sleep_timeout * 60000;
+    uint32_t timeout_ms = (uint32_t)rgb_config.sleep_timeout * 60000u;
     
     static bool was_asleep = false;
     if (timeout_ms > 0 && idle_time > timeout_ms) {
@@ -392,7 +435,7 @@ void rgb_task(void) {
     static uint32_t anim_timer = 0;
     static uint16_t scaled_timer = 0;
     
-    anim_timer += (rgb_config.effect_speed * 16) / 128;
+    anim_timer += ((uint32_t)rgb_config.effect_speed * 16u) / 128u;
     
     uint16_t prev_scaled = scaled_timer;
     scaled_timer += qadd8(rgb_config.effect_speed, 16);
@@ -411,9 +454,9 @@ void rgb_task(void) {
             rgb_set_all_color(0, 0, 0);
             break;
         case RGB_EFFECT_SOLID_COLOR: {
-            uint32_t r = (rgb_config.solid_color.r * effective_brightness) / 255;
-            uint32_t g = (rgb_config.solid_color.g * effective_brightness) / 255;
-            uint32_t b = (rgb_config.solid_color.b * effective_brightness) / 255;
+            uint32_t r = ((uint32_t)rgb_config.solid_color.r * effective_brightness) / 255u;
+            uint32_t g = ((uint32_t)rgb_config.solid_color.g * effective_brightness) / 255u;
+            uint32_t b = ((uint32_t)rgb_config.solid_color.b * effective_brightness) / 255u;
             rgb_set_all_color(r, g, b);
             break;
         }
@@ -542,7 +585,8 @@ void rgb_task(void) {
                 pixel_rain_index = random8_max(NUM_LEDS);
                 pixel_rain_wait = timer_read();
             }
-            if (timer_elapsed(pixel_rain_wait) >= (2048 - scale16by8(1792, rgb_config.effect_speed))) {
+            uint32_t rain_interval = 2048u - (uint32_t)scale16by8(1792u, rgb_config.effect_speed);
+            if (timer_elapsed(pixel_rain_wait) >= rain_interval) {
                 hsv_t hsv = (random8() & 2) ? (hsv_t){0, 0, 0} : (hsv_t){random8(), random8_min_max(127, 255), effective_brightness};
                 rgb_color_t c = hsv_to_rgb(hsv);
                 rgb_set_color(pixel_rain_index, c.r, c.g, c.b);
@@ -906,22 +950,19 @@ void rgb_task(void) {
         }
 
         case RGB_EFFECT_ANALOG: {
-            uint8_t bg_r = ((uint32_t)rgb_config.secondary_color.r * effective_brightness) / 255;
-            uint8_t bg_g = ((uint32_t)rgb_config.secondary_color.g * effective_brightness) / 255;
-            uint8_t bg_b = ((uint32_t)rgb_config.secondary_color.b * effective_brightness) / 255;
+            uint8_t base_r = (uint8_t)(((uint32_t)rgb_config.secondary_color.r * effective_brightness) / 255u);
+            uint8_t base_g = (uint8_t)(((uint32_t)rgb_config.secondary_color.g * effective_brightness) / 255u);
+            uint8_t base_b = (uint8_t)(((uint32_t)rgb_config.secondary_color.b * effective_brightness) / 255u);
+            uint8_t pressed_r = (uint8_t)(((uint32_t)rgb_config.solid_color.r * effective_brightness) / 255u);
+            uint8_t pressed_g = (uint8_t)(((uint32_t)rgb_config.solid_color.g * effective_brightness) / 255u);
+            uint8_t pressed_b = (uint8_t)(((uint32_t)rgb_config.solid_color.b * effective_brightness) / 255u);
             for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t dist = (i < NUM_KEYS) ? key_matrix[i].distance : 0;
-                if (dist == 0) {
-                    rgb_set_color(i, bg_r, bg_g, bg_b);
-                } else {
-                    uint8_t offset_h = (base_hue + 85 - ((dist * 85) / 255)) % 255;
-                    hsv_t hsv = { .h = offset_h, .s = 255, .v = effective_brightness };
-                    rgb_color_t c = hsv_to_rgb(hsv);
-                    uint8_t final_r = ((uint32_t)c.r * dist + (uint32_t)bg_r * (255 - dist)) / 255;
-                    uint8_t final_g = ((uint32_t)c.g * dist + (uint32_t)bg_g * (255 - dist)) / 255;
-                    uint8_t final_b = ((uint32_t)c.b * dist + (uint32_t)bg_b * (255 - dist)) / 255;
-                    rgb_set_color(i, final_r, final_g, final_b);
-                }
+                uint8_t key_index = rgb_led_key_index[i];
+                uint8_t dist = (key_index < NUM_KEYS) ? key_matrix[key_index].distance : 0;
+                uint8_t final_r = (uint8_t)(((uint32_t)pressed_r * dist + (uint32_t)base_r * (uint32_t)(255u - dist)) / 255u);
+                uint8_t final_g = (uint8_t)(((uint32_t)pressed_g * dist + (uint32_t)base_g * (uint32_t)(255u - dist)) / 255u);
+                uint8_t final_b = (uint8_t)(((uint32_t)pressed_b * dist + (uint32_t)base_b * (uint32_t)(255u - dist)) / 255u);
+                rgb_set_color(i, final_r, final_g, final_b);
             }
             break;
         }

@@ -45,6 +45,17 @@ class CompilerFlags:
         self.flags.append(f"-I{path}")
 
 
+def get_keyboard_name(env):
+    try:
+        keyboard = env.GetProjectOption("custom_keyboard_name")
+        if keyboard:
+            return keyboard
+    except Exception:
+        pass
+
+    return env["PIOENV"]
+
+
 # Load the keyboard JSON configuration file
 def get_kb_json(keyboard: str):
     with open(os.path.join("keyboards", keyboard, "keyboard.json"), "r") as f:

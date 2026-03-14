@@ -33,7 +33,7 @@ METADATA_TEMPLATE = """#pragma once
 
 Import("env")
 
-keyboard = env["PIOENV"]
+keyboard = utils.get_keyboard_name(env)
 
 kb_json = utils.get_kb_json(keyboard)
 driver = utils.get_driver(keyboard)

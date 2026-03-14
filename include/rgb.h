@@ -17,6 +17,8 @@ typedef struct {
     uint8_t v; // 0-255
 } hsv_t;
 
+// Most effect names intentionally mirror QMK RGB Matrix / RGB Light effects.
+// In libhmk, ANALOG and PER_KEY are local extensions; OFF maps to QMK's NONE.
 typedef enum {
     RGB_EFFECT_OFF = 0,
     RGB_EFFECT_SOLID_COLOR = 1,

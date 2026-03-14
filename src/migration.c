@@ -61,6 +61,9 @@ static bool v1_C_profile_config_func(uint8_t profile, uint8_t *dst,
 static bool v1_D_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_D_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
+static bool v1_E_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_E_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
 
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
@@ -266,6 +269,20 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_D_global_config_func,
         .profile_config_func = v1_D_profile_config_func,
+    },
+    {
+        .version = 0x010E,
+        .global_config_size = 16 + NUM_KEYS * 2,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 + NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1 + NUM_MACROS * sizeof(macro_t)
+#if defined(RGB_ENABLED)
+                               + 7 + 3 + 1 + 2 + 3 * NUM_LAYERS + 3 * NUM_KEYS
+#endif
+#if defined(JOYSTICK_ENABLED)
+                               + 20
+#endif
+        ,
+        .global_config_func = v1_E_global_config_func,
+        .profile_config_func = v1_E_profile_config_func,
     },
 };
 
@@ -733,6 +750,46 @@ bool v1_D_profile_config_func(uint8_t profile, uint8_t *dst,
 #if defined(JOYSTICK_ENABLED)
   // Joystick config unchanged.
   migration_memcpy(&dst, &src, 20);
+#endif
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.D -> v1.E Migration
+//--------------------------------------------------------------------+
+
+bool v1_E_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x010D)
+    return false;
+
+  // Global config unchanged
+  migration_memcpy(&dst, &src, 16 + NUM_KEYS * 2);
+  return true;
+}
+
+bool v1_E_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  // Profile fields before rgb_config are unchanged.
+  uint32_t pre_rgb_size = NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +
+                          NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1 +
+                          NUM_MACROS * sizeof(macro_t);
+  migration_memcpy(&dst, &src, pre_rgb_size);
+
+#if defined(RGB_ENABLED)
+  // RGB config unchanged.
+  migration_memcpy(&dst, &src, 7 + 3 + 1 + 2 + 3 * NUM_LAYERS + 3 * NUM_KEYS);
+#endif
+
+#if defined(JOYSTICK_ENABLED)
+  // Preserve joystick config, but initialize the new debounce field from the
+  // old reserved byte if it was zero.
+  uint8_t joystick_config[20];
+  migration_memcpy(&dst, &src, 20);
+  memcpy(joystick_config, dst - 20, sizeof(joystick_config));
+  if (joystick_config[15] == 0)
+    joystick_config[15] = 5;
+  memcpy(dst - 20, joystick_config, sizeof(joystick_config));
 #endif
 
   return true;

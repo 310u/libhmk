@@ -56,7 +56,47 @@ if __name__ == "__main__":
         "framework": driver.platformio.framework,
         "lib_deps": "\n".join(lib_deps),
         "platform": driver.platformio.platform,
+        "test_ignore": "*",
         "upload_protocol": "dfu",
+    }
+    pio_config[f"env:{keyboard}_recovery"] = {
+        "board": driver.platformio.board,
+        "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+        "build_flags": "\n".join(build_flags + ["-DRECOVERY_RESET_CURRENT_PROFILE_RGB"]),
+        "build_src_filter": "${env.build_src_filter}",
+        "build_src_flags": "\n".join(build_src_flags),
+        "extra_scripts": "\n".join(extra_scripts),
+        "framework": driver.platformio.framework,
+        "custom_keyboard_name": keyboard,
+        "lib_deps": "\n".join(lib_deps),
+        "platform": driver.platformio.platform,
+        "test_ignore": "*",
+        "upload_protocol": "dfu",
+    }
+
+    # Native unit test environments
+    common_test_flags = "-I include\n-include test/test_config.h"
+    pio_config["env:native_test_advanced_keys"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_advanced_keys",
+        "test_build_src": "yes",
+        "build_src_filter": "+<advanced_keys.c>",
+        "build_flags": common_test_flags,
+    }
+    pio_config["env:native_test_layout"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_layout",
+        "test_build_src": "yes",
+        "build_src_filter": "+<layout.c>",
+        "build_flags": common_test_flags,
+    }
+    pio_config["env:native_test_dummy"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_dummy",
+        "test_build_src": "no",
     }
 
     with open("platformio.ini", "w") as f:

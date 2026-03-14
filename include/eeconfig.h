@@ -91,7 +91,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x010D
+#define EECONFIG_VERSION 0x010E
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -189,8 +189,8 @@ extern const eeconfig_t *eeconfig;
       .sleep_timeout = 0,                                                      \
       .layer_indicator_mode = 0,                                               \
       .layer_indicator_key = 0,                                                \
-      .layer_colors = {0},                                                     \
-      .per_key_colors = {0},                                                   \
+      .layer_colors = {{0}},                                                   \
+      .per_key_colors = {{0}},                                                 \
   }
 #endif
 
@@ -220,6 +220,15 @@ bool eeconfig_reset(void);
  * @return true if successful, false otherwise
  */
 bool eeconfig_reset_profile(uint8_t profile);
+
+/**
+ * @brief Reset only the RGB configuration of a specific profile.
+ *
+ * @param profile Profile index
+ *
+ * @return true if successful, false otherwise
+ */
+bool eeconfig_reset_profile_rgb(uint8_t profile);
 
 /**
  * @brief Write a value to a field in the persistent configuration

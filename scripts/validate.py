@@ -17,7 +17,7 @@ import utils
 
 Import("env")
 
-keyboard = env["PIOENV"]
+keyboard = utils.get_keyboard_name(env)
 
 # Load driver (only for validation)
 utils.get_driver(keyboard)

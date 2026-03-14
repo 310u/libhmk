@@ -34,9 +34,6 @@ This fork adds joystick support, RGB lighting, combo/macro keys, and various imp
 
 ### Fork Additions
 
-> [!WARNING]
-> Hardware features like **Joystick Support**, **Slider Support**, and **RGB Lighting** have been implemented in software but are not yet fully tested on physical hardware.
-
 #### Analog RGB
 New lighting effects that react to key press depth:
 - **Depth-Reactive Lighting**: LEDs change color or brightness based on how far each key is pressed, providing immediate visual feedback for analog input.
@@ -44,6 +41,9 @@ New lighting effects that react to key press depth:
 
 #### Slider Support
 On-board analog slider support with 2 operating modes:
+
+> [!WARNING]
+> Slider support has been implemented in software but is not yet fully tested on physical hardware.
 
 | Mode | Description |
 |------|-------------|
@@ -74,6 +74,12 @@ Per-key RGB backlighting via SK6812MINI-E LEDs with 50+ effects:
 - Reactive effects: Typing Heatmap, Reactive, Splash, Nexus
 - Ambient effects: Digital Rain, Pixel Rain, Raindrops, Starlight, Riverflow
 - Per-key color configuration and adjustable global brightness / speed
+
+Many RGB effect names and animation formulas in this fork are adapted from QMK's
+[RGB Matrix](https://docs.qmk.fm/features/rgb_matrix) / RGB Light effect set.
+`ANALOG` and `PER_KEY` are libhmk-specific extensions. If you redistribute
+firmware derived from these effects, keep the corresponding source available and
+preserve attribution in line with the project licenses.
 
 #### Combo Keys
 Press multiple keys simultaneously to trigger a different keycode:
@@ -156,7 +162,7 @@ You can refer to existing hardware drivers as examples when implementing support
 
 - [peppapighs/libhmk](https://github.com/peppapighs/libhmk) — Original project this fork is based on.
 - [hathach/tinyusb](https://github.com/hathach/tinyusb) for the USB stack.
-- [qmk/qmk_firmware](https://github.com/qmk/qmk_firmware) for inspiration, including EEPROM emulation and matrix scanning.
+- [qmk/qmk_firmware](https://github.com/qmk/qmk_firmware) for inspiration, including EEPROM emulation, matrix scanning, and the RGB Matrix / RGB Light effect set adapted in this fork.
 - [@riskable](https://github.com/riskable) for pioneering custom Hall-effect keyboard firmware development.
 - [@heiso](https://github.com/heiso/) for his [macrolev](https://github.com/heiso/macrolev) and his helpfulness throughout the development process.
 - [Wooting](https://wooting.io/) for pioneering Hall-effect gaming keyboards and introducing many advanced features based on analog input.

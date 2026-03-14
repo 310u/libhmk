@@ -25,11 +25,25 @@ static eeconfig_options_t default_options = DEFAULT_OPTIONS;
 static eeconfig_calibration_t default_calibration = DEFAULT_CALIBRATION;
 static const uint8_t
     default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] = DEFAULT_KEYMAPS;
+#if defined(RGB_ENABLED)
+static const rgb_config_t default_rgb_config = (rgb_config_t)DEFAULT_RGB_CONFIG;
+#endif
 static eeconfig_profile_t default_profile = {
-  .gamepad_options = DEFAULT_GAMEPAD_OPTIONS,
+  .gamepad_options = (gamepad_options_t)DEFAULT_GAMEPAD_OPTIONS,
   .tick_rate = DEFAULT_TICK_RATE,
 #if defined(RGB_ENABLED)
-  .rgb_config = DEFAULT_RGB_CONFIG,
+  .rgb_config = (rgb_config_t)DEFAULT_RGB_CONFIG,
+#endif
+#if defined(JOYSTICK_ENABLED)
+  .joystick_config = {
+      .x = {0, 2048, 4095},
+      .y = {0, 2048, 4095},
+      .deadzone = 150,
+      .mode = JOYSTICK_MODE_MOUSE,
+      .mouse_speed = 10,
+      .mouse_acceleration = 255,
+      .sw_debounce_ms = 5,
+  },
 #endif
 };
 
@@ -92,4 +106,16 @@ bool eeconfig_reset_profile(uint8_t profile) {
     return false;
 
   return eeconfig_write_default_profile(profile);
+}
+
+bool eeconfig_reset_profile_rgb(uint8_t profile) {
+#if !defined(RGB_ENABLED)
+  (void)profile;
+  return false;
+#else
+  if (profile >= NUM_PROFILES)
+    return false;
+
+  return EECONFIG_WRITE(profiles[profile].rgb_config, &default_rgb_config);
+#endif
 }

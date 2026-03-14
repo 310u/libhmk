@@ -25,7 +25,9 @@ typedef struct __attribute__((packed)) {
     uint8_t deadzone;
     uint8_t mode; // joystick_mode_t
     uint8_t mouse_speed; // 1-255
-    uint8_t reserved[5];
+    uint8_t mouse_acceleration; // 1-255, 255 = strongest acceleration
+    uint8_t sw_debounce_ms; // Push switch debounce time in ms (0 = disabled)
+    uint8_t reserved[3];
 } joystick_config_t;
 
 _Static_assert(sizeof(joystick_config_t) == 20, "joystick_config_t size mismatch");

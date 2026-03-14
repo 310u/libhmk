@@ -221,6 +221,14 @@ void board_enter_bootloader(void) {
   // Set the bootloader flag
   BOARD_BOOTLOADER_FLAG = BOOTLOADER_MAGIC;
 
+  tud_disconnect();
+
+  uint32_t start_cycles = board_cycle_count();
+  // 10ms delay (system_core_clock is cycles per second)
+  uint32_t delay_cycles = system_core_clock / 100;
+  while (board_cycle_count() - start_cycles < delay_cycles)
+    ;
+
   // Reset the board to enter the bootloader
   NVIC_SystemReset();
 }

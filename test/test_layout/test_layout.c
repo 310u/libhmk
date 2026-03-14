@@ -25,6 +25,7 @@ bool advanced_key_combo_task(void) { return false; }
 void advanced_key_combo_invalidate_cache(void) {}
 void advanced_key_update_last_key_time(uint32_t time) {}
 bool advanced_key_has_undecided(void) { return false; }
+void advanced_key_abort_macros(void) {}
 
 void deferred_action_process(void) {}
 bool deferred_action_push(const deferred_action_t *action) { return true; }

@@ -23,6 +23,7 @@
 #include "joystick.h"
 #include "layout.h"
 #include "matrix.h"
+#include "rgb.h"
 #include "tusb.h"
 #include "wear_leveling.h"
 #include "xinput.h"
@@ -38,10 +39,16 @@ int main(void) {
   // Initialize the persistent configuration
   wear_leveling_init();
   eeconfig_init();
+#if defined(RECOVERY_RESET_CURRENT_PROFILE_RGB) && defined(RGB_ENABLED)
+  (void)eeconfig_reset_profile_rgb(eeconfig->current_profile);
+#endif
 
   // Initialize the core modules
   analog_init();
   matrix_init();
+#if defined(RGB_ENABLED)
+  rgb_init();
+#endif
   hid_init();
   deferred_action_init();
   advanced_key_init();
@@ -61,6 +68,9 @@ int main(void) {
     analog_task();
     matrix_scan();
     layout_task();
+#if defined(RGB_ENABLED)
+    rgb_task();
+#endif
 #if defined(JOYSTICK_ENABLED)
     joystick_task();
 #endif

@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import sys
 
@@ -60,6 +61,8 @@ def gen_rgb_coords(keyboard_dir):
 
     led_coords = []
     led_is_mod = []
+    key_to_led = [255] * num_keys
+    normalized_rects = []
     for key_index in led_map:
         if key_index in key_coords:
             x, y = key_coords[key_index]
@@ -69,6 +72,62 @@ def gen_rgb_coords(keyboard_dir):
         else:
             led_coords.append((0, 0))
         led_is_mod.append(1 if key_index in mod_keys else 0)
+
+    for led_index, key_index in enumerate(led_map):
+        if isinstance(key_index, int) and 0 <= key_index < num_keys:
+            key_to_led[key_index] = led_index
+
+    for key_index, (x, y) in key_coords.items():
+        key_data = None
+        for row in layout:
+            for item in row:
+                if item.get("key") == key_index:
+                    key_data = item
+                    break
+            if key_data is not None:
+                break
+        if key_data is None:
+            continue
+
+        w = key_data.get("w", 1.0)
+        h = key_data.get("h", 1.0)
+        left = ((x - w / 2.0) - min_x) / range_x * 255.0
+        right = ((x + w / 2.0) - min_x) / range_x * 255.0
+        top = ((y - h / 2.0) - min_y) / range_y * 255.0
+        bottom = ((y + h / 2.0) - min_y) / range_y * 255.0
+        normalized_rects.append((left, top, right, bottom))
+
+    def point_inside_keyboard(px, py):
+        for left, top, right, bottom in normalized_rects:
+            if left <= px <= right and top <= py <= bottom:
+                return True
+        return False
+
+    reactive_clip = []
+    samples = 64
+    for source_index, (sx, sy) in enumerate(led_coords):
+        source_row = []
+        for target_index, (tx, ty) in enumerate(led_coords):
+            if source_index == target_index:
+                source_row.append(255)
+                continue
+
+            radius = math.hypot(tx - sx, ty - sy)
+            if radius == 0:
+                source_row.append(255)
+                continue
+
+            inside = 0
+            for sample_index in range(samples):
+                angle = (2.0 * math.pi * sample_index) / samples
+                px = sx + math.cos(angle) * radius
+                py = sy + math.sin(angle) * radius
+                if point_inside_keyboard(px, py):
+                    inside += 1
+
+            coverage = inside / samples
+            source_row.append(int((coverage * coverage) * 255))
+        reactive_clip.append(source_row)
 
     # Generate header
     output_path = os.path.abspath(
@@ -80,17 +139,32 @@ def gen_rgb_coords(keyboard_dir):
         f.write("#include \"rgb.h\"\n\n")
         f.write("#if defined(RGB_ENABLED)\n\n")
         f.write("typedef struct {\n    uint8_t x;\n    uint8_t y;\n} led_point_t;\n\n")
-        f.write(f"const led_point_t rgb_led_coords[NUM_KEYS] = {{\n")
+        f.write(f"const led_point_t rgb_led_coords[NUM_LEDS] = {{\n")
         
         for i, (x, y) in enumerate(led_coords):
             comma = "," if i < len(led_coords) - 1 else ""
             f.write(f"    {{{x}, {y}}}{comma}\n")
         
         f.write("};\n\n")
-        f.write(f"const uint8_t rgb_led_is_mod[NUM_KEYS] = {{\n")
+        f.write(f"const uint8_t rgb_led_is_mod[NUM_LEDS] = {{\n")
         for i, is_mod in enumerate(led_is_mod):
             comma = "," if i < len(led_is_mod) - 1 else ""
             f.write(f"    {is_mod}{comma}\n")
+        f.write("};\n\n")
+        f.write(f"const uint8_t rgb_led_key_index[NUM_LEDS] = {{\n")
+        for i, key_index in enumerate(led_map):
+            comma = "," if i < len(led_map) - 1 else ""
+            f.write(f"    {key_index}{comma}\n")
+        f.write("};\n\n")
+        f.write(f"const uint8_t rgb_key_to_led[NUM_KEYS] = {{\n")
+        for i, led_index in enumerate(key_to_led):
+            comma = "," if i < len(key_to_led) - 1 else ""
+            f.write(f"    {led_index}{comma}\n")
+        f.write("};\n\n")
+        f.write(f"const uint8_t rgb_reactive_clip[NUM_LEDS][NUM_LEDS] = {{\n")
+        for row_index, row in enumerate(reactive_clip):
+            comma = "," if row_index < len(reactive_clip) - 1 else ""
+            f.write("    {" + ", ".join(str(value) for value in row) + "}" + comma + "\n")
         f.write("};\n\n")
         f.write("#endif\n")
 

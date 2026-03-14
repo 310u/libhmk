@@ -38,11 +38,19 @@
 #endif
 #endif
 
-#if defined(__has_include)
+#if defined(DRIVER_BOARD_DEF_HEADER)
+// Include driver-specific defaults first so keyboard definitions can extend them.
+#include DRIVER_BOARD_DEF_HEADER
+#elif defined(__has_include)
 #if __has_include("board_def.h")
-// Include board-specific definitions if available
+// Fallback for legacy include layouts.
 #include "board_def.h"
 #endif
+#endif
+
+#if defined(KEYBOARD_BOARD_DEF_HEADER)
+// Include keyboard-specific board definitions after driver defaults.
+#include KEYBOARD_BOARD_DEF_HEADER
 #endif
 
 //--------------------------------------------------------------------+
