@@ -58,10 +58,10 @@ typedef enum {
 
 // Key state
 typedef struct {
-  // Filtered ADC value
-  uint16_t adc_filtered;
-  // ADC value when the key is fully released
-  uint16_t adc_rest_value;
+  // Filtered ADC value (shifted left by 8 for fractional precision)
+  uint32_t adc_filtered;
+  // ADC value when the key is fully released (shifted left by 8)
+  uint32_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
 

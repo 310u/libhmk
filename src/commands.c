@@ -85,7 +85,7 @@ void command_process(const uint8_t *buf) {
 
     for (uint32_t i = 0;
          i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
-      o[i].adc_value = key_matrix[i + p->offset].adc_filtered;
+      o[i].adc_value = key_matrix[i + p->offset].adc_filtered >> 8;
       o[i].distance = key_matrix[i + p->offset].distance;
     }
     break;

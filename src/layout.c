@@ -335,8 +335,8 @@ void layout_task(void) {
     const key_state_t *k = &key_matrix[i];
     const bool last_key_press = bitmap_get(key_press_states, i);
 
-    if ((current_layer == 0) & eeconfig->options.xinput_enabled) {
-      // XInput key only applies to layer 0. We process it first since the
+    if (current_layer == 0) {
+      // Gamepad key only applies to layer 0. We process it first since the
       // subsequent key processing may be skipped due to the gamepad options.
       if (CURRENT_PROFILE.gamepad_buttons[i] != GP_BUTTON_NONE) {
         xinput_process(i);

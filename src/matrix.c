@@ -46,6 +46,7 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
                ADC_MAX_VALUE);
 }
 
+
 key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
@@ -65,8 +66,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   }
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    key_matrix[i].adc_filtered = eeconfig->calibration.initial_rest_value;
-    key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
+    key_matrix[i].adc_filtered = (uint32_t)eeconfig->calibration.initial_rest_value << 8;
+    key_matrix[i].adc_rest_value = (uint32_t)eeconfig->calibration.initial_rest_value << 8;
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, eeconfig->calibration.initial_rest_value);
     key_matrix[i].distance = 0;
@@ -83,12 +84,13 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     analog_task();
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
-      const uint16_t new_adc_filtered =
-          EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
+      const uint32_t raw_shifted = (uint32_t)matrix_analog_read(i) << 8;
+      const uint32_t new_adc_filtered =
+          EMA(raw_shifted, key_matrix[i].adc_filtered);
 
       key_matrix[i].adc_filtered = new_adc_filtered;
 
-      if (new_adc_filtered + MATRIX_CALIBRATION_EPSILON <=
+      if (new_adc_filtered + (MATRIX_CALIBRATION_EPSILON << 8) <=
           key_matrix[i].adc_rest_value)
         // Only update the rest value if the new value is smaller and the
         // difference is at least the calibration epsilon
@@ -97,24 +99,28 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
       // Update the bottom-out value to be the minimum bottom-out value based on
       // the updated rest value
       key_matrix[i].adc_bottom_out_value =
-          matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+          matrix_bottom_out_value(i, key_matrix[i].adc_rest_value >> 8);
     }
   }
 }
 
 void matrix_scan(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    const uint16_t new_adc_filtered =
-        EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
+    const uint32_t raw_shifted = (uint32_t)matrix_analog_read(i) << 8;
+    const uint32_t new_adc_filtered =
+        EMA(raw_shifted, key_matrix[i].adc_filtered);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    if (new_adc_filtered >=
+    const uint16_t filtered_uint16 = new_adc_filtered >> 8;
+    const uint16_t rest_uint16 = key_matrix[i].adc_rest_value >> 8;
+
+    if (filtered_uint16 >=
         key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
       // Only update the bottom-out value if the new value is larger and the
       // difference is at least the calibration epsilon.
-      key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+      key_matrix[i].adc_bottom_out_value = filtered_uint16;
       matrix_bottom_out_threshold_dirty = true;
     } else if (eeconfig->options.continuous_calibration &&
                key_matrix[i].key_dir == KEY_DIR_INACTIVE) {
@@ -122,14 +128,14 @@ void matrix_scan(void) {
       // If the key is inactive and within a small drift range from rest baseline (e.g., ±50 units)
       // apply a very slow EMA to track temperature drift.
       int32_t diff = (int32_t)new_adc_filtered - (int32_t)key_matrix[i].adc_rest_value;
-      if (diff > -50 && diff < 50) {
+      if (diff > -(50 << 8) && diff < (50 << 8)) {
         key_matrix[i].adc_rest_value =
-            (((uint32_t)key_matrix[i].adc_rest_value * 255) + new_adc_filtered) / 256;
+            (((uint64_t)key_matrix[i].adc_rest_value * 255) + new_adc_filtered) / 256;
       }
     }
 
     key_matrix[i].distance =
-        adc_to_distance(new_adc_filtered, key_matrix[i].adc_rest_value,
+        adc_to_distance(filtered_uint16, rest_uint16,
                         key_matrix[i].adc_bottom_out_value);
 
     bool was_pressed = key_matrix[i].is_pressed;
@@ -212,11 +218,12 @@ void matrix_scan(void) {
     uint16_t bottom_out_threshold[NUM_KEYS];
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
-      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
+      const uint16_t rest_unscaled = key_matrix[i].adc_rest_value >> 8;
+      if (key_matrix[i].adc_bottom_out_value < rest_unscaled)
         bottom_out_threshold[i] = 0;
       else
         bottom_out_threshold[i] =
-            key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
+            key_matrix[i].adc_bottom_out_value - rest_unscaled;
     }
 
     if (EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold))
