@@ -18,6 +18,11 @@ key_state_t key_matrix[NUM_KEYS];
 eeconfig_t mock_eeconfig;
 const eeconfig_t *eeconfig = &mock_eeconfig;
 uint32_t mock_timer = 0;
+uint32_t board_reset_count = 0;
+uint32_t wear_leveling_write_count = 0;
+uint32_t last_write_address = 0;
+uint32_t last_write_len = 0;
+uint32_t last_write_u32 = 0;
 
 void advanced_key_init(void) {}
 void advanced_key_clear(void) {}
@@ -34,8 +39,16 @@ void deferred_action_process(void) {}
 bool deferred_action_push(const deferred_action_t *action) { return true; }
 
 void board_enter_bootloader(void) {}
+void board_reset(void) { board_reset_count++; }
 uint32_t timer_read(void) { return mock_timer; }
-bool wear_leveling_write(uint32_t address, const void *data, uint32_t len) { return true; }
+bool wear_leveling_write(uint32_t address, const void *data, uint32_t len) {
+    wear_leveling_write_count++;
+    last_write_address = address;
+    last_write_len = len;
+    last_write_u32 = 0;
+    memcpy(&last_write_u32, data, len > sizeof(last_write_u32) ? sizeof(last_write_u32) : len);
+    return true;
+}
 
 void hid_keycode_add(uint8_t keycode) {}
 void hid_keycode_remove(uint8_t keycode) {}
@@ -58,6 +71,11 @@ void setUp(void) {
     memset(&mock_eeconfig, 0, sizeof(eeconfig_t));
     memset(key_matrix, 0, sizeof(key_matrix));
     mock_timer = 0;
+    board_reset_count = 0;
+    wear_leveling_write_count = 0;
+    last_write_address = 0;
+    last_write_len = 0;
+    last_write_u32 = 0;
 #if defined(JOYSTICK_ENABLED)
     mock_joystick_config.mode = JOYSTICK_MODE_MOUSE;
 #endif
@@ -76,6 +94,23 @@ void test_layout_process_key(void) {
     TEST_ASSERT_TRUE(has_press);
 }
 
+void test_poll_rate_toggle_persists_options_and_resets(void) {
+    const uint32_t initial_options = 0x0000120f;
+    mock_eeconfig.options.raw = initial_options;
+
+    layout_register(255, SP_POLL_RATE_TOGGLE);
+
+    TEST_ASSERT_EQUAL_UINT32(1, wear_leveling_write_count);
+    TEST_ASSERT_EQUAL_UINT32(offsetof(eeconfig_t, options), last_write_address);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(eeconfig_options_t), last_write_len);
+    TEST_ASSERT_EQUAL_UINT32(1, board_reset_count);
+
+    eeconfig_options_t written_options = {.raw = last_write_u32};
+    TEST_ASSERT_FALSE(written_options.high_polling_rate_enabled);
+    TEST_ASSERT_EQUAL_UINT32(initial_options ^ ((uint32_t)1 << 2),
+                             written_options.raw);
+}
+
 #if defined(JOYSTICK_ENABLED)
 void test_joystick_scroll_mo_restores_previous_mode(void) {
     mock_joystick_config.mode = JOYSTICK_MODE_XINPUT_RS;
@@ -91,6 +126,7 @@ void test_joystick_scroll_mo_restores_previous_mode(void) {
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_layout_process_key);
+    RUN_TEST(test_poll_rate_toggle_persists_options_and_resets);
 #if defined(JOYSTICK_ENABLED)
     RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
 #endif

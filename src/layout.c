@@ -31,6 +31,10 @@
 static uint16_t layer_mask;
 static uint8_t default_layer;
 
+#if defined(RGB_ENABLED)
+#define RGB_BRIGHTNESS_STEP 17
+#endif
+
 /**
  * @brief Get the current layer
  *
@@ -165,6 +169,64 @@ static void layout_apply_current_profile_state(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_apply_config(CURRENT_PROFILE.joystick_config);
 #endif
+}
+
+#if defined(RGB_ENABLED)
+static bool layout_write_current_profile_rgb_field(uint32_t field_offset,
+                                                   const void *value,
+                                                   uint32_t len) {
+  const uint32_t addr = offsetof(eeconfig_t, profiles) +
+                        (uint32_t)eeconfig->current_profile *
+                            sizeof(eeconfig_profile_t) +
+                        offsetof(eeconfig_profile_t, rgb_config) + field_offset;
+  return wear_leveling_write(addr, value, len);
+}
+
+static void layout_set_rgb_enabled(bool enabled) {
+  const uint8_t value = enabled ? 1 : 0;
+  if (!layout_write_current_profile_rgb_field(offsetof(rgb_config_t, enabled),
+                                              &value, sizeof(value)))
+    return;
+
+  rgb_get_config()->enabled = value;
+  rgb_apply_config();
+}
+
+static void layout_adjust_rgb_brightness(bool increase) {
+  const rgb_config_t *current_config = rgb_get_config();
+  const uint16_t current_brightness = current_config->global_brightness;
+  uint8_t next_brightness = (uint8_t)current_brightness;
+
+  if (increase) {
+    if (current_brightness >= UINT8_MAX)
+      return;
+    next_brightness =
+        (uint8_t)M_MIN((uint16_t)UINT8_MAX,
+                       current_brightness + (uint16_t)RGB_BRIGHTNESS_STEP);
+  } else {
+    if (current_brightness == 0)
+      return;
+    next_brightness =
+        current_brightness > RGB_BRIGHTNESS_STEP
+            ? (uint8_t)(current_brightness - RGB_BRIGHTNESS_STEP)
+            : 0;
+  }
+
+  if (!layout_write_current_profile_rgb_field(
+          offsetof(rgb_config_t, global_brightness), &next_brightness,
+          sizeof(next_brightness)))
+    return;
+
+  rgb_get_config()->global_brightness = next_brightness;
+  rgb_apply_config();
+}
+#endif
+
+static void layout_toggle_polling_rate(void) {
+  eeconfig_options_t options = eeconfig->options;
+  options.high_polling_rate_enabled = !options.high_polling_rate_enabled;
+  if (EECONFIG_WRITE(options, &options))
+    board_reset();
 }
 
 void layout_init(void) { layout_apply_current_profile_state(); }
@@ -504,6 +566,28 @@ void layout_register(uint8_t key, uint8_t keycode) {
 #if defined(JOYSTICK_ENABLED)
     joystick_scroll_mo_register();
 #endif
+    break;
+
+  case SP_RGB_TOGGLE:
+#if defined(RGB_ENABLED)
+    layout_set_rgb_enabled(!rgb_get_config()->enabled);
+#endif
+    break;
+
+  case SP_RGB_BRIGHTNESS_UP:
+#if defined(RGB_ENABLED)
+    layout_adjust_rgb_brightness(true);
+#endif
+    break;
+
+  case SP_RGB_BRIGHTNESS_DOWN:
+#if defined(RGB_ENABLED)
+    layout_adjust_rgb_brightness(false);
+#endif
+    break;
+
+  case SP_POLL_RATE_TOGGLE:
+    layout_toggle_polling_rate();
     break;
 
   case SP_SNIPER:
