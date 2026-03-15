@@ -81,10 +81,25 @@
 
 #if !defined(RGB_USE_BITBANG_DRIVER)
 #define RGB_DMA_BUFFER_LEN (NUM_LEDS * 24u)
+#define RGB_DMA_BUFFER_COUNT 2u
 
 _Static_assert(RGB_DMA_BUFFER_LEN <= 65535u, "RGB DMA buffer exceeds DMA limit");
 
-static uint32_t rgb_dma_buffer[RGB_DMA_BUFFER_LEN];
+typedef enum {
+  RGB_DMA_STATE_IDLE = 0,
+  RGB_DMA_STATE_RESETTING,
+  RGB_DMA_STATE_ACTIVE,
+  RGB_DMA_STATE_FLUSHING,
+} rgb_dma_state_t;
+
+static uint32_t rgb_dma_buffers[RGB_DMA_BUFFER_COUNT][RGB_DMA_BUFFER_LEN];
+static uint16_t rgb_dma_buffer_len[RGB_DMA_BUFFER_COUNT];
+static rgb_dma_state_t rgb_dma_state = RGB_DMA_STATE_IDLE;
+static uint8_t rgb_dma_active_buffer = 0;
+static uint8_t rgb_dma_pending_buffer = 1;
+static bool rgb_dma_pending = false;
+static uint32_t rgb_dma_state_start = 0;
+static uint32_t rgb_dma_repeats_remaining = 0;
 #endif
 static bool rgb_driver_initialized = false;
 
@@ -187,7 +202,7 @@ static void rgb_driver_dma_init(void) {
   dma_reset(RGB_DMA_CHANNEL);
   dma_default_para_init(&dma_init_struct);
   dma_init_struct.peripheral_base_addr = (uint32_t)&RGB_TIMER->c3dt;
-  dma_init_struct.memory_base_addr = (uint32_t)rgb_dma_buffer;
+  dma_init_struct.memory_base_addr = (uint32_t)rgb_dma_buffers[0];
   dma_init_struct.direction = DMA_DIR_MEMORY_TO_PERIPHERAL;
   dma_init_struct.buffer_size = 1;
   dma_init_struct.peripheral_inc_enable = FALSE;
@@ -224,6 +239,54 @@ static void rgb_driver_timer_init(void) {
   tmr_dma_request_enable(RGB_TIMER, RGB_TIMER_DMA_REQUEST, TRUE);
   tmr_output_enable(RGB_TIMER, TRUE);
 }
+
+static uint16_t rgb_driver_encode_dma_buffer(uint32_t *dst, const uint8_t *grb_data,
+                                             uint16_t byte_count) {
+  uint16_t duty_index = 0;
+
+  for (uint16_t byte_index = 0; byte_index < byte_count; byte_index++) {
+    uint8_t value = grb_data[byte_index];
+    for (uint8_t mask = 0x80; mask != 0; mask >>= 1) {
+      dst[duty_index++] =
+          (value & mask) ? RGB_PWM_HIGH_1_TICKS : RGB_PWM_HIGH_0_TICKS;
+    }
+  }
+
+  return duty_index;
+}
+
+static void rgb_driver_stop_dma_transfer(void) {
+  dma_channel_enable(RGB_DMA_CHANNEL, FALSE);
+  dma_flag_clear(RGB_DMA_CLEAR_FLAG);
+
+  tmr_counter_enable(RGB_TIMER, FALSE);
+  tmr_counter_value_set(RGB_TIMER, 0);
+  tmr_channel_value_set(RGB_TIMER, RGB_TIMER_CHANNEL, 0);
+  tmr_event_sw_trigger(RGB_TIMER, TMR_OVERFLOW_SWTRIG);
+}
+
+static void rgb_driver_begin_reset_wait(void) {
+  rgb_driver_stop_dma_transfer();
+  rgb_driver_gpio_output_init();
+  rgb_dma_state_start = board_cycle_count();
+  rgb_dma_state = RGB_DMA_STATE_RESETTING;
+}
+
+static void rgb_driver_start_dma_transfer(void) {
+  uint16_t total_slots = rgb_dma_buffer_len[rgb_dma_active_buffer];
+
+  rgb_driver_stop_dma_transfer();
+  rgb_driver_gpio_mux_init();
+
+  if (total_slots > 0u) {
+    RGB_DMA_CHANNEL->maddr = (uint32_t)rgb_dma_buffers[rgb_dma_active_buffer];
+    dma_data_number_set(RGB_DMA_CHANNEL, total_slots);
+    dma_channel_enable(RGB_DMA_CHANNEL, TRUE);
+  }
+
+  tmr_counter_enable(RGB_TIMER, TRUE);
+  rgb_dma_state = RGB_DMA_STATE_ACTIVE;
+}
 #endif
 
 void rgb_driver_init(void) {
@@ -237,6 +300,59 @@ void rgb_driver_init(void) {
   rgb_driver_timer_init();
 #endif
   rgb_driver_initialized = true;
+}
+
+void rgb_driver_task(void) {
+#if !defined(RGB_USE_BITBANG_DRIVER)
+  if (!rgb_driver_initialized) {
+    return;
+  }
+
+  switch (rgb_dma_state) {
+  case RGB_DMA_STATE_IDLE:
+    break;
+
+  case RGB_DMA_STATE_RESETTING:
+    if ((uint32_t)(board_cycle_count() - rgb_dma_state_start) >=
+        RGB_RESET_TIME_TICKS) {
+      rgb_driver_start_dma_transfer();
+    }
+    break;
+
+  case RGB_DMA_STATE_ACTIVE:
+    if (dma_interrupt_flag_get(RGB_DMA_TRANSFER_FLAG) != RESET) {
+      rgb_dma_state_start = board_cycle_count();
+      rgb_dma_state = RGB_DMA_STATE_FLUSHING;
+    }
+    break;
+
+  case RGB_DMA_STATE_FLUSHING:
+    if ((uint32_t)(board_cycle_count() - rgb_dma_state_start) >=
+        RGB_FRAME_FLUSH_TICKS) {
+      if (rgb_dma_repeats_remaining > 1u) {
+        rgb_dma_repeats_remaining--;
+        rgb_driver_begin_reset_wait();
+      } else if (rgb_dma_pending) {
+        rgb_dma_active_buffer = rgb_dma_pending_buffer;
+        rgb_dma_pending = false;
+        rgb_dma_repeats_remaining = RGB_DMA_FRAME_REPEATS;
+        rgb_driver_begin_reset_wait();
+      } else {
+        rgb_driver_stop_dma_transfer();
+        rgb_driver_gpio_output_init();
+        rgb_dma_state = RGB_DMA_STATE_IDLE;
+      }
+    }
+    break;
+
+  default:
+    rgb_driver_stop_dma_transfer();
+    rgb_driver_gpio_output_init();
+    rgb_dma_pending = false;
+    rgb_dma_state = RGB_DMA_STATE_IDLE;
+    break;
+  }
+#endif
 }
 
 void rgb_driver_write(const uint8_t *grb_data, uint16_t byte_count) {
@@ -269,73 +385,34 @@ void rgb_driver_write(const uint8_t *grb_data, uint16_t byte_count) {
   }
   rgb_wait_reset_period();
 #else
-  uint16_t duty_index = 0;
-  uint16_t total_slots;
+  uint8_t target_buffer;
 
   if (!rgb_driver_initialized) {
     rgb_driver_init();
   }
 
   if (byte_count == 0) {
-    tmr_channel_value_set(RGB_TIMER, RGB_TIMER_CHANNEL, 0);
-    tmr_event_sw_trigger(RGB_TIMER, TMR_OVERFLOW_SWTRIG);
-    rgb_wait_reset_period();
+    rgb_dma_pending = false;
+    rgb_driver_stop_dma_transfer();
+    rgb_driver_gpio_output_init();
+    rgb_dma_state = RGB_DMA_STATE_IDLE;
     return;
   }
 
-  for (uint16_t byte_index = 0; byte_index < byte_count; byte_index++) {
-    uint8_t value = grb_data[byte_index];
-    for (uint8_t mask = 0x80; mask != 0; mask >>= 1) {
-      rgb_dma_buffer[duty_index++] =
-          (value & mask) ? RGB_PWM_HIGH_1_TICKS : RGB_PWM_HIGH_0_TICKS;
-    }
+  if (rgb_dma_state == RGB_DMA_STATE_IDLE) {
+    target_buffer = rgb_dma_active_buffer;
+  } else {
+    target_buffer = (uint8_t)(rgb_dma_active_buffer ^ 1u);
+    rgb_dma_pending = true;
+    rgb_dma_pending_buffer = target_buffer;
   }
 
-  total_slots = duty_index;
+  rgb_dma_buffer_len[target_buffer] = rgb_driver_encode_dma_buffer(
+      rgb_dma_buffers[target_buffer], grb_data, byte_count);
 
-  rgb_driver_gpio_output_init();
-  rgb_wait_reset_period();
-
-  for (uint32_t repeat = 0; repeat < RGB_DMA_FRAME_REPEATS; repeat++) {
-    dma_channel_enable(RGB_DMA_CHANNEL, FALSE);
-    dma_flag_clear(RGB_DMA_CLEAR_FLAG);
-
-    tmr_counter_enable(RGB_TIMER, FALSE);
-    tmr_counter_value_set(RGB_TIMER, 0);
-    tmr_channel_value_set(RGB_TIMER, RGB_TIMER_CHANNEL, 0);
-    tmr_event_sw_trigger(RGB_TIMER, TMR_OVERFLOW_SWTRIG);
-
-    rgb_driver_gpio_mux_init();
-
-    if (total_slots > 0u) {
-      RGB_DMA_CHANNEL->maddr = (uint32_t)rgb_dma_buffer;
-      dma_data_number_set(RGB_DMA_CHANNEL, total_slots);
-      dma_channel_enable(RGB_DMA_CHANNEL, TRUE);
-    }
-
-    tmr_counter_enable(RGB_TIMER, TRUE);
-
-    if (total_slots > 0u) {
-      while (dma_interrupt_flag_get(RGB_DMA_TRANSFER_FLAG) == RESET) {
-      }
-    }
-
-    {
-      uint32_t start = board_cycle_count();
-      while ((uint32_t)(board_cycle_count() - start) < RGB_FRAME_FLUSH_TICKS) {
-      }
-    }
-
-    dma_channel_enable(RGB_DMA_CHANNEL, FALSE);
-    dma_flag_clear(RGB_DMA_CLEAR_FLAG);
-
-    tmr_counter_enable(RGB_TIMER, FALSE);
-    tmr_counter_value_set(RGB_TIMER, 0);
-    tmr_channel_value_set(RGB_TIMER, RGB_TIMER_CHANNEL, 0);
-    tmr_event_sw_trigger(RGB_TIMER, TMR_OVERFLOW_SWTRIG);
-
-    rgb_driver_gpio_output_init();
-    rgb_wait_reset_period();
+  if (rgb_dma_state == RGB_DMA_STATE_IDLE) {
+    rgb_dma_repeats_remaining = RGB_DMA_FRAME_REPEATS;
+    rgb_driver_begin_reset_wait();
   }
 #endif
 }

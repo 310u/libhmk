@@ -207,6 +207,7 @@ static void rgb_transmit_dma(void) {
     }
 
     rgb_driver_write(grb_data, offset);
+    rgb_driver_task();
 }
 
 void rgb_update(void) {
@@ -388,6 +389,8 @@ rgb_color_t hsv_to_rgb(hsv_t hsv) {
 }
 
 void rgb_task(void) {
+    rgb_driver_task();
+
     if (!rgb_config.enabled) return;
 
     static uint32_t last_render_tick = 0;
