@@ -65,6 +65,7 @@ On-board analog joystick support with 5 operating modes:
 - Configurable deadzone, mouse speed, and axis calibration
 - Joystick switch (click) is mapped as the 41st key and fully remappable
 - Mode cycling via `SP_JOY_MODE_NEXT` keycode
+- Hold `SP_JOY_SCROLL_MO` to temporarily switch the joystick to scroll mode
 
 #### RGB Lighting
 Per-key RGB backlighting via SK6812MINI-E LEDs with 50+ effects:

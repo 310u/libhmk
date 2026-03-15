@@ -29,6 +29,12 @@ static hid_nkro_kb_report_t kb_report;
 static uint16_t system_report;
 static uint16_t consumer_report;
 static hid_mouse_report_t mouse_report;
+static uint8_t mouse_keycode_buttons;
+static uint8_t mouse_pointer_buttons;
+
+static void hid_mouse_sync_buttons(void) {
+  mouse_report.buttons = mouse_keycode_buttons | mouse_pointer_buttons;
+}
 
 #if !defined(HID_DISABLED)
 /**
@@ -141,7 +147,8 @@ void hid_keycode_add(uint8_t keycode) {
     break;
 
   case MOUSE_KEYCODE_RANGE:
-    mouse_report.buttons |= hid_code;
+    mouse_keycode_buttons |= hid_code;
+    hid_mouse_sync_buttons();
     break;
 
   default:
@@ -154,14 +161,17 @@ void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons) {
   mouse_report.y = y;
   mouse_report.wheel = 0;
   mouse_report.pan = 0;
-  mouse_report.buttons |= buttons;
+  mouse_pointer_buttons = buttons;
+  hid_mouse_sync_buttons();
 }
 
-void hid_mouse_scroll(int8_t wheel, int8_t pan) {
+void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons) {
   mouse_report.x = 0;
   mouse_report.y = 0;
   mouse_report.wheel = wheel;
   mouse_report.pan = pan;
+  mouse_pointer_buttons = buttons;
+  hid_mouse_sync_buttons();
 }
 
 void hid_keycode_remove(uint8_t keycode) {
@@ -202,7 +212,8 @@ void hid_keycode_remove(uint8_t keycode) {
     break;
 
   case MOUSE_KEYCODE_RANGE:
-    mouse_report.buttons &= ~hid_code;
+    mouse_keycode_buttons &= ~hid_code;
+    hid_mouse_sync_buttons();
     break;
 
   default:

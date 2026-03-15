@@ -62,10 +62,11 @@ void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons);
  *
  * @param wheel Vertical scroll amount
  * @param pan Horizontal scroll amount
+ * @param buttons Mouse buttons bitmask
  *
  * @return None
  */
-void hid_mouse_scroll(int8_t wheel, int8_t pan);
+void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons);
 
 /**
  * @brief Send all HID reports

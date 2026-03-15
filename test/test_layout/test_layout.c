@@ -9,6 +9,9 @@
 #include "lib/bitmap.h"
 #include "matrix.h"
 #include "xinput.h"
+#if defined(JOYSTICK_ENABLED)
+#include "joystick.h"
+#endif
 
 // --- Mocks ---
 key_state_t key_matrix[NUM_KEYS];
@@ -40,11 +43,24 @@ void hid_send_reports(void) {}
 
 void xinput_process(uint8_t key) {}
 
+#if defined(JOYSTICK_ENABLED)
+joystick_config_t mock_joystick_config = {
+    .mode = JOYSTICK_MODE_MOUSE,
+};
+
+joystick_config_t joystick_get_config(void) { return mock_joystick_config; }
+void joystick_apply_config(joystick_config_t config) { mock_joystick_config = config; }
+void joystick_set_config(joystick_config_t config) { mock_joystick_config = config; }
+#endif
+
 // --- Tests ---
 void setUp(void) {
     memset(&mock_eeconfig, 0, sizeof(eeconfig_t));
     memset(key_matrix, 0, sizeof(key_matrix));
     mock_timer = 0;
+#if defined(JOYSTICK_ENABLED)
+    mock_joystick_config.mode = JOYSTICK_MODE_MOUSE;
+#endif
     layout_init();
 }
 
@@ -60,9 +76,24 @@ void test_layout_process_key(void) {
     TEST_ASSERT_TRUE(has_press);
 }
 
+#if defined(JOYSTICK_ENABLED)
+void test_joystick_scroll_mo_restores_previous_mode(void) {
+    mock_joystick_config.mode = JOYSTICK_MODE_XINPUT_RS;
+
+    layout_register(255, SP_JOY_SCROLL_MO);
+    TEST_ASSERT_EQUAL_UINT8(JOYSTICK_MODE_SCROLL, mock_joystick_config.mode);
+
+    layout_unregister(255, SP_JOY_SCROLL_MO);
+    TEST_ASSERT_EQUAL_UINT8(JOYSTICK_MODE_XINPUT_RS, mock_joystick_config.mode);
+}
+#endif
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_layout_process_key);
+#if defined(JOYSTICK_ENABLED)
+    RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
+#endif
     UNITY_END();
     return 0;
 }

@@ -49,7 +49,8 @@ typedef union __attribute__((packed)) {
   struct __attribute__((packed)) {
     // Whether the XInput interface is enabled
     uint32_t xinput_enabled : 1;
-    uint32_t _unused0 : 1;
+    // Whether to persist per-key bottom-out thresholds after inactivity
+    uint32_t save_bottom_out_threshold : 1;
     // Whether 8kHz polling rate is enabled. Only applicable if USB HS is
     // enabled. If disabled, the 1kHz polling rate is used instead.
     uint32_t high_polling_rate_enabled : 1;
@@ -145,6 +146,7 @@ extern const eeconfig_t *eeconfig;
 #define DEFAULT_OPTIONS                                                        \
   {                                                                            \
       .xinput_enabled = false,                                                 \
+      .save_bottom_out_threshold = true,                                       \
       .high_polling_rate_enabled = true,                                       \
       .continuous_calibration = true,                                          \
       .sniper_mode_multiplier = 128, /* 50% speed */                           \

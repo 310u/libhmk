@@ -27,6 +27,8 @@
     ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1))) >>               \
    MATRIX_EMA_ALPHA_EXPONENT)
 
+#define MATRIX_BOTTOM_OUT_SAVE_IDLE_MS 3000u
+
 __attribute__((always_inline)) static inline uint16_t
 matrix_analog_read(uint8_t key) {
 #if defined(MATRIX_INVERT_ADC_VALUES)
@@ -51,6 +53,7 @@ static bitmap_t rapid_trigger_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
 // Tracks the last time any key state changed
 static uint32_t matrix_last_activity_time = 0;
+static bool matrix_bottom_out_threshold_dirty = false;
 
 void matrix_init(void) { matrix_recalibrate(false); }
 
@@ -58,6 +61,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   if (reset_bottom_out_threshold) {
     uint16_t bottom_out_threshold[NUM_KEYS] = {0};
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+    matrix_bottom_out_threshold_dirty = false;
   }
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -111,6 +115,7 @@ void matrix_scan(void) {
       // Only update the bottom-out value if the new value is larger and the
       // difference is at least the calibration epsilon.
       key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+      matrix_bottom_out_threshold_dirty = true;
     } else if (eeconfig->options.continuous_calibration &&
                key_matrix[i].key_dir == KEY_DIR_INACTIVE) {
       // Continuous Auto-Calibration
@@ -200,6 +205,23 @@ void matrix_scan(void) {
 #endif
     }
   }
+
+  if (matrix_bottom_out_threshold_dirty &&
+      eeconfig->options.save_bottom_out_threshold &&
+      matrix_get_idle_time() >= MATRIX_BOTTOM_OUT_SAVE_IDLE_MS) {
+    uint16_t bottom_out_threshold[NUM_KEYS];
+
+    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
+        bottom_out_threshold[i] = 0;
+      else
+        bottom_out_threshold[i] =
+            key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
+    }
+
+    if (EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold))
+      matrix_bottom_out_threshold_dirty = false;
+  }
 }
 
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
@@ -214,4 +236,3 @@ uint32_t matrix_get_idle_time(void) {
   }
   return timer_elapsed(matrix_last_activity_time);
 }
-

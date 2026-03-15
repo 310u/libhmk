@@ -205,6 +205,7 @@ typedef enum {
   SP_BOOT = 0xD4,
   SP_JOY_MODE_NEXT = 0xD5,
   SP_SNIPER = 0xD6,
+  SP_JOY_SCROLL_MO = 0xD7,
 
   XXXXXXX = KC_NO,
   _______ = KC_TRANSPARENT,
@@ -314,6 +315,7 @@ typedef enum {
   PF_SWAP = SP_PROFILE_SWAP,
   PF_NEXT = SP_PROFILE_NEXT,
   JY_NEXT = SP_JOY_MODE_NEXT,
+  JY_SCROLL_MO = SP_JOY_SCROLL_MO,
 } keycode_t;
 
 // Map keycodes to their corresponding HID codes

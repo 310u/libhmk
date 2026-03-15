@@ -50,6 +50,20 @@ static int32_t mouse_accum_x = 0;
 static int32_t mouse_accum_y = 0;
 static int32_t scroll_accum_x = 0;
 static int32_t scroll_accum_y = 0;
+static bool mouse_switch_reported = false;
+
+static joystick_config_t joystick_default_config(void) {
+    joystick_config_t def = {
+        .x = {0, 2048, 4095},
+        .y = {0, 2048, 4095},
+        .deadzone = 150,
+        .mode = JOYSTICK_MODE_MOUSE,
+        .mouse_speed = 10,
+        .mouse_acceleration = JOYSTICK_MOUSE_ACCELERATION_DEFAULT,
+        .sw_debounce_ms = 5,
+    };
+    return def;
+}
 
 static uint16_t smooth_adc(uint16_t old_val, uint16_t new_val) {
     if (old_val == 0) return new_val;
@@ -188,7 +202,8 @@ void joystick_init(void) {
     gpio_init(JOYSTICK_SW_PORT, &gpio_init_struct);
 
     // Initial load of config cache
-    config_cache = joystick_get_config();
+    config_cache = eeconfig != NULL ? CURRENT_PROFILE.joystick_config
+                                    : joystick_default_config();
 
     // Reset state
     current_state.raw_x = 0;
@@ -210,20 +225,18 @@ void joystick_init(void) {
 
 // Global state getters/setters
 joystick_config_t joystick_get_config(void) {
-    if (eeconfig != NULL) {
-        return CURRENT_PROFILE.joystick_config;
+    return config_cache;
+}
+
+void joystick_apply_config(joystick_config_t config) {
+    const uint8_t prev_mode = config_cache.mode;
+    config_cache = config;
+
+    if ((prev_mode == JOYSTICK_MODE_MOUSE || prev_mode == JOYSTICK_MODE_SCROLL) &&
+        prev_mode != config.mode && mouse_switch_reported) {
+        hid_mouse_move(0, 0, 0);
+        mouse_switch_reported = false;
     }
-    // Default fallback
-    joystick_config_t def = {
-        .x = {0, 2048, 4095},
-        .y = {0, 2048, 4095},
-        .deadzone = 150,
-        .mode = JOYSTICK_MODE_MOUSE,
-        .mouse_speed = 10,
-        .mouse_acceleration = JOYSTICK_MOUSE_ACCELERATION_DEFAULT,
-        .sw_debounce_ms = 5,
-    };
-    return def;
 }
 
 void joystick_set_config(joystick_config_t config) {
@@ -233,7 +246,7 @@ void joystick_set_config(joystick_config_t config) {
                         offsetof(eeconfig_profile_t, joystick_config);
         (void)wear_leveling_write(addr, &config, sizeof(config));
     }
-    config_cache = config;
+    joystick_apply_config(config);
 }
 
 joystick_state_t joystick_get_state(void) {
@@ -274,7 +287,8 @@ void joystick_task(void) {
         // Needs a tick pacing mechanism so it doesn't slam the host with max speed HID reports
         uint32_t tick = timer_read();
         if (timer_elapsed(last_mouse_tick) >= JOYSTICK_MOUSE_REPORT_INTERVAL_MS) {
-            if (current_state.out_x != 0 || current_state.out_y != 0 || current_state.sw) {
+            if (current_state.out_x != 0 || current_state.out_y != 0 ||
+                current_state.sw || mouse_switch_reported) {
                 uint8_t acceleration =
                     joystick_effective_mouse_acceleration(config_cache.mouse_acceleration);
                 uint16_t magnitude =
@@ -305,15 +319,16 @@ void joystick_task(void) {
                 uint8_t buttons = 0;
                 if (current_state.sw) buttons |= 1; // Left click
 
-                // Call hid_mouse_move which is now available in hid.c
                 hid_mouse_move(dx, dy, buttons);
+                mouse_switch_reported = buttons != 0;
             }
             last_mouse_tick = tick;
         }
     } else if (config_cache.mode == JOYSTICK_MODE_SCROLL) {
         uint32_t tick = timer_read();
         if (timer_elapsed(last_mouse_tick) >= JOYSTICK_SCROLL_REPORT_INTERVAL_MS) {
-            if (current_state.out_x != 0 || current_state.out_y != 0) {
+            if (current_state.out_x != 0 || current_state.out_y != 0 ||
+                current_state.sw || mouse_switch_reported) {
                 uint16_t magnitude =
                     joystick_vector_length(current_state.out_x, current_state.out_y);
                 int32_t dx_fp = 0;
@@ -338,14 +353,11 @@ void joystick_task(void) {
                 int8_t pan = joystick_consume_mouse_accum(&scroll_accum_x);
                 int8_t wheel = joystick_consume_mouse_accum(&scroll_accum_y);
 
-                // Typical orientation: up joystick = positive scroll (up)
-                // Right joystick = positive pan (right)
-                hid_mouse_scroll(wheel, pan);
+                uint8_t buttons = 0;
+                if (current_state.sw) buttons |= 1;
+                hid_mouse_scroll(wheel, pan, buttons);
+                mouse_switch_reported = buttons != 0;
             }
-            uint8_t buttons = 0;
-            if (current_state.sw) buttons |= 1; // Allows click while scrolling
-            // If we just clicked, send a move with 0 dx/dy to register the click quickly
-            if (current_state.sw) hid_mouse_move(0, 0, buttons);
             last_mouse_tick = tick;
         }
     }

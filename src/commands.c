@@ -35,6 +35,17 @@
 static uint8_t out_buf[RAW_HID_EP_SIZE];
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
+static void command_reload_current_profile_state(void) {
+  layout_load_advanced_keys();
+#if defined(RGB_ENABLED)
+  memcpy(rgb_get_config(), &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
+  rgb_apply_config();
+#endif
+#if defined(JOYSTICK_ENABLED)
+  joystick_apply_config(CURRENT_PROFILE.joystick_config);
+#endif
+}
+
 void command_init(void) {}
 
 void command_process(const uint8_t *buf) {
@@ -58,7 +69,8 @@ void command_process(const uint8_t *buf) {
   case COMMAND_FACTORY_RESET: {
     advanced_key_clear();
     success = eeconfig_reset();
-    layout_load_advanced_keys();
+    if (success)
+      command_reload_current_profile_state();
     break;
   }
   case COMMAND_RECALIBRATE: {
@@ -106,8 +118,8 @@ void command_process(const uint8_t *buf) {
     if (p->profile == eeconfig->current_profile)
       advanced_key_clear();
     success = eeconfig_reset_profile(p->profile);
-    if (p->profile == eeconfig->current_profile)
-      layout_load_advanced_keys();
+    if (success && p->profile == eeconfig->current_profile)
+      command_reload_current_profile_state();
     break;
   }
   case COMMAND_DUPLICATE_PROFILE: {
@@ -120,8 +132,8 @@ void command_process(const uint8_t *buf) {
       advanced_key_clear();
     success = EECONFIG_WRITE(profiles[p->profile],
                              &eeconfig->profiles[p->src_profile]);
-    if (p->profile == eeconfig->current_profile)
-      layout_load_advanced_keys();
+    if (success && p->profile == eeconfig->current_profile)
+      command_reload_current_profile_state();
     break;
   }
   case COMMAND_GET_KEYMAP: {
@@ -239,8 +251,8 @@ void command_process(const uint8_t *buf) {
                     p->offset * sizeof(advanced_key_t);
     success =
         wear_leveling_write(addr, p->advanced_keys, sizeof(advanced_key_t) * p->len);
-    if (p->profile == eeconfig->current_profile)
-      layout_load_advanced_keys();
+    if (success && p->profile == eeconfig->current_profile)
+      command_reload_current_profile_state();
     break;
   }
   case COMMAND_GET_TICK_RATE: {
@@ -403,7 +415,7 @@ void command_process(const uint8_t *buf) {
     success = wear_leveling_write(addr, &p->joystick_config, sizeof(joystick_config_t));
     
     if (success && p->profile == eeconfig->current_profile) {
-      joystick_set_config(p->joystick_config);
+      joystick_apply_config(p->joystick_config);
     }
     break;
   }

@@ -44,4 +44,5 @@ void joystick_init(void);
 void joystick_task(void);
 joystick_state_t joystick_get_state(void);
 joystick_config_t joystick_get_config(void);
+void joystick_apply_config(joystick_config_t config);
 void joystick_set_config(joystick_config_t config);

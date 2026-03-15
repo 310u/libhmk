@@ -24,6 +24,7 @@
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
+#include "rgb.h"
 #include "xinput.h"
 
 // Layer mask. Each bit represents whether a layer is active or not.
@@ -121,7 +122,52 @@ static uint8_t pending_count;
 
 bool is_sniper_active = false;
 
-void layout_init(void) { layout_load_advanced_keys(); }
+#if defined(JOYSTICK_ENABLED)
+static uint8_t joystick_scroll_mo_depth;
+static uint8_t joystick_scroll_mo_restore_mode;
+
+static void joystick_scroll_mo_register(void) {
+  joystick_config_t jc = joystick_get_config();
+
+  if (joystick_scroll_mo_depth == 0) {
+    joystick_scroll_mo_restore_mode = jc.mode;
+    if (jc.mode != JOYSTICK_MODE_SCROLL) {
+      jc.mode = JOYSTICK_MODE_SCROLL;
+      joystick_apply_config(jc);
+    }
+  }
+
+  if (joystick_scroll_mo_depth < UINT8_MAX)
+    joystick_scroll_mo_depth++;
+}
+
+static void joystick_scroll_mo_unregister(void) {
+  if (joystick_scroll_mo_depth == 0)
+    return;
+
+  joystick_scroll_mo_depth--;
+  if (joystick_scroll_mo_depth == 0) {
+    joystick_config_t jc = joystick_get_config();
+    if (jc.mode != joystick_scroll_mo_restore_mode) {
+      jc.mode = joystick_scroll_mo_restore_mode;
+      joystick_apply_config(jc);
+    }
+  }
+}
+#endif
+
+static void layout_apply_current_profile_state(void) {
+  layout_load_advanced_keys();
+#if defined(RGB_ENABLED)
+  memcpy(rgb_get_config(), &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
+  rgb_apply_config();
+#endif
+#if defined(JOYSTICK_ENABLED)
+  joystick_apply_config(CURRENT_PROFILE.joystick_config);
+#endif
+}
+
+void layout_init(void) { layout_apply_current_profile_state(); }
 
 /**
  * @brief Reload advanced key indices from the current profile.
@@ -397,7 +443,7 @@ static bool layout_set_profile(uint8_t profile) {
   bool status = EECONFIG_WRITE(current_profile, &profile);
   if (status && profile != 0)
     status = EECONFIG_WRITE(last_non_default_profile, &profile);
-  layout_load_advanced_keys();
+  layout_apply_current_profile_state();
 
   return status;
 }
@@ -454,6 +500,12 @@ void layout_register(uint8_t key, uint8_t keycode) {
     break;
   }
 
+  case SP_JOY_SCROLL_MO:
+#if defined(JOYSTICK_ENABLED)
+    joystick_scroll_mo_register();
+#endif
+    break;
+
   case SP_SNIPER:
     is_sniper_active = true;
     break;
@@ -479,6 +531,12 @@ void layout_unregister(uint8_t key, uint8_t keycode) {
 
   case SP_SNIPER:
     is_sniper_active = false;
+    break;
+
+  case SP_JOY_SCROLL_MO:
+#if defined(JOYSTICK_ENABLED)
+    joystick_scroll_mo_unregister();
+#endif
     break;
 
   default:
