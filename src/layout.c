@@ -117,7 +117,7 @@ static uint8_t active_advanced_keys[NUM_KEYS];
 // Pending events buffer for hold-tap input buffering.
 // When a hold-tap key is undecided, non-hold-tap key events are buffered
 // here and replayed after the hold-tap resolves.
-#define MAX_PENDING_EVENTS 8
+#define MAX_PENDING_EVENTS 32
 static struct {
   uint8_t key;
   bool pressed;
