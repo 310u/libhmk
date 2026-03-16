@@ -134,7 +134,21 @@ static void joystick_apply_radial_deadzone(int8_t *x, int8_t *y, uint8_t deadzon
         return;
     }
 
-    uint16_t magnitude_norm = (uint16_t)((uint32_t)magnitude * 255u / JOYSTICK_VECTOR_MAX);
+    // Calculate the maximum magnitude achievable in the current direction.
+    // Using the fixed diagonal-max (JOYSTICK_VECTOR_MAX = 181) would cause
+    // cardinal directions (max 127) to never reach full range after remapping.
+    uint16_t abs_x = (*x >= 0) ? (uint16_t)*x : (uint16_t)(-*x);
+    uint16_t abs_y = (*y >= 0) ? (uint16_t)*y : (uint16_t)(-*y);
+    uint16_t limit_x = (*x >= 0) ? 127 : 128;
+    uint16_t limit_y = (*y >= 0) ? 127 : 128;
+    uint16_t direction_max;
+    if (abs_x >= abs_y) {
+        direction_max = (uint16_t)((uint32_t)magnitude * limit_x / abs_x);
+    } else {
+        direction_max = (uint16_t)((uint32_t)magnitude * limit_y / abs_y);
+    }
+
+    uint16_t magnitude_norm = (uint16_t)((uint32_t)magnitude * 255u / direction_max);
     if (magnitude_norm <= deadzone) {
         *x = 0;
         *y = 0;

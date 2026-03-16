@@ -271,15 +271,24 @@ void xinput_task(void) {
   joystick_config_t j_config = joystick_get_config();
   
   // XInput axes are scaled to -32768..32767. Our joystick outputs -128..127.
-  // Scale out_x/out_y by << 8 to fit the XInput int16_t range roughly.
+  // Use proportional scaling so positive max (127) maps to 32767 and
+  // negative min (-128) maps to -32768.
   if (j_config.mode == JOYSTICK_MODE_XINPUT_LS) {
-      report.joysticks[0] = (int16_t)j_state.out_x << 8;
+      report.joysticks[0] = (j_state.out_x > 0)
+          ? (int16_t)((int32_t)j_state.out_x * 32767 / 127)
+          : (int16_t)((int32_t)j_state.out_x * 32768 / 128);
       // Depending on hardware, Y axis might be inverted. Usually up is positive in XInput.
-      report.joysticks[1] = -(int16_t)j_state.out_y << 8;
+      report.joysticks[1] = (j_state.out_y > 0)
+          ? -(int16_t)((int32_t)j_state.out_y * 32767 / 127)
+          : -(int16_t)((int32_t)j_state.out_y * 32768 / 128);
       if (j_state.sw) report.buttons |= XINPUT_BUTTON_LS;
   } else if (j_config.mode == JOYSTICK_MODE_XINPUT_RS) {
-      report.joysticks[2] = (int16_t)j_state.out_x << 8;
-      report.joysticks[3] = -(int16_t)j_state.out_y << 8;
+      report.joysticks[2] = (j_state.out_x > 0)
+          ? (int16_t)((int32_t)j_state.out_x * 32767 / 127)
+          : (int16_t)((int32_t)j_state.out_x * 32768 / 128);
+      report.joysticks[3] = (j_state.out_y > 0)
+          ? -(int16_t)((int32_t)j_state.out_y * 32767 / 127)
+          : -(int16_t)((int32_t)j_state.out_y * 32768 / 128);
       if (j_state.sw) report.buttons |= XINPUT_BUTTON_RS;
   }
 #endif
