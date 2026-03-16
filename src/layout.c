@@ -100,10 +100,10 @@ uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
 
 
 // Whether the key is disabled by `SP_KEY_LOCK`
-static bitmap_t key_disabled[] = MAKE_BITMAP(NUM_KEYS);
+static bitmap_t key_disabled[BITMAP_SIZE(NUM_KEYS)] = {0};
 
 // Track whether the key is currently pressed. Used to detect key events.
-static bitmap_t key_press_states[] = MAKE_BITMAP(NUM_KEYS);
+static bitmap_t key_press_states[BITMAP_SIZE(NUM_KEYS)] = {0};
 // Store the keycodes of the currently pressed keys. Layer/profile may change so
 // we need to remember the keycodes we pressed to release them correctly.
 static uint8_t active_keycodes[NUM_KEYS];

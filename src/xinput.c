@@ -106,7 +106,7 @@ static uint8_t endpoint_out;
 
 // We track key press states independently of the layout module in case
 // layout processing is disabled for some keys.
-static bitmap_t key_press_states[] = MAKE_BITMAP(NUM_KEYS);
+static bitmap_t key_press_states[BITMAP_SIZE(NUM_KEYS)] = {0};
 // Track maximum analog values for analog buttons
 // (2 joysticks * 4 directions + 2 triggers)
 static uint16_t analog_states[10];

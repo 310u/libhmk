@@ -28,13 +28,22 @@ typedef uint32_t bitmap_t;
 //--------------------------------------------------------------------+
 
 /**
- * @brief Create a bitmap of a given length
+ * @brief Calculate the number of `bitmap_t` elements needed for a given length
+ *
+ * @param len Length of the bitmap in bits
+ *
+ * @return Number of `bitmap_t` elements
+ */
+#define BITMAP_SIZE(len) M_DIV_CEIL(len, 32)
+
+/**
+ * @brief Create a bitmap of a given length (compound literal for dynamic use)
  *
  * @param len Length of the bitmap in bits
  *
  * @return Bitmap
  */
-#define MAKE_BITMAP(len) ((bitmap_t[M_DIV_CEIL(len, 32)]){0})
+#define MAKE_BITMAP(len) ((bitmap_t[BITMAP_SIZE(len)]){0})
 
 /**
  * @brief Get the value of a bit in a bitmap

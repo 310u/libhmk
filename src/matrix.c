@@ -49,7 +49,7 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
 key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
-static bitmap_t rapid_trigger_disabled[] = MAKE_BITMAP(NUM_KEYS);
+static bitmap_t rapid_trigger_disabled[BITMAP_SIZE(NUM_KEYS)] = {0};
 
 // Tracks the last time any key state changed
 static uint32_t matrix_last_activity_time = 0;
