@@ -159,17 +159,38 @@ void xinput_task(void) {
     uint8_t slider_val = key_matrix[NUM_KEYS - 1].distance;
     uint8_t gp_btn = GP_BUTTON_NONE;
     switch (eeconfig->options.slider_action) {
-      case 0: gp_btn = GP_BUTTON_LS_UP; break;
-      case 1: gp_btn = GP_BUTTON_LS_DOWN; break;
-      case 2: gp_btn = GP_BUTTON_LS_LEFT; break;
-      case 3: gp_btn = GP_BUTTON_LS_RIGHT; break;
-      case 4: gp_btn = GP_BUTTON_RS_UP; break;
-      case 5: gp_btn = GP_BUTTON_RS_DOWN; break;
-      case 6: gp_btn = GP_BUTTON_RS_LEFT; break;
-      case 7: gp_btn = GP_BUTTON_RS_RIGHT; break;
-      case 8: gp_btn = GP_BUTTON_LT; break;
-      case 9: gp_btn = GP_BUTTON_RT; break;
-      default: break;
+    case 0:
+      gp_btn = GP_BUTTON_LS_UP;
+      break;
+    case 1:
+      gp_btn = GP_BUTTON_LS_DOWN;
+      break;
+    case 2:
+      gp_btn = GP_BUTTON_LS_LEFT;
+      break;
+    case 3:
+      gp_btn = GP_BUTTON_LS_RIGHT;
+      break;
+    case 4:
+      gp_btn = GP_BUTTON_RS_UP;
+      break;
+    case 5:
+      gp_btn = GP_BUTTON_RS_DOWN;
+      break;
+    case 6:
+      gp_btn = GP_BUTTON_RS_LEFT;
+      break;
+    case 7:
+      gp_btn = GP_BUTTON_RS_RIGHT;
+      break;
+    case 8:
+      gp_btn = GP_BUTTON_LT;
+      break;
+    case 9:
+      gp_btn = GP_BUTTON_RT;
+      break;
+    default:
+      break;
     }
     if (gp_btn != GP_BUTTON_NONE) {
       ANALOG_STATE(gp_btn) = M_MAX(ANALOG_STATE(gp_btn), slider_val);
@@ -245,8 +266,10 @@ void xinput_task(void) {
     }
 
     if (is_sniper_active) {
-      state[0] = (uint16_t)state[0] * eeconfig->options.sniper_mode_multiplier / 255;
-      state[1] = (uint16_t)state[1] * eeconfig->options.sniper_mode_multiplier / 255;
+      state[0] =
+          (uint16_t)state[0] * eeconfig->options.sniper_mode_multiplier / 255;
+      state[1] =
+          (uint16_t)state[1] * eeconfig->options.sniper_mode_multiplier / 255;
     }
   }
 
@@ -269,27 +292,30 @@ void xinput_task(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_state_t j_state = joystick_get_state();
   joystick_config_t j_config = joystick_get_config();
-  
+
   // XInput axes are scaled to -32768..32767. Our joystick outputs -128..127.
   // Use proportional scaling so positive max (127) maps to 32767 and
   // negative min (-128) maps to -32768.
   if (j_config.mode == JOYSTICK_MODE_XINPUT_LS) {
-      report.joysticks[0] = (j_state.out_x > 0)
-          ? (int16_t)((int32_t)j_state.out_x * 32767 / 127)
-          : (int16_t)((int32_t)j_state.out_x * 32768 / 128);
-      // Depending on hardware, Y axis might be inverted. Usually up is positive in XInput.
-      report.joysticks[1] = (j_state.out_y > 0)
-          ? -(int16_t)((int32_t)j_state.out_y * 32767 / 127)
-          : -(int16_t)((int32_t)j_state.out_y * 32768 / 128);
-      if (j_state.sw) report.buttons |= XINPUT_BUTTON_LS;
+    report.joysticks[0] = (j_state.out_x > 0)
+                              ? (int16_t)((int32_t)j_state.out_x * 32767 / 127)
+                              : (int16_t)((int32_t)j_state.out_x * 32768 / 128);
+    // Depending on hardware, Y axis might be inverted. Usually up is positive
+    // in XInput.
+    report.joysticks[1] =
+        (j_state.out_y > 0) ? -(int16_t)((int32_t)j_state.out_y * 32767 / 127)
+                            : -(int16_t)((int32_t)j_state.out_y * 32768 / 128);
+    if (j_state.sw)
+      report.buttons |= XINPUT_BUTTON_LS;
   } else if (j_config.mode == JOYSTICK_MODE_XINPUT_RS) {
-      report.joysticks[2] = (j_state.out_x > 0)
-          ? (int16_t)((int32_t)j_state.out_x * 32767 / 127)
-          : (int16_t)((int32_t)j_state.out_x * 32768 / 128);
-      report.joysticks[3] = (j_state.out_y > 0)
-          ? -(int16_t)((int32_t)j_state.out_y * 32767 / 127)
-          : -(int16_t)((int32_t)j_state.out_y * 32768 / 128);
-      if (j_state.sw) report.buttons |= XINPUT_BUTTON_RS;
+    report.joysticks[2] = (j_state.out_x > 0)
+                              ? (int16_t)((int32_t)j_state.out_x * 32767 / 127)
+                              : (int16_t)((int32_t)j_state.out_x * 32768 / 128);
+    report.joysticks[3] =
+        (j_state.out_y > 0) ? -(int16_t)((int32_t)j_state.out_y * 32767 / 127)
+                            : -(int16_t)((int32_t)j_state.out_y * 32768 / 128);
+    if (j_state.sw)
+      report.buttons |= XINPUT_BUTTON_RS;
   }
 #endif
 
@@ -360,17 +386,28 @@ void xinput_task(void) {
     //            9=LS, 10=RS, 11=Home
     {
       uint16_t hid_buttons = 0;
-      if (report.buttons & XINPUT_BUTTON_A)     hid_buttons |= (1 << 0);
-      if (report.buttons & XINPUT_BUTTON_B)     hid_buttons |= (1 << 1);
-      if (report.buttons & XINPUT_BUTTON_X)     hid_buttons |= (1 << 2);
-      if (report.buttons & XINPUT_BUTTON_Y)     hid_buttons |= (1 << 3);
-      if (report.buttons & XINPUT_BUTTON_LB)    hid_buttons |= (1 << 4);
-      if (report.buttons & XINPUT_BUTTON_RB)    hid_buttons |= (1 << 5);
-      if (report.buttons & XINPUT_BUTTON_BACK)  hid_buttons |= (1 << 6);
-      if (report.buttons & XINPUT_BUTTON_START) hid_buttons |= (1 << 7);
-      if (report.buttons & XINPUT_BUTTON_LS)    hid_buttons |= (1 << 8);
-      if (report.buttons & XINPUT_BUTTON_RS)    hid_buttons |= (1 << 9);
-      if (report.buttons & XINPUT_BUTTON_HOME)  hid_buttons |= (1 << 10);
+      if (report.buttons & XINPUT_BUTTON_A)
+        hid_buttons |= (1 << 0);
+      if (report.buttons & XINPUT_BUTTON_B)
+        hid_buttons |= (1 << 1);
+      if (report.buttons & XINPUT_BUTTON_X)
+        hid_buttons |= (1 << 2);
+      if (report.buttons & XINPUT_BUTTON_Y)
+        hid_buttons |= (1 << 3);
+      if (report.buttons & XINPUT_BUTTON_LB)
+        hid_buttons |= (1 << 4);
+      if (report.buttons & XINPUT_BUTTON_RB)
+        hid_buttons |= (1 << 5);
+      if (report.buttons & XINPUT_BUTTON_BACK)
+        hid_buttons |= (1 << 6);
+      if (report.buttons & XINPUT_BUTTON_START)
+        hid_buttons |= (1 << 7);
+      if (report.buttons & XINPUT_BUTTON_LS)
+        hid_buttons |= (1 << 8);
+      if (report.buttons & XINPUT_BUTTON_RS)
+        hid_buttons |= (1 << 9);
+      if (report.buttons & XINPUT_BUTTON_HOME)
+        hid_buttons |= (1 << 10);
       gp_report.buttons = hid_buttons;
     }
 

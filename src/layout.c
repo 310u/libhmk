@@ -98,7 +98,6 @@ uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
   return CURRENT_PROFILE.keymap[default_layer][key];
 }
 
-
 // Whether the key is disabled by `SP_KEY_LOCK`
 static bitmap_t key_disabled[BITMAP_SIZE(NUM_KEYS)] = {0};
 
@@ -175,10 +174,10 @@ static void layout_apply_current_profile_state(void) {
 static bool layout_write_current_profile_rgb_field(uint32_t field_offset,
                                                    const void *value,
                                                    uint32_t len) {
-  const uint32_t addr = offsetof(eeconfig_t, profiles) +
-                        (uint32_t)eeconfig->current_profile *
-                            sizeof(eeconfig_profile_t) +
-                        offsetof(eeconfig_profile_t, rgb_config) + field_offset;
+  const uint32_t addr =
+      offsetof(eeconfig_t, profiles) +
+      (uint32_t)eeconfig->current_profile * sizeof(eeconfig_profile_t) +
+      offsetof(eeconfig_profile_t, rgb_config) + field_offset;
   return wear_leveling_write(addr, value, len);
 }
 
@@ -206,10 +205,9 @@ static void layout_adjust_rgb_brightness(bool increase) {
   } else {
     if (current_brightness == 0)
       return;
-    next_brightness =
-        current_brightness > RGB_BRIGHTNESS_STEP
-            ? (uint8_t)(current_brightness - RGB_BRIGHTNESS_STEP)
-            : 0;
+    next_brightness = current_brightness > RGB_BRIGHTNESS_STEP
+                          ? (uint8_t)(current_brightness - RGB_BRIGHTNESS_STEP)
+                          : 0;
   }
 
   if (!layout_write_current_profile_rgb_field(
@@ -254,7 +252,7 @@ void layout_load_advanced_keys(void) {
       // Null Bind advanced keys also have a secondary key
       advanced_key_indices[ak->layer][ak->null_bind.secondary_key] = i + 1;
   }
-  
+
   // Invalidate combo bitmap cache so it's rebuilt with updated definitions.
   // Layer changes are handled lazily by combo_key_bitmap_rebuild() checking
   // combo_key_bitmap_layer != current_layer. This invalidation covers the
@@ -413,16 +411,15 @@ void layout_task(void) {
       // This prevents keys from being registered before a modifier
       // (hold) is resolved.
       const uint8_t current_layer_for_key = layout_get_current_layer();
-      const uint8_t ak_idx =
-          advanced_key_indices[current_layer_for_key][key];
+      const uint8_t ak_idx = advanced_key_indices[current_layer_for_key][key];
       const bool is_hold_tap =
-          ak_idx && CURRENT_PROFILE.advanced_keys[ak_idx - 1].type ==
-                        AK_TYPE_TAP_HOLD;
+          ak_idx &&
+          CURRENT_PROFILE.advanced_keys[ak_idx - 1].type == AK_TYPE_TAP_HOLD;
 
       if (!is_hold_tap && advanced_key_has_undecided() &&
           pending_count < MAX_PENDING_EVENTS) {
-        pending_events[pending_count++] = (typeof(pending_events[0])){
-            .key = key, .pressed = true};
+        pending_events[pending_count++] =
+            (typeof(pending_events[0])){.key = key, .pressed = true};
         // Still signal that a non-hold-tap key was pressed so that
         // advanced_key_tick can set the 'interrupted' flag correctly.
         has_non_tap_hold_press = true;
@@ -445,8 +442,8 @@ void layout_task(void) {
         }
       }
       if (is_pending && pending_count < MAX_PENDING_EVENTS) {
-        pending_events[pending_count++] = (typeof(pending_events[0])){
-            .key = key, .pressed = false};
+        pending_events[pending_count++] =
+            (typeof(pending_events[0])){.key = key, .pressed = false};
         has_non_tap_hold_release = true;
         goto update_event_state;
       }

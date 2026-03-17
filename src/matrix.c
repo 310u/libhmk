@@ -119,12 +119,16 @@ void matrix_scan(void) {
     } else if (eeconfig->options.continuous_calibration &&
                key_matrix[i].key_dir == KEY_DIR_INACTIVE) {
       // Continuous Auto-Calibration
-      // If the key is inactive and within a small drift range from rest baseline (e.g., ±50 units)
-      // apply a very slow EMA to track temperature drift.
-      int32_t diff = (int32_t)new_adc_filtered - (int32_t)key_matrix[i].adc_rest_value;
+      // If the key is inactive and within a small drift range from rest
+      // baseline (e.g., ±50 units) apply a very slow EMA to track temperature
+      // drift.
+      int32_t diff =
+          (int32_t)new_adc_filtered - (int32_t)key_matrix[i].adc_rest_value;
       if (diff > -50 && diff < 50) {
         key_matrix[i].adc_rest_value =
-            (((uint32_t)key_matrix[i].adc_rest_value * 255) + new_adc_filtered) / 256;
+            (((uint32_t)key_matrix[i].adc_rest_value * 255) +
+             new_adc_filtered) /
+            256;
       }
     }
 
