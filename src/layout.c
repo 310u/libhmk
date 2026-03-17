@@ -113,6 +113,13 @@ static uint8_t advanced_key_indices[NUM_LAYERS][NUM_KEYS];
 // Same as `active_keycodes` but for advanced keys
 static uint8_t active_advanced_keys[NUM_KEYS];
 
+typedef struct {
+  uint8_t key;
+  bool pressed;
+  uint32_t event_time;
+  uint8_t distance;
+} layout_event_t;
+
 // Pending events buffer for hold-tap input buffering.
 // When a hold-tap key is undecided, non-hold-tap key events are buffered
 // here and replayed after the hold-tap resolves.
@@ -313,6 +320,26 @@ bool layout_process_key(uint8_t key, bool pressed) {
   return has_non_tap_hold_press;
 }
 
+static bool layout_event_should_swap(const layout_event_t *lhs,
+                                     const layout_event_t *rhs) {
+  if (lhs->event_time != rhs->event_time)
+    return lhs->event_time > rhs->event_time;
+
+  if (lhs->pressed != rhs->pressed)
+    // Prefer releases before presses when two events collapse to the same
+    // millisecond tick.
+    return lhs->pressed && !rhs->pressed;
+
+  if (lhs->pressed)
+    // For equal timestamps, the key that is already deeper past actuation was
+    // likely pressed first.
+    return lhs->distance < rhs->distance;
+
+  // For equal-timestamp releases, the key closer to the rest position was
+  // likely released first.
+  return lhs->distance > rhs->distance;
+}
+
 void layout_task(void) {
   static uint32_t last_ak_tick = 0;
 
@@ -321,11 +348,7 @@ void layout_task(void) {
   bool has_non_tap_hold_release = false;
 
   // Buffer for key press/release events to be sorted by event_time
-  struct {
-    uint8_t key;
-    bool pressed;
-    uint32_t event_time;
-  } events[NUM_KEYS];
+  layout_event_t events[NUM_KEYS];
   uint8_t event_count = 0;
 
   // First pass: collect key events and process XInput/hold events
@@ -364,11 +387,19 @@ void layout_task(void) {
     if (k->is_pressed & !last_key_press) {
       // Key press event: buffer for sorted processing
       events[event_count++] = (typeof(events[0])){
-          .key = i, .pressed = true, .event_time = k->event_time};
+          .key = i,
+          .pressed = true,
+          .event_time = k->event_time,
+          .distance = k->distance,
+      };
     } else if (!k->is_pressed & last_key_press) {
       // Key release event: buffer for sorted processing
       events[event_count++] = (typeof(events[0])){
-          .key = i, .pressed = false, .event_time = k->event_time};
+          .key = i,
+          .pressed = false,
+          .event_time = k->event_time,
+          .distance = k->distance,
+      };
     } else if (k->is_pressed) {
       // Key hold event: process immediately (ordering doesn't matter)
       const uint8_t keycode = active_keycodes[i];
@@ -390,7 +421,7 @@ void layout_task(void) {
   for (uint8_t i = 1; i < event_count; i++) {
     typeof(events[0]) tmp = events[i];
     uint8_t j = i;
-    while (j > 0 && events[j - 1].event_time > tmp.event_time) {
+    while (j > 0 && layout_event_should_swap(&events[j - 1], &tmp)) {
       events[j] = events[j - 1];
       j--;
     }
@@ -416,8 +447,15 @@ void layout_task(void) {
           ak_idx &&
           CURRENT_PROFILE.advanced_keys[ak_idx - 1].type == AK_TYPE_TAP_HOLD;
 
-      if (!is_hold_tap && advanced_key_has_undecided() &&
-          pending_count < MAX_PENDING_EVENTS) {
+      if (!is_hold_tap && advanced_key_has_undecided()) {
+        if (pending_count >= MAX_PENDING_EVENTS) {
+          // Buffer full: force-flush all pending events to make room.
+          // This prevents press/release pair mismatches that cause stuck keys.
+          for (uint8_t p = 0; p < pending_count; p++)
+            layout_process_key(pending_events[p].key,
+                               pending_events[p].pressed);
+          pending_count = 0;
+        }
         pending_events[pending_count++] =
             (typeof(pending_events[0])){.key = key, .pressed = true};
         // Still signal that a non-hold-tap key was pressed so that
@@ -441,7 +479,17 @@ void layout_task(void) {
           break;
         }
       }
-      if (is_pending && pending_count < MAX_PENDING_EVENTS) {
+      if (is_pending) {
+        if (pending_count >= MAX_PENDING_EVENTS) {
+          // Buffer full: force-flush all pending events to make room.
+          // Without this, the release would bypass the buffer while its
+          // corresponding press remains buffered, causing the key to get
+          // stuck in the pressed state when the buffer eventually flushes.
+          for (uint8_t p = 0; p < pending_count; p++)
+            layout_process_key(pending_events[p].key,
+                               pending_events[p].pressed);
+          pending_count = 0;
+        }
         pending_events[pending_count++] =
             (typeof(pending_events[0])){.key = key, .pressed = false};
         has_non_tap_hold_release = true;

@@ -34,6 +34,17 @@
 #define MATRIX_EMA_ALPHA_EXPONENT 4
 #endif
 
+#if !defined(MATRIX_EMA_FAST_ALPHA_EXPONENT)
+// Faster EMA used while a key is actively moving or the sampled ADC delta is
+// large enough that smoothing would noticeably hurt responsiveness.
+#define MATRIX_EMA_FAST_ALPHA_EXPONENT 2
+#endif
+
+#if !defined(MATRIX_EMA_FAST_DELTA)
+// Minimum ADC delta required to switch to the faster EMA path.
+#define MATRIX_EMA_FAST_DELTA 16
+#endif
+
 #if !defined(MATRIX_CALIBRATION_EPSILON)
 // Minimum change in ADC values required to update the calibration values. This
 // is used to mitigate the inconsistency of the Hall effect sensors.
@@ -58,6 +69,8 @@ typedef enum {
 
 // Key state
 typedef struct {
+  // Most recent raw ADC value
+  uint16_t adc_raw;
   // Filtered ADC value
   uint16_t adc_filtered;
   // ADC value when the key is fully released

@@ -21,13 +21,30 @@
 #include "lib/bitmap.h"
 #include "rgb.h"
 
-// Exponential moving average (EMA) filter
-#define EMA(x, y)                                                              \
-  (((uint32_t)(x) +                                                            \
-    ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1))) >>               \
-   MATRIX_EMA_ALPHA_EXPONENT)
-
 #define MATRIX_BOTTOM_OUT_SAVE_IDLE_MS 3000u
+
+__attribute__((always_inline)) static inline uint16_t
+matrix_ema(uint16_t sample, uint16_t filtered, uint8_t exponent) {
+  return (uint16_t)(((uint32_t)sample +
+                     ((uint32_t)filtered * ((1u << exponent) - 1u))) >>
+                    exponent);
+}
+
+__attribute__((always_inline)) static inline uint16_t
+matrix_filter_adc(uint8_t key, uint16_t sample) {
+  const key_state_t *state = &key_matrix[key];
+  const uint16_t filtered = state->adc_filtered;
+  const uint16_t delta =
+      sample > filtered ? (uint16_t)(sample - filtered)
+                        : (uint16_t)(filtered - sample);
+  uint8_t exponent = MATRIX_EMA_ALPHA_EXPONENT;
+
+  if (delta >= MATRIX_EMA_FAST_DELTA || state->is_pressed ||
+      state->distance != 0 || state->key_dir != KEY_DIR_INACTIVE)
+    exponent = MATRIX_EMA_FAST_ALPHA_EXPONENT;
+
+  return matrix_ema(sample, filtered, exponent);
+}
 
 __attribute__((always_inline)) static inline uint16_t
 matrix_analog_read(uint8_t key) {
@@ -65,6 +82,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   }
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    key_matrix[i].adc_raw = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_filtered = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_bottom_out_value =
@@ -83,9 +101,12 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     analog_task();
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
-      const uint16_t new_adc_filtered =
-          EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
+      const uint16_t raw_adc = matrix_analog_read(i);
+      const uint16_t new_adc_filtered = matrix_ema(raw_adc,
+                                                   key_matrix[i].adc_filtered,
+                                                   MATRIX_EMA_ALPHA_EXPONENT);
 
+      key_matrix[i].adc_raw = raw_adc;
       key_matrix[i].adc_filtered = new_adc_filtered;
 
       if (new_adc_filtered + MATRIX_CALIBRATION_EPSILON <=
@@ -104,10 +125,12 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
 void matrix_scan(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    const uint16_t raw_adc = matrix_analog_read((uint8_t)i);
     const uint16_t new_adc_filtered =
-        EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
+        matrix_filter_adc((uint8_t)i, raw_adc);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
+    key_matrix[i].adc_raw = raw_adc;
     key_matrix[i].adc_filtered = new_adc_filtered;
 
     if (new_adc_filtered >=

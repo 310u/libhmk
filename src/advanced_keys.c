@@ -650,6 +650,17 @@ static combo_event_t *queue_peek(uint8_t offset) {
   return &event_queue[(queue_head + offset) % COMBO_QUEUE_SIZE];
 }
 
+static bool queue_has_unconsumed_press(uint8_t key) {
+  for (uint8_t i = 0; i < queue_count; i++) {
+    combo_event_t *ev = queue_peek(i);
+    if (!ev || ev->consumed)
+      continue;
+    if (ev->key == key && ev->pressed)
+      return true;
+  }
+  return false;
+}
+
 static void queue_pop(void) {
   if (queue_count == 0) return;
   queue_head = (queue_head + 1) % COMBO_QUEUE_SIZE;
@@ -732,8 +743,8 @@ static int check_combo_match(const advanced_key_t *ak, uint32_t current_time) {
     combo_event_t *ev = queue_peek(i);
     if (!ev || ev->consumed) continue; 
     
-    // Release events are not queued (handled immediately in combo_process),
-    // but skip them defensively if present.
+    // Release events can be queued to preserve press/release ordering when a
+    // combo candidate is abandoned, but they are not part of combo matching.
     if (!ev->pressed) continue;
     
     bool is_part = false;
@@ -912,19 +923,24 @@ bool advanced_key_combo_process(uint8_t key, bool pressed, uint32_t time) {
   }
 
   // ── Release of a combo key ──
-  // Don't queue release events. Pass them through immediately
-  // so key-up reports are not delayed. Then re-evaluate combo state:
-  // the release may have killed all candidates, triggering an
-  // immediate flush inside process_combo_logic.
+  // If the press is still buffered in the combo queue, buffer the release
+  // too and flush both in order. Otherwise we would drop the release now and
+  // later flush only the press, leaving the key stuck down.
   if (!pressed) {
-      if (layout_process_key(key, false)) {
-          pending_activity = true;
-      }
-      // Re-evaluate: release may have killed all candidates
-      if (queue_count > 0) {
-          process_combo_logic(time);
-      }
-      return true; // We handled this event
+    if (queue_has_unconsumed_press(key)) {
+      queue_push(key, false, time);
+      flush_events(queue_count);
+      return true;
+    }
+
+    if (layout_process_key(key, false)) {
+      pending_activity = true;
+    }
+    // Re-evaluate: release may have killed all candidates
+    if (queue_count > 0) {
+      process_combo_logic(time);
+    }
+    return true; // We handled this event
   }
 
   // ── Press of a combo key: queue it ──

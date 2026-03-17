@@ -90,6 +90,19 @@ void command_process(const uint8_t *buf) {
     }
     break;
   }
+  case COMMAND_ANALOG_INFO_RAW: {
+    const command_in_analog_info_t *p = &in->analog_info;
+    command_out_analog_info_t *o = out->analog_info;
+
+    COMMAND_VERIFY(p->offset < NUM_KEYS);
+
+    for (uint32_t i = 0;
+         i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
+      o[i].adc_value = key_matrix[i + p->offset].adc_raw;
+      o[i].distance = key_matrix[i + p->offset].distance;
+    }
+    break;
+  }
   case COMMAND_GET_CALIBRATION: {
     out->calibration = eeconfig->calibration;
     break;

@@ -25,6 +25,12 @@
 // Track how many keys are currently in the 6KRO part of the report
 static uint8_t num_6kro_keys;
 static hid_nkro_kb_report_t kb_report;
+static hid_nkro_kb_report_t kb_report_last_sent;
+
+#define MAX_PENDING_KB_REPORTS 16u
+static hid_nkro_kb_report_t kb_report_queue[MAX_PENDING_KB_REPORTS];
+static uint8_t kb_report_queue_head;
+static uint8_t kb_report_queue_size;
 
 static uint16_t system_report;
 static uint16_t consumer_report;
@@ -36,6 +42,36 @@ static void hid_mouse_sync_buttons(void) {
   mouse_report.buttons = mouse_keycode_buttons | mouse_pointer_buttons;
 }
 
+static void hid_keyboard_queue_report(void) {
+  const hid_nkro_kb_report_t *baseline = &kb_report_last_sent;
+  if (kb_report_queue_size != 0u) {
+    const uint32_t tail_index = ((uint32_t)kb_report_queue_head +
+                                 (uint32_t)kb_report_queue_size - 1u) &
+                                (uint32_t)(MAX_PENDING_KB_REPORTS - 1u);
+    const uint8_t tail =
+        (uint8_t)tail_index;
+    baseline = &kb_report_queue[tail];
+  }
+
+  if (memcmp(baseline, &kb_report, sizeof(kb_report)) == 0)
+    return;
+
+  if (kb_report_queue_size == MAX_PENDING_KB_REPORTS) {
+    // If the queue overflows, drop the oldest unsent snapshot and keep the
+    // newest transitions flowing.
+    kb_report_queue_head =
+        (kb_report_queue_head + 1u) & (MAX_PENDING_KB_REPORTS - 1u);
+    kb_report_queue_size--;
+  }
+
+  const uint32_t tail_index =
+      ((uint32_t)kb_report_queue_head + (uint32_t)kb_report_queue_size) &
+      (uint32_t)(MAX_PENDING_KB_REPORTS - 1u);
+  const uint8_t tail = (uint8_t)tail_index;
+  kb_report_queue[tail] = kb_report;
+  kb_report_queue_size++;
+}
+
 #if !defined(HID_DISABLED)
 /**
  * @brief Send the keyboard report
@@ -45,16 +81,21 @@ static void hid_mouse_sync_buttons(void) {
  * @return None
  */
 static void hid_send_keyboard_report(void) {
-  static hid_nkro_kb_report_t prev_kb_report = {0};
+  if (kb_report_queue_size == 0u) {
+    hid_keyboard_queue_report();
+  }
 
-  if (memcmp(&prev_kb_report, &kb_report, sizeof(prev_kb_report)) == 0)
-    // Don't send the report if it hasn't changed
+  if (kb_report_queue_size == 0u)
     return;
 
-  // Only update prev_kb_report after successful send to ensure the report
-  // is retried on the next cycle if the send fails.
-  if (tud_hid_n_report(USB_ITF_KEYBOARD, 0, &kb_report, sizeof(kb_report)))
-    prev_kb_report = kb_report;
+  hid_nkro_kb_report_t *report = &kb_report_queue[kb_report_queue_head];
+
+  if (tud_hid_n_report(USB_ITF_KEYBOARD, 0, report, sizeof(*report))) {
+    kb_report_last_sent = *report;
+    kb_report_queue_head =
+        (kb_report_queue_head + 1u) & (MAX_PENDING_KB_REPORTS - 1u);
+    kb_report_queue_size--;
+  }
 }
 #endif
 
@@ -107,7 +148,18 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
   }
 }
 
-void hid_init(void) {}
+void hid_init(void) {
+  num_6kro_keys = 0;
+  memset(&kb_report, 0, sizeof(kb_report));
+  memset(&kb_report_last_sent, 0, sizeof(kb_report_last_sent));
+  kb_report_queue_head = 0;
+  kb_report_queue_size = 0;
+  system_report = 0;
+  consumer_report = 0;
+  memset(&mouse_report, 0, sizeof(mouse_report));
+  mouse_keycode_buttons = 0;
+  mouse_pointer_buttons = 0;
+}
 
 void hid_keycode_add(uint8_t keycode) {
   const uint16_t hid_code = keycode_to_hid[keycode];
@@ -132,10 +184,12 @@ void hid_keycode_add(uint8_t keycode) {
       kb_report.keycodes[num_6kro_keys++] = hid_code;
     }
     kb_report.bitmap[hid_code / 8] |= 1 << (hid_code & 7);
+    hid_keyboard_queue_report();
     break;
 
   case MODIFIER_KEYCODE_RANGE:
     kb_report.modifiers |= hid_code;
+    hid_keyboard_queue_report();
     break;
 
   case SYSTEM_KEYCODE_RANGE:
@@ -193,10 +247,12 @@ void hid_keycode_remove(uint8_t keycode) {
       }
     }
     kb_report.bitmap[hid_code / 8] &= ~(1 << (hid_code & 7));
+    hid_keyboard_queue_report();
     break;
 
   case MODIFIER_KEYCODE_RANGE:
     kb_report.modifiers &= ~hid_code;
+    hid_keyboard_queue_report();
     break;
 
   case SYSTEM_KEYCODE_RANGE:
@@ -223,28 +279,19 @@ void hid_keycode_remove(uint8_t keycode) {
 
 void hid_send_reports(void) {
 #if !defined(HID_DISABLED)
-  if (tud_suspended())
+  if (tud_suspended()) {
     // Wake up the host if it's suspended
     tud_remote_wakeup();
-
-  // Wait for keyboard interface with timeout to prevent blocking the main loop
-  for (uint32_t t = timer_read(); !tud_hid_n_ready(USB_ITF_KEYBOARD);) {
-    tud_task();
-    if (timer_elapsed(t) > 5)
+    if (tud_suspended())
       return;
   }
 
-  hid_send_keyboard_report();
+  if (tud_hid_n_ready(USB_ITF_KEYBOARD))
+    hid_send_keyboard_report();
 
-  // Wait for HID interface with timeout
-  for (uint32_t t = timer_read(); !tud_hid_n_ready(USB_ITF_HID);) {
-    tud_task();
-    if (timer_elapsed(t) > 5)
-      return;
-  }
-
-  // Start from the first report ID
-  hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);
+  if (tud_hid_n_ready(USB_ITF_HID))
+    // Start from the first report ID
+    hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);
 #endif
 }
 
@@ -267,7 +314,9 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
 
 void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
                                 uint16_t len) {
-  if (instance == USB_ITF_HID)
+  if (instance == USB_ITF_KEYBOARD)
+    hid_send_keyboard_report();
+  else if (instance == USB_ITF_HID)
     // Start from the next report ID
     hid_send_hid_report(report[0] + 1);
 }

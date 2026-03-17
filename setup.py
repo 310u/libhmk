@@ -92,6 +92,21 @@ if __name__ == "__main__":
         "build_src_filter": "+<layout.c>",
         "build_flags": common_test_flags,
     }
+    pio_config["env:native_test_hid"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_hid",
+        "test_build_src": "yes",
+        "build_src_filter": "+<hid.c>",
+        "build_flags": "\n".join(
+            [
+                common_test_flags,
+                "-I test/test_hid",
+                "-DCFG_TUSB_MCU=0",
+                "-DBOARD_USB_FS=1",
+            ]
+        ),
+    }
     pio_config["env:native_test_dummy"] = {
         "platform": "native",
         "test_framework": "unity",

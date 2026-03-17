@@ -71,7 +71,8 @@ void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons);
 /**
  * @brief Send all HID reports
  *
- * This function will block until the device is ready to send the reports.
+ * This function is non-blocking. If an interface is not ready, the report is
+ * retried on a later call.
  *
  * @return None
  */

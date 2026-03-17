@@ -52,6 +52,16 @@ static int32_t scroll_accum_x = 0;
 static int32_t scroll_accum_y = 0;
 static bool mouse_switch_reported = false;
 
+static bool joystick_sw_sends_mouse_button(void) {
+#if defined(JOYSTICK_SW_KEY_INDEX)
+  // Boards that expose the push switch as a normal key should let the keymap
+  // decide its behavior instead of also forcing a mouse click.
+  return false;
+#else
+  return true;
+#endif
+}
+
 static joystick_config_t joystick_default_config(void) {
   joystick_config_t def = {
       .x = {0, 2048, 4095},
@@ -97,8 +107,8 @@ static int8_t apply_calibration(uint16_t raw_val,
       range = 1; // Failsafe
 
     result = (dist_from_center * 127) / range;
-  about:
-    blank #blocked if (result > 127) result = 127;
+    if (result > 127)
+      result = 127;
   } else {
     // Negative side
     int32_t range = center - min;
@@ -311,8 +321,10 @@ void joystick_task(void) {
     // HID reports
     uint32_t tick = timer_read();
     if (timer_elapsed(last_mouse_tick) >= JOYSTICK_MOUSE_REPORT_INTERVAL_MS) {
+      const bool sw_mouse_button =
+          joystick_sw_sends_mouse_button() && current_state.sw;
       if (current_state.out_x != 0 || current_state.out_y != 0 ||
-          current_state.sw || mouse_switch_reported) {
+          sw_mouse_button || mouse_switch_reported) {
         uint8_t acceleration = joystick_effective_mouse_acceleration(
             config_cache.mouse_acceleration);
         uint16_t magnitude =
@@ -343,7 +355,7 @@ void joystick_task(void) {
         // For some reason Y axis might be inverted depending on hardware
         // orientation, adjust here if needed
         uint8_t buttons = 0;
-        if (current_state.sw)
+        if (sw_mouse_button)
           buttons |= 1; // Left click
 
         hid_mouse_move(dx, dy, buttons);
@@ -354,8 +366,10 @@ void joystick_task(void) {
   } else if (config_cache.mode == JOYSTICK_MODE_SCROLL) {
     uint32_t tick = timer_read();
     if (timer_elapsed(last_mouse_tick) >= JOYSTICK_SCROLL_REPORT_INTERVAL_MS) {
+      const bool sw_mouse_button =
+          joystick_sw_sends_mouse_button() && current_state.sw;
       if (current_state.out_x != 0 || current_state.out_y != 0 ||
-          current_state.sw || mouse_switch_reported) {
+          sw_mouse_button || mouse_switch_reported) {
         uint16_t magnitude =
             joystick_vector_length(current_state.out_x, current_state.out_y);
         int32_t dx_fp = 0;
@@ -382,7 +396,7 @@ void joystick_task(void) {
         int8_t wheel = joystick_consume_mouse_accum(&scroll_accum_y);
 
         uint8_t buttons = 0;
-        if (current_state.sw)
+        if (sw_mouse_button)
           buttons |= 1;
         hid_mouse_scroll(wheel, pan, buttons);
         mouse_switch_reported = buttons != 0;

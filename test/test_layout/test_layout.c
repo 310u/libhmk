@@ -23,6 +23,10 @@ uint32_t wear_leveling_write_count = 0;
 uint32_t last_write_address = 0;
 uint32_t last_write_len = 0;
 uint32_t last_write_u32 = 0;
+uint8_t hid_added[8] = {0};
+uint8_t hid_removed[8] = {0};
+uint8_t hid_add_count = 0;
+uint8_t hid_remove_count = 0;
 
 void advanced_key_init(void) {}
 void advanced_key_clear(void) {}
@@ -50,8 +54,16 @@ bool wear_leveling_write(uint32_t address, const void *data, uint32_t len) {
     return true;
 }
 
-void hid_keycode_add(uint8_t keycode) {}
-void hid_keycode_remove(uint8_t keycode) {}
+void hid_keycode_add(uint8_t keycode) {
+    if (hid_add_count < 8) {
+        hid_added[hid_add_count++] = keycode;
+    }
+}
+void hid_keycode_remove(uint8_t keycode) {
+    if (hid_remove_count < 8) {
+        hid_removed[hid_remove_count++] = keycode;
+    }
+}
 void hid_send_reports(void) {}
 
 void xinput_process(uint8_t key) {}
@@ -76,6 +88,10 @@ void setUp(void) {
     last_write_address = 0;
     last_write_len = 0;
     last_write_u32 = 0;
+    memset(hid_added, 0, sizeof(hid_added));
+    memset(hid_removed, 0, sizeof(hid_removed));
+    hid_add_count = 0;
+    hid_remove_count = 0;
 #if defined(JOYSTICK_ENABLED)
     mock_joystick_config.mode = JOYSTICK_MODE_MOUSE;
 #endif
@@ -111,6 +127,25 @@ void test_poll_rate_toggle_persists_options_and_resets(void) {
                              written_options.raw);
 }
 
+void test_layout_sorts_same_timestamp_presses_by_distance(void) {
+    mock_eeconfig.profiles[0].keymap[0][1] = KC_B;
+    mock_eeconfig.profiles[0].keymap[0][2] = KC_A;
+
+    key_matrix[1].is_pressed = true;
+    key_matrix[1].event_time = 10;
+    key_matrix[1].distance = 120;
+
+    key_matrix[2].is_pressed = true;
+    key_matrix[2].event_time = 10;
+    key_matrix[2].distance = 200;
+
+    layout_task();
+
+    TEST_ASSERT_EQUAL_UINT8(2, hid_add_count);
+    TEST_ASSERT_EQUAL_UINT8(KC_A, hid_added[0]);
+    TEST_ASSERT_EQUAL_UINT8(KC_B, hid_added[1]);
+}
+
 #if defined(JOYSTICK_ENABLED)
 void test_joystick_scroll_mo_restores_previous_mode(void) {
     mock_joystick_config.mode = JOYSTICK_MODE_XINPUT_RS;
@@ -127,6 +162,7 @@ int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_layout_process_key);
     RUN_TEST(test_poll_rate_toggle_persists_options_and_resets);
+    RUN_TEST(test_layout_sorts_same_timestamp_presses_by_distance);
 #if defined(JOYSTICK_ENABLED)
     RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
 #endif

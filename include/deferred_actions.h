@@ -23,7 +23,7 @@
 
 #if !defined(MAX_DEFERRED_ACTIONS)
 // Maximum number of deferred actions for each matrix scan
-#define MAX_DEFERRED_ACTIONS 16
+#define MAX_DEFERRED_ACTIONS 32
 #endif
 
 _Static_assert(M_IS_POWER_OF_TWO(MAX_DEFERRED_ACTIONS),
