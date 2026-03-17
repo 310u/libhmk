@@ -154,9 +154,10 @@ void xinput_process(uint8_t key) {
 void xinput_task(void) {
   static xinput_report_t last_report = {.report_size = sizeof(xinput_report_t)};
 
+#if defined(SLIDER_KEY_INDEX)
   // Inject slider override if Gamepad Mode is active
   if (eeconfig->options.slider_mode == 2) {
-    uint8_t slider_val = key_matrix[NUM_KEYS - 1].distance;
+    uint8_t slider_val = key_matrix[SLIDER_KEY_INDEX].distance;
     uint8_t gp_btn = GP_BUTTON_NONE;
     switch (eeconfig->options.slider_action) {
     case 0:
@@ -196,6 +197,7 @@ void xinput_task(void) {
       ANALOG_STATE(gp_btn) = M_MAX(ANALOG_STATE(gp_btn), slider_val);
     }
   }
+#endif
 
   bool is_key_end_deadzone = false;
   // Update trigger states in the report

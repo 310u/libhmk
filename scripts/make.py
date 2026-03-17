@@ -39,7 +39,9 @@ build_flags.include(f"hardware/{driver_name}")
 build_flags.include(f"keyboards/{keyboard}")
 build_flags.include("include")
 build_flags.define("DRIVER_BOARD_DEF_HEADER", f"\"../hardware/{driver_name}/board_def.h\"")
-build_flags.define("KEYBOARD_BOARD_DEF_HEADER", f"\"../keyboards/{keyboard}/board_def.h\"")
+keyboard_board_def = os.path.join("keyboards", keyboard, "board_def.h")
+if os.path.exists(keyboard_board_def):
+    build_flags.define("KEYBOARD_BOARD_DEF_HEADER", f"\"../keyboards/{keyboard}/board_def.h\"")
 
 # Bootloader Configuration
 build_flags.define("BOOTLOADER_ADDR", driver.metadata.bootloader.address)

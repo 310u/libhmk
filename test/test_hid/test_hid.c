@@ -3,6 +3,7 @@
 #include "commands.h"
 #include "hid.h"
 #include "keycodes.h"
+#include "tusb.h"
 #include "usb_descriptors.h"
 
 static bool keyboard_ready;
@@ -20,6 +21,8 @@ static uint16_t last_report_len;
 static uint16_t last_report_value;
 static hid_nkro_kb_report_t keyboard_reports[8];
 static uint8_t keyboard_report_count;
+static hid_mouse_report_t mouse_reports[8];
+static uint8_t mouse_report_count;
 
 const uint16_t keycode_to_hid[256] = {
     [KC_A] = 0x0004,
@@ -48,6 +51,11 @@ bool tud_hid_n_report(uint8_t instance, uint8_t report_id, const void *report,
       len == sizeof(hid_nkro_kb_report_t)) {
     memcpy(&keyboard_reports[keyboard_report_count], report, len);
     keyboard_report_count++;
+  }
+  if (instance == USB_ITF_HID && report_id == REPORT_ID_MOUSE &&
+      mouse_report_count < 8 && len == sizeof(hid_mouse_report_t)) {
+    memcpy(&mouse_reports[mouse_report_count], report, len);
+    mouse_report_count++;
   }
   return true;
 }
@@ -85,9 +93,12 @@ static void reset_observations(void) {
   last_report_value = 0;
   memset(keyboard_reports, 0, sizeof(keyboard_reports));
   keyboard_report_count = 0;
+  memset(mouse_reports, 0, sizeof(mouse_reports));
+  mouse_report_count = 0;
 }
 
 void setUp(void) {
+  hid_init();
   keyboard_ready = true;
   hid_ready = true;
   usb_suspended = false;
@@ -171,9 +182,72 @@ void test_hid_preserves_transient_keyboard_taps_while_interface_busy(void) {
   TEST_ASSERT_BITS_LOW(1u << 4, keyboard_reports[1].bitmap[0]);
 }
 
+void test_hid_sends_repeated_mouse_motion_reports(void) {
+  hid_mouse_move(3, -2, 0);
+  hid_send_reports();
+
+  TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT8(1, mouse_report_count);
+  TEST_ASSERT_EQUAL_INT8(3, mouse_reports[0].x);
+  TEST_ASSERT_EQUAL_INT8(-2, mouse_reports[0].y);
+  TEST_ASSERT_EQUAL_INT8(0, mouse_reports[0].wheel);
+  TEST_ASSERT_EQUAL_INT8(0, mouse_reports[0].pan);
+
+  hid_mouse_move(3, -2, 0);
+  hid_send_reports();
+
+  TEST_ASSERT_EQUAL_UINT32(2, report_count);
+  TEST_ASSERT_EQUAL_UINT8(2, mouse_report_count);
+  TEST_ASSERT_EQUAL_INT8(3, mouse_reports[1].x);
+  TEST_ASSERT_EQUAL_INT8(-2, mouse_reports[1].y);
+}
+
+void test_hid_accumulates_mouse_motion_while_interface_busy(void) {
+  hid_ready = false;
+
+  hid_mouse_move(4, -1, 0);
+  hid_send_reports();
+  hid_mouse_move(5, -2, 0);
+  hid_send_reports();
+
+  TEST_ASSERT_EQUAL_UINT32(0, report_count);
+
+  hid_ready = true;
+  hid_send_reports();
+
+  TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT8(1, mouse_report_count);
+  TEST_ASSERT_EQUAL_INT8(9, mouse_reports[0].x);
+  TEST_ASSERT_EQUAL_INT8(-3, mouse_reports[0].y);
+}
+
+void test_hid_accumulates_mouse_scroll_while_interface_busy(void) {
+  hid_ready = false;
+
+  hid_mouse_scroll(1, 2, 0);
+  hid_send_reports();
+  hid_mouse_scroll(-3, 1, 0);
+  hid_send_reports();
+
+  TEST_ASSERT_EQUAL_UINT32(0, report_count);
+
+  hid_ready = true;
+  hid_send_reports();
+
+  TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT8(1, mouse_report_count);
+  TEST_ASSERT_EQUAL_INT8(0, mouse_reports[0].x);
+  TEST_ASSERT_EQUAL_INT8(0, mouse_reports[0].y);
+  TEST_ASSERT_EQUAL_INT8(-2, mouse_reports[0].wheel);
+  TEST_ASSERT_EQUAL_INT8(3, mouse_reports[0].pan);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_hid_send_reports_is_non_blocking_per_interface);
   RUN_TEST(test_hid_preserves_transient_keyboard_taps_while_interface_busy);
+  RUN_TEST(test_hid_sends_repeated_mouse_motion_reports);
+  RUN_TEST(test_hid_accumulates_mouse_motion_while_interface_busy);
+  RUN_TEST(test_hid_accumulates_mouse_scroll_while_interface_busy);
   return UNITY_END();
 }

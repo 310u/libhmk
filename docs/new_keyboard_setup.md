@@ -11,7 +11,8 @@ libhmk/
 └── keyboards/
     └── <your_keyboard_name>/
         ├── keyboard.json   (Required: Metadata and configuration)
-        └── config.h        (Optional: Custom code or overrides)
+        ├── board_def.h     (Optional: Feature pin definitions)
+        └── config.h        (Optional: Additional compile-time overrides)
 ```
 
 ## 2. Configuration (`keyboard.json`)
@@ -30,14 +31,14 @@ The `keyboard.json` file is the heart of your keyboard definition. It defines th
 
 Refer to [`keyboards/mochiko39he/keyboard.json`](../keyboards/mochiko39he/keyboard.json) as a complete example.
 
-## 3. Custom Logic (`config.h`)
+## 3. Optional Headers
 
-If your keyboard requires specific initialization or custom features (like a physical slider), use `config.h`. 
+Use `board_def.h` for hardware-backed optional features, and `config.h` for any extra compile-time overrides.
 
-Example for a slider:
+Example `board_def.h` for a slider or joystick switch mapped into the matrix:
 ```c
-#define SLIDER_PIN A0
-#define SLIDER_ADC_CHANNEL 0
+#define SLIDER_KEY_INDEX 39
+#define JOYSTICK_SW_KEY_INDEX 40
 ```
 
 ## 4. Building the Firmware

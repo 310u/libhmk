@@ -37,9 +37,24 @@ static uint16_t consumer_report;
 static hid_mouse_report_t mouse_report;
 static uint8_t mouse_keycode_buttons;
 static uint8_t mouse_pointer_buttons;
+static int32_t mouse_pending_x;
+static int32_t mouse_pending_y;
+static int32_t mouse_pending_wheel;
+static int32_t mouse_pending_pan;
+static uint16_t system_report_last_sent;
+static uint16_t consumer_report_last_sent;
+static uint8_t mouse_buttons_last_sent;
 
 static void hid_mouse_sync_buttons(void) {
   mouse_report.buttons = mouse_keycode_buttons | mouse_pointer_buttons;
+}
+
+static int8_t hid_mouse_clamp_pending(int32_t value) {
+  if (value > INT8_MAX)
+    return INT8_MAX;
+  if (value < INT8_MIN)
+    return INT8_MIN;
+  return (int8_t)value;
 }
 
 static void hid_keyboard_queue_report(void) {
@@ -107,39 +122,50 @@ static void hid_send_keyboard_report(void) {
  * @return None
  */
 static void hid_send_hid_report(uint8_t starting_report_id) {
-  static uint16_t prev_system_report = 0;
-  static uint16_t prev_consumer_report = 0;
-  static hid_mouse_report_t prev_mouse_report = {0};
-
   for (uint8_t report_id = starting_report_id; report_id < REPORT_ID_COUNT;
        report_id++) {
     switch (report_id) {
     case REPORT_ID_SYSTEM_CONTROL:
-      if (system_report == prev_system_report)
+      if (system_report == system_report_last_sent)
         // Don't send the report if it hasn't changed
         break;
       if (tud_hid_n_report(USB_ITF_HID, report_id, &system_report,
                            sizeof(system_report)))
-        prev_system_report = system_report;
+        system_report_last_sent = system_report;
       return;
 
     case REPORT_ID_CONSUMER_CONTROL:
-      if (consumer_report == prev_consumer_report)
+      if (consumer_report == consumer_report_last_sent)
         // Don't send the report if it hasn't changed
         break;
       if (tud_hid_n_report(USB_ITF_HID, report_id, &consumer_report,
                            sizeof(consumer_report)))
-        prev_consumer_report = consumer_report;
+        consumer_report_last_sent = consumer_report;
       return;
 
     case REPORT_ID_MOUSE:
-      if (memcmp(&prev_mouse_report, &mouse_report,
-                 sizeof(prev_mouse_report)) == 0)
-        // Don't send the report if it hasn't changed
+      if (mouse_report.buttons == mouse_buttons_last_sent && mouse_pending_x == 0 &&
+          mouse_pending_y == 0 && mouse_pending_wheel == 0 &&
+          mouse_pending_pan == 0)
+        // Nothing changed since the last mouse report.
         break;
-      if (tud_hid_n_report(USB_ITF_HID, report_id, &mouse_report,
-                           sizeof(mouse_report)))
-        prev_mouse_report = mouse_report;
+
+      hid_mouse_report_t next_mouse_report = {
+          .buttons = mouse_report.buttons,
+          .x = hid_mouse_clamp_pending(mouse_pending_x),
+          .y = hid_mouse_clamp_pending(mouse_pending_y),
+          .wheel = hid_mouse_clamp_pending(mouse_pending_wheel),
+          .pan = hid_mouse_clamp_pending(mouse_pending_pan),
+      };
+
+      if (tud_hid_n_report(USB_ITF_HID, report_id, &next_mouse_report,
+                           sizeof(next_mouse_report))) {
+        mouse_buttons_last_sent = next_mouse_report.buttons;
+        mouse_pending_x -= next_mouse_report.x;
+        mouse_pending_y -= next_mouse_report.y;
+        mouse_pending_wheel -= next_mouse_report.wheel;
+        mouse_pending_pan -= next_mouse_report.pan;
+      }
       return;
 
     default:
@@ -159,6 +185,13 @@ void hid_init(void) {
   memset(&mouse_report, 0, sizeof(mouse_report));
   mouse_keycode_buttons = 0;
   mouse_pointer_buttons = 0;
+  mouse_pending_x = 0;
+  mouse_pending_y = 0;
+  mouse_pending_wheel = 0;
+  mouse_pending_pan = 0;
+  system_report_last_sent = 0;
+  consumer_report_last_sent = 0;
+  mouse_buttons_last_sent = 0;
 }
 
 void hid_keycode_add(uint8_t keycode) {
@@ -211,19 +244,15 @@ void hid_keycode_add(uint8_t keycode) {
 }
 
 void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons) {
-  mouse_report.x = x;
-  mouse_report.y = y;
-  mouse_report.wheel = 0;
-  mouse_report.pan = 0;
+  mouse_pending_x += x;
+  mouse_pending_y += y;
   mouse_pointer_buttons = buttons;
   hid_mouse_sync_buttons();
 }
 
 void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons) {
-  mouse_report.x = 0;
-  mouse_report.y = 0;
-  mouse_report.wheel = wheel;
-  mouse_report.pan = pan;
+  mouse_pending_wheel += wheel;
+  mouse_pending_pan += pan;
   mouse_pointer_buttons = buttons;
   hid_mouse_sync_buttons();
 }

@@ -107,6 +107,14 @@ if __name__ == "__main__":
             ]
         ),
     }
+    pio_config["env:native_test_matrix"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_matrix",
+        "test_build_src": "yes",
+        "build_src_filter": "+<matrix.c>",
+        "build_flags": common_test_flags,
+    }
     pio_config["env:native_test_dummy"] = {
         "platform": "native",
         "test_framework": "unity",

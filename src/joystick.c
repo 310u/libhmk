@@ -7,9 +7,21 @@
 #include "layout.h"
 #include "wear_leveling.h"
 
-#include "at32f402_405.h"
-
 #if defined(JOYSTICK_ENABLED)
+
+#if defined(__has_include)
+#if __has_include("at32f402_405.h")
+#include "at32f402_405.h"
+#define JOYSTICK_GPIO_BACKEND_AT32 1
+#elif __has_include("stm32f4xx_hal.h")
+#include "stm32f4xx_hal.h"
+#define JOYSTICK_GPIO_BACKEND_STM32 1
+#endif
+#endif
+
+#if !defined(JOYSTICK_GPIO_BACKEND_AT32) && !defined(JOYSTICK_GPIO_BACKEND_STM32)
+#error "Unsupported GPIO backend for joystick"
+#endif
 
 #ifndef JOYSTICK_X_ADC_INDEX
 #error "JOYSTICK_X_ADC_INDEX not defined in board_def.h"
@@ -27,10 +39,26 @@
 #error "JOYSTICK_SW_PORT not defined in board_def.h"
 #endif
 
-// Smoothing factor (0 = no smoothing, 15 = max smoothing)
-#define JOYSTICK_SMOOTHING 4
-#define JOYSTICK_MOUSE_REPORT_INTERVAL_MS 10u
-#define JOYSTICK_SCROLL_REPORT_INTERVAL_MS 25u
+#ifndef JOYSTICK_SMOOTHING_SLOW_EXPONENT
+#define JOYSTICK_SMOOTHING_SLOW_EXPONENT 4u
+#endif
+
+#ifndef JOYSTICK_SMOOTHING_FAST_EXPONENT
+#define JOYSTICK_SMOOTHING_FAST_EXPONENT 2u
+#endif
+
+#ifndef JOYSTICK_SMOOTHING_FAST_DELTA
+#define JOYSTICK_SMOOTHING_FAST_DELTA 24u
+#endif
+
+#ifndef JOYSTICK_MOUSE_REPORT_INTERVAL_MS
+#define JOYSTICK_MOUSE_REPORT_INTERVAL_MS 1u
+#endif
+
+#ifndef JOYSTICK_SCROLL_REPORT_INTERVAL_MS
+#define JOYSTICK_SCROLL_REPORT_INTERVAL_MS 8u
+#endif
+
 #define JOYSTICK_MOUSE_FP_SHIFT 8
 #define JOYSTICK_MOUSE_FP_ONE (1L << JOYSTICK_MOUSE_FP_SHIFT)
 #define JOYSTICK_MOUSE_ACCELERATION_DEFAULT 255u
@@ -40,6 +68,8 @@
 
 static joystick_state_t current_state = {0};
 static joystick_config_t config_cache = {0};
+static uint16_t filtered_x = 0;
+static uint16_t filtered_y = 0;
 
 // Debounce state for push switch
 static bool sw_raw = false;
@@ -75,11 +105,26 @@ static joystick_config_t joystick_default_config(void) {
   return def;
 }
 
-static uint16_t smooth_adc(uint16_t old_val, uint16_t new_val) {
-  if (old_val == 0)
+static uint16_t joystick_abs_diff_u16(uint16_t a, uint16_t b) {
+  return a >= b ? (uint16_t)(a - b) : (uint16_t)(b - a);
+}
+
+static uint16_t joystick_ema(uint16_t old_val, uint16_t new_val,
+                             uint8_t exponent) {
+  if (old_val == 0 || exponent == 0u)
     return new_val;
-  return ((old_val * ((1 << JOYSTICK_SMOOTHING) - 1)) + new_val) >>
-         JOYSTICK_SMOOTHING;
+
+  const uint32_t weight = (1u << exponent) - 1u;
+  return (uint16_t)(((uint32_t)old_val * weight + new_val) >> exponent);
+}
+
+static uint16_t joystick_filter_adc(uint16_t filtered_val, uint16_t raw_val) {
+  uint8_t exponent = JOYSTICK_SMOOTHING_SLOW_EXPONENT;
+
+  if (joystick_abs_diff_u16(filtered_val, raw_val) >= JOYSTICK_SMOOTHING_FAST_DELTA)
+    exponent = JOYSTICK_SMOOTHING_FAST_EXPONENT;
+
+  return joystick_ema(filtered_val, raw_val, exponent);
 }
 
 static int8_t apply_calibration(uint16_t raw_val,
@@ -224,9 +269,10 @@ static uint8_t joystick_effective_mouse_acceleration(uint8_t raw) {
   return raw == 0u ? JOYSTICK_MOUSE_ACCELERATION_DEFAULT : raw;
 }
 
-void joystick_init(void) {
-  // Init GPIO switch pin (input with pullup)
+static void joystick_init_switch_pin(void) {
+#if defined(JOYSTICK_GPIO_BACKEND_AT32)
   gpio_init_type gpio_init_struct;
+
   gpio_default_para_init(&gpio_init_struct);
   gpio_init_struct.gpio_drive_strength = GPIO_DRIVE_STRENGTH_STRONGER;
   gpio_init_struct.gpio_out_type = GPIO_OUTPUT_PUSH_PULL;
@@ -234,6 +280,27 @@ void joystick_init(void) {
   gpio_init_struct.gpio_pins = JOYSTICK_SW_PIN;
   gpio_init_struct.gpio_pull = GPIO_PULL_UP;
   gpio_init(JOYSTICK_SW_PORT, &gpio_init_struct);
+#elif defined(JOYSTICK_GPIO_BACKEND_STM32)
+  GPIO_InitTypeDef gpio_init_struct = {0};
+
+  gpio_init_struct.Pin = JOYSTICK_SW_PIN;
+  gpio_init_struct.Mode = GPIO_MODE_INPUT;
+  gpio_init_struct.Pull = GPIO_PULLUP;
+  gpio_init_struct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(JOYSTICK_SW_PORT, &gpio_init_struct);
+#endif
+}
+
+static bool joystick_switch_pressed(void) {
+#if defined(JOYSTICK_GPIO_BACKEND_AT32)
+  return gpio_input_data_bit_read(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == RESET;
+#elif defined(JOYSTICK_GPIO_BACKEND_STM32)
+  return HAL_GPIO_ReadPin(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == GPIO_PIN_RESET;
+#endif
+}
+
+void joystick_init(void) {
+  joystick_init_switch_pin();
 
   // Initial load of config cache
   config_cache = eeconfig != NULL ? CURRENT_PROFILE.joystick_config
@@ -245,6 +312,8 @@ void joystick_init(void) {
   current_state.out_x = 0;
   current_state.out_y = 0;
   current_state.sw = false;
+  filtered_x = 0;
+  filtered_y = 0;
 
   // Initialize debounce state
   sw_raw = false;
@@ -287,12 +356,12 @@ void joystick_task(void) {
   // Read raw ADC values
   uint16_t x_raw = analog_read_raw(JOYSTICK_X_ADC_INDEX);
   uint16_t y_raw = analog_read_raw(JOYSTICK_Y_ADC_INDEX);
-  // Apply smoothing
-  current_state.raw_x = smooth_adc(current_state.raw_x, x_raw);
-  current_state.raw_y = smooth_adc(current_state.raw_y, y_raw);
+  current_state.raw_x = x_raw;
+  current_state.raw_y = y_raw;
+  filtered_x = joystick_filter_adc(filtered_x, x_raw);
+  filtered_y = joystick_filter_adc(filtered_y, y_raw);
   // Read push switch with debounce
-  bool sw_current =
-      (gpio_input_data_bit_read(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == RESET);
+  bool sw_current = joystick_switch_pressed();
   if (sw_current != sw_raw) {
     sw_raw = sw_current;
     sw_last_change_tick = timer_read();
@@ -307,8 +376,8 @@ void joystick_task(void) {
   current_state.sw = sw_debounced;
 
   // Apply calibration
-  current_state.out_x = apply_calibration(current_state.raw_x, &config_cache.x);
-  current_state.out_y = apply_calibration(current_state.raw_y, &config_cache.y);
+  current_state.out_x = apply_calibration(filtered_x, &config_cache.x);
+  current_state.out_y = apply_calibration(filtered_y, &config_cache.y);
   joystick_apply_radial_deadzone(&current_state.out_x, &current_state.out_y,
                                  config_cache.deadzone);
 
