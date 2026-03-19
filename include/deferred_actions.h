@@ -75,6 +75,13 @@ void deferred_action_init(void);
 bool deferred_action_push(const deferred_action_t *action);
 
 /**
+ * @brief Clear all queued deferred actions
+ *
+ * @return None
+ */
+void deferred_action_clear(void);
+
+/**
  * @brief Process all deferred actions and clear the stack
  *
  * @return None

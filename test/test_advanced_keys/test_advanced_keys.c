@@ -2,6 +2,7 @@
 #include "advanced_keys.h"
 #include "deferred_actions.h"
 #include "eeconfig.h"
+#include "keycodes.h"
 #include "matrix.h"
 #include "layout.h"
 
@@ -15,8 +16,17 @@ static uint8_t last_registered_keycode;
 static uint8_t processed_keys[8];
 static bool processed_pressed[8];
 static uint8_t processed_count;
+static uint8_t rt_keys[8];
+static bool rt_disabled[8];
+static uint8_t rt_call_count;
 
-void matrix_disable_rapid_trigger(uint8_t key, bool disable) {}
+void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
+    if (rt_call_count < 8) {
+        rt_keys[rt_call_count] = key;
+        rt_disabled[rt_call_count] = disable;
+        rt_call_count++;
+    }
+}
 bool deferred_action_push(const deferred_action_t *action) { return true; }
 uint32_t timer_read(void) { return mock_timer; }
 uint32_t timer_elapsed(uint32_t last) { return mock_timer - last; }
@@ -30,6 +40,9 @@ void setUp(void) {
     last_registered_key = 0xFF;
     last_registered_keycode = 0xFF;
     processed_count = 0;
+    memset(rt_keys, 0, sizeof(rt_keys));
+    memset(rt_disabled, 0, sizeof(rt_disabled));
+    rt_call_count = 0;
     advanced_key_clear();
 }
 
@@ -108,11 +121,50 @@ void test_advanced_keys_init(void) {
     TEST_ASSERT_TRUE(1);
 }
 
+void test_advanced_keys_clear_re_enables_dynamic_keystroke_rapid_trigger(void) {
+    mock_eeconfig.profiles[0].advanced_keys[0].type = AK_TYPE_DYNAMIC_KEYSTROKE;
+    mock_eeconfig.profiles[0].advanced_keys[0].dynamic_keystroke.keycodes[0] = KC_A;
+
+    advanced_key_event_t event = {
+        .type = AK_EVENT_TYPE_PRESS,
+        .key = 3,
+        .ak_index = 0,
+    };
+
+    advanced_key_process(&event);
+    advanced_key_clear();
+
+    TEST_ASSERT_EQUAL_UINT8(2, rt_call_count);
+    TEST_ASSERT_EQUAL_UINT8(3, rt_keys[0]);
+    TEST_ASSERT_TRUE(rt_disabled[0]);
+    TEST_ASSERT_EQUAL_UINT8(3, rt_keys[1]);
+    TEST_ASSERT_FALSE(rt_disabled[1]);
+}
+
+void test_advanced_keys_clear_drops_buffered_combo_events(void) {
+    mock_eeconfig.profiles[0].advanced_keys[0].type = AK_TYPE_COMBO;
+    mock_eeconfig.profiles[0].advanced_keys[0].layer = 0;
+    mock_eeconfig.profiles[0].advanced_keys[0].combo.keys[0] = 1;
+    mock_eeconfig.profiles[0].advanced_keys[0].combo.keys[1] = 2;
+    mock_eeconfig.profiles[0].advanced_keys[0].combo.keys[2] = 255;
+    mock_eeconfig.profiles[0].advanced_keys[0].combo.keys[3] = 255;
+    mock_eeconfig.profiles[0].advanced_keys[0].combo.term = 50;
+
+    TEST_ASSERT_TRUE(advanced_key_combo_process(1, true, 100));
+
+    advanced_key_clear();
+
+    TEST_ASSERT_FALSE(advanced_key_combo_task());
+    TEST_ASSERT_EQUAL_UINT8(0, processed_count);
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_advanced_keys_init);
     RUN_TEST(test_advanced_keys_combo);
     RUN_TEST(test_advanced_keys_combo_release_before_match_flushes_press_and_release);
+    RUN_TEST(test_advanced_keys_clear_re_enables_dynamic_keystroke_rapid_trigger);
+    RUN_TEST(test_advanced_keys_clear_drops_buffered_combo_events);
     UNITY_END();
     return 0;
 }

@@ -99,6 +99,16 @@ void xinput_init(void);
 void xinput_process(uint8_t key);
 
 /**
+ * @brief Reset runtime gamepad/XInput state.
+ *
+ * Clears queued snapshots and synchronizes held physical keys so that old
+ * profile/config state is not replayed after a reload.
+ *
+ * @return None
+ */
+void xinput_reset_runtime_state(void);
+
+/**
  * @brief XInput task
  *
  * @return None

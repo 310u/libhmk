@@ -35,7 +35,18 @@
 static uint8_t out_buf[RAW_HID_EP_SIZE];
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
+static bool command_validate_gamepad_options(
+    const gamepad_options_t *gamepad_options) {
+  for (uint8_t i = 1; i < 4; i++) {
+    if (gamepad_options->analog_curve[i][0] <=
+        gamepad_options->analog_curve[i - 1][0])
+      return false;
+  }
+  return true;
+}
+
 static void command_reload_current_profile_state(void) {
+  layout_reset_runtime_state();
   layout_load_advanced_keys();
 #if defined(RGB_ENABLED)
   memcpy(rgb_get_config(), &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
@@ -67,7 +78,6 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_FACTORY_RESET: {
-    advanced_key_clear();
     success = eeconfig_reset();
     if (success)
       command_reload_current_profile_state();
@@ -128,8 +138,6 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
 
-    if (p->profile == eeconfig->current_profile)
-      advanced_key_clear();
     success = eeconfig_reset_profile(p->profile);
     if (success && p->profile == eeconfig->current_profile)
       command_reload_current_profile_state();
@@ -141,8 +149,6 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
     COMMAND_VERIFY(p->src_profile < NUM_PROFILES);
 
-    if (p->profile == eeconfig->current_profile)
-      advanced_key_clear();
     success = EECONFIG_WRITE(profiles[p->profile],
                              &eeconfig->profiles[p->src_profile]);
     if (success && p->profile == eeconfig->current_profile)
@@ -205,6 +211,8 @@ void command_process(const uint8_t *buf) {
                     p->layer * sizeof(eeconfig->profiles[0].keymap[0]) +
                     p->offset * sizeof(uint8_t);
     success = wear_leveling_write(addr, p->keymap, sizeof(uint8_t) * p->len);
+    if (success && p->profile == eeconfig->current_profile)
+      layout_reset_runtime_state();
     break;
   }
   case COMMAND_GET_ACTUATION_MAP: {
@@ -256,8 +264,6 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->advanced_keys) &&
                    p->len <= NUM_ADVANCED_KEYS - p->offset);
 
-    if (p->profile == eeconfig->current_profile)
-      advanced_key_clear();
     uint32_t addr = offsetof(eeconfig_t, profiles) +
                     p->profile * sizeof(eeconfig_profile_t) +
                     offsetof(eeconfig_profile_t, advanced_keys) +
@@ -313,6 +319,8 @@ void command_process(const uint8_t *buf) {
                     offsetof(eeconfig_profile_t, gamepad_buttons) +
                     p->offset * sizeof(uint8_t);
     success = wear_leveling_write(addr, p->gamepad_buttons, sizeof(uint8_t) * p->len);
+    if (success && p->profile == eeconfig->current_profile)
+      layout_reset_runtime_state();
     break;
   }
   case COMMAND_GET_GAMEPAD_OPTIONS: {
@@ -327,11 +335,14 @@ void command_process(const uint8_t *buf) {
     const command_in_gamepad_options_t *p = &in->gamepad_options;
 
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(command_validate_gamepad_options(&p->gamepad_options));
 
     uint32_t addr = offsetof(eeconfig_t, profiles) +
                     p->profile * sizeof(eeconfig_profile_t) +
                     offsetof(eeconfig_profile_t, gamepad_options);
     success = wear_leveling_write(addr, &p->gamepad_options, sizeof(p->gamepad_options));
+    if (success && p->profile == eeconfig->current_profile)
+      layout_reset_runtime_state();
     break;
   }
   case COMMAND_GET_MACROS: {
@@ -362,6 +373,8 @@ void command_process(const uint8_t *buf) {
                     p->offset * sizeof(macro_t);
 
     success = wear_leveling_write(addr, p->macros, sizeof(macro_t) * p->len);
+    if (success && p->profile == eeconfig->current_profile)
+      layout_reset_runtime_state();
     break;
   }
 #if defined(RGB_ENABLED)
@@ -428,7 +441,7 @@ void command_process(const uint8_t *buf) {
     success = wear_leveling_write(addr, &p->joystick_config, sizeof(joystick_config_t));
     
     if (success && p->profile == eeconfig->current_profile) {
-      joystick_apply_config(p->joystick_config);
+      layout_reset_runtime_state();
     }
     break;
   }

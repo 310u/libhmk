@@ -30,7 +30,7 @@ This fork adds joystick support, RGB lighting, combo/macro keys, and various imp
 - **Web Configurator**: Configure the firmware using [hmkconf](https://github.com/310u/hmkconf) without recompiling.
 - **Tick Rate**: Customizable tick rate for Tap-Hold and Dynamic Keystroke.
 - **8kHz Polling Rate**: Support for 8kHz polling rate on some microcontrollers (e.g., AT32F405xx).
-- **Gamepad**: XInput gamepad mode, allowing the keyboard to be used as a game controller.
+- **Gamepad**: XInput gamepad mode for Windows and HID gamepad fallback for Linux/macOS.
 
 ### Fork Additions
 
@@ -121,7 +121,7 @@ Record and playback key sequences:
 
 2. Open the project in PlatformIO, such as through Visual Studio Code.
 
-3. Run `python setup.py -k <YOUR_KEYBOARD>` to generate the `platformio.ini` file.
+3. Run `python setup.py -k <YOUR_KEYBOARD>` to generate the `platformio.ini` file for that keyboard.
 
 4. Wait for PlatformIO to finish initializing the environment.
 
@@ -139,6 +139,7 @@ Record and playback key sequences:
 To develop a new keyboard, create a new directory under `keyboards/` with your keyboard's name. This directory should include the following files:
 
 - `keyboard.json`: A JSON file containing metadata about your keyboard, used for both firmware compilation and the web configurator. Refer to [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json) for the schema.
+- `board_def.h` (Optional): Per-keyboard hardware macro definitions for optional features such as RGB, joystick, or slider.
 - `config.h` (Optional): Additional configuration header for your keyboard to define custom configurations beyond what's specified in `keyboard.json`.
 
 For a step-by-step guide on creating a new keyboard definition, see the [New Keyboard Setup Guide](docs/new_keyboard_setup.md).
@@ -156,6 +157,11 @@ Hardware drivers follow this directory structure:
 - [`src/hardware/`](src/hardware/): Contains hardware driver implementations of the functions declared in the header files
 - [`linker/`](linker/): Contains linker scripts for supported microcontrollers
 - [`scripts/drivers.py`](scripts/drivers.py): Contains the driver configuration for each supported microcontroller. Each driver must implement the `Driver` class.
+
+Current in-tree MCU drivers are:
+
+- `at32f405xx`: ADC matrix scanning, joystick support, and DMA/PWM RGB driver
+- `stm32f446xx`: ADC matrix scanning, joystick support, and bitbang RGB driver
 
 You can refer to existing hardware drivers as examples when implementing support for new hardware.
 

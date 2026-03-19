@@ -194,6 +194,26 @@ void hid_init(void) {
   mouse_buttons_last_sent = 0;
 }
 
+void hid_clear_runtime_state(void) {
+  num_6kro_keys = 0;
+  memset(&kb_report, 0, sizeof(kb_report));
+  kb_report_queue_head = 0;
+  kb_report_queue_size = 0;
+  hid_keyboard_queue_report();
+
+  system_report = 0;
+  consumer_report = 0;
+
+  memset(&mouse_report, 0, sizeof(mouse_report));
+  mouse_keycode_buttons = 0;
+  mouse_pointer_buttons = 0;
+  mouse_pending_x = 0;
+  mouse_pending_y = 0;
+  mouse_pending_wheel = 0;
+  mouse_pending_pan = 0;
+  hid_mouse_sync_buttons();
+}
+
 void hid_keycode_add(uint8_t keycode) {
   const uint16_t hid_code = keycode_to_hid[keycode];
 

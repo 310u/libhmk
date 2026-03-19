@@ -110,16 +110,18 @@ static const uint8_t desc_hid_report_with_gamepad[] = {
     HID_REPORT_SIZE(16),
     HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
 
-    // Right Stick: Z, Rz (int16, -32768 to 32767)
-    HID_USAGE(HID_USAGE_DESKTOP_Z),
-    HID_USAGE(HID_USAGE_DESKTOP_RZ),
+    // Right Stick: Rx, Ry (int16, -32768 to 32767)
+    // This matches the Linux gamepad convention for the secondary stick.
+    HID_USAGE(HID_USAGE_DESKTOP_RX),
+    HID_USAGE(HID_USAGE_DESKTOP_RY),
     HID_REPORT_COUNT(2),
     HID_REPORT_SIZE(16),
     HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
 
-    // Triggers: Rx (left), Ry (right) (uint8, 0 to 255)
-    HID_USAGE(HID_USAGE_DESKTOP_RX),
-    HID_USAGE(HID_USAGE_DESKTOP_RY),
+    // Triggers: Z (left), Rz (right) (uint8, 0 to 255)
+    // Using Z/Rz keeps LT/RT separate from the right-stick axes in Linux/SDL.
+    HID_USAGE(HID_USAGE_DESKTOP_Z),
+    HID_USAGE(HID_USAGE_DESKTOP_RZ),
     HID_LOGICAL_MIN(0),
     HID_LOGICAL_MAX_N(0x00FF, 2),
     HID_REPORT_COUNT(2),

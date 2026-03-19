@@ -69,6 +69,16 @@ void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons);
 void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons);
 
 /**
+ * @brief Clear all runtime HID state.
+ *
+ * This drops queued snapshots, clears currently pressed buttons/keys, and
+ * schedules release reports for anything the host has already seen.
+ *
+ * @return None
+ */
+void hid_clear_runtime_state(void);
+
+/**
  * @brief Send all HID reports
  *
  * This function is non-blocking. If an interface is not ready, the report is

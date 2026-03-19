@@ -74,6 +74,13 @@ bool deferred_action_push(const deferred_action_t *action) {
   return true;
 }
 
+void deferred_action_clear(void) {
+  queue_lock = false;
+  queue_head = 0;
+  queue_size = 0;
+  memset(queue, 0, sizeof(queue));
+}
+
 void deferred_action_process(void) {
   static deferred_action_t buffer[MAX_DEFERRED_ACTIONS];
 

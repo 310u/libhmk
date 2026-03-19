@@ -31,6 +31,17 @@ extern bool is_sniper_active;
 void layout_init(void);
 
 /**
+ * @brief Reset transient layout/input runtime state.
+ *
+ * This clears buffered key events, advanced-key runtime state, deferred
+ * actions, HID/gamepad output state, and synchronizes held physical keys so
+ * they do not retrigger under a newly applied profile/config.
+ *
+ * @return None
+ */
+void layout_reset_runtime_state(void);
+
+/**
  * @brief Load advanced keys
  *
  * This function loads the advanced keys from the current profile. It should be
@@ -73,7 +84,7 @@ void layout_unregister(uint8_t key, uint8_t keycode);
  * @param key Key index
  * @param pressed Whether the key is pressed
  *
- * @return true if a non-Tap-Hold key press occurred
+ * @return true if a non-Tap-Hold key event occurred
  */
 bool layout_process_key(uint8_t key, bool pressed);
 

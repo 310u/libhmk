@@ -236,6 +236,30 @@ static void layout_toggle_polling_rate(void) {
 
 void layout_init(void) { layout_apply_current_profile_state(); }
 
+void layout_reset_runtime_state(void) {
+  advanced_key_clear();
+  deferred_action_clear();
+  hid_clear_runtime_state();
+  xinput_reset_runtime_state();
+
+  memset(active_keycodes, KC_NO, sizeof(active_keycodes));
+  memset(active_advanced_keys, 0, sizeof(active_advanced_keys));
+  pending_count = 0;
+
+  layer_mask = 0;
+  default_layer = 0;
+  is_sniper_active = false;
+
+#if defined(JOYSTICK_ENABLED)
+  joystick_scroll_mo_depth = 0;
+  joystick_scroll_mo_restore_mode = 0;
+  joystick_apply_config(CURRENT_PROFILE.joystick_config);
+#endif
+
+  for (uint32_t i = 0; i < NUM_KEYS; i++)
+    bitmap_set(key_press_states, i, key_matrix[i].is_pressed);
+}
+
 /**
  * @brief Reload advanced key indices from the current profile.
  *
@@ -269,7 +293,7 @@ void layout_load_advanced_keys(void) {
 
 bool layout_process_key(uint8_t key, bool pressed) {
   const uint8_t current_layer = layout_get_current_layer();
-  bool has_non_tap_hold_press = false;
+  bool has_non_tap_hold_event = false;
 
   if (pressed) {
     // Abort playing macros whenever a new key is pressed
@@ -287,13 +311,13 @@ bool layout_process_key(uint8_t key, bool pressed) {
           .ak_index = ak_index - 1,
       };
       advanced_key_process(&ak_event);
-      has_non_tap_hold_press |=
+      has_non_tap_hold_event |=
           (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
            AK_TYPE_TAP_HOLD);
     } else {
       active_keycodes[key] = keycode;
       layout_register(key, keycode);
-      has_non_tap_hold_press |= (keycode != KC_NO);
+      has_non_tap_hold_event |= (keycode != KC_NO);
       // Update last key time for require_prior_idle_ms feature
       if (keycode != KC_NO)
         advanced_key_update_last_key_time(timer_read());
@@ -311,13 +335,17 @@ bool layout_process_key(uint8_t key, bool pressed) {
           .ak_index = ak_index - 1,
       };
       advanced_key_process(&ak_event);
+      has_non_tap_hold_event |=
+          (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
+           AK_TYPE_TAP_HOLD);
     } else {
       active_keycodes[key] = KC_NO;
       layout_unregister(key, keycode);
+      has_non_tap_hold_event |= (keycode != KC_NO);
     }
   }
 
-  return has_non_tap_hold_press;
+  return has_non_tap_hold_event;
 }
 
 static bool layout_event_should_swap(const layout_event_t *lhs,
@@ -356,9 +384,10 @@ void layout_task(void) {
     const key_state_t *k = &key_matrix[i];
     const bool last_key_press = bitmap_get(key_press_states, i);
 
-    if ((current_layer == 0) & eeconfig->options.xinput_enabled) {
-      // XInput key only applies to layer 0. We process it first since the
-      // subsequent key processing may be skipped due to the gamepad options.
+    if (current_layer == 0) {
+      // Gamepad key processing only applies to layer 0. We process it first
+      // since the subsequent key processing may be skipped due to the
+      // gamepad options, regardless of whether the transport is XInput or HID.
       if (CURRENT_PROFILE.gamepad_buttons[i] != GP_BUTTON_NONE) {
         xinput_process(i);
 
@@ -378,7 +407,7 @@ void layout_task(void) {
       }
     }
 
-    if ((current_layer == 0) & bitmap_get(key_disabled, i)) {
+    if (current_layer == 0 && bitmap_get(key_disabled, i)) {
       // Only keys in layer 0 can be disabled.
       bitmap_set(key_press_states, i, k->is_pressed);
       continue;
@@ -546,11 +575,15 @@ static bool layout_set_profile(uint8_t profile) {
   if (profile >= NUM_PROFILES)
     return false;
 
-  advanced_key_clear();
-  bool status = EECONFIG_WRITE(current_profile, &profile);
+  const bool current_profile_written = EECONFIG_WRITE(current_profile, &profile);
+  bool status = current_profile_written;
   if (status && profile != 0)
     status = EECONFIG_WRITE(last_non_default_profile, &profile);
-  layout_apply_current_profile_state();
+
+  if (current_profile_written) {
+    layout_reset_runtime_state();
+    layout_apply_current_profile_state();
+  }
 
   return status;
 }

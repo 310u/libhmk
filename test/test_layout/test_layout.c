@@ -23,10 +23,15 @@ uint32_t wear_leveling_write_count = 0;
 uint32_t last_write_address = 0;
 uint32_t last_write_len = 0;
 uint32_t last_write_u32 = 0;
+uint32_t deferred_action_clear_count = 0;
+uint32_t hid_clear_runtime_state_count = 0;
+uint32_t xinput_reset_runtime_state_count = 0;
 uint8_t hid_added[8] = {0};
 uint8_t hid_removed[8] = {0};
 uint8_t hid_add_count = 0;
 uint8_t hid_remove_count = 0;
+uint8_t xinput_processed[8] = {0};
+uint8_t xinput_process_count = 0;
 
 void advanced_key_init(void) {}
 void advanced_key_clear(void) {}
@@ -41,6 +46,7 @@ void advanced_key_abort_macros(void) {}
 
 void deferred_action_process(void) {}
 bool deferred_action_push(const deferred_action_t *action) { return true; }
+void deferred_action_clear(void) { deferred_action_clear_count++; }
 
 void board_enter_bootloader(void) {}
 void board_reset(void) { board_reset_count++; }
@@ -65,8 +71,14 @@ void hid_keycode_remove(uint8_t keycode) {
     }
 }
 void hid_send_reports(void) {}
+void hid_clear_runtime_state(void) { hid_clear_runtime_state_count++; }
 
-void xinput_process(uint8_t key) {}
+void xinput_process(uint8_t key) {
+    if (xinput_process_count < 8) {
+        xinput_processed[xinput_process_count++] = key;
+    }
+}
+void xinput_reset_runtime_state(void) { xinput_reset_runtime_state_count++; }
 
 #if defined(JOYSTICK_ENABLED)
 joystick_config_t mock_joystick_config = {
@@ -88,10 +100,16 @@ void setUp(void) {
     last_write_address = 0;
     last_write_len = 0;
     last_write_u32 = 0;
+    deferred_action_clear_count = 0;
+    hid_clear_runtime_state_count = 0;
+    xinput_reset_runtime_state_count = 0;
     memset(hid_added, 0, sizeof(hid_added));
     memset(hid_removed, 0, sizeof(hid_removed));
     hid_add_count = 0;
     hid_remove_count = 0;
+    memset(xinput_processed, 0, sizeof(xinput_processed));
+    xinput_process_count = 0;
+    mock_eeconfig.profiles[0].gamepad_options.keyboard_enabled = true;
 #if defined(JOYSTICK_ENABLED)
     mock_joystick_config.mode = JOYSTICK_MODE_MOUSE;
 #endif
@@ -110,6 +128,13 @@ void test_layout_process_key(void) {
     TEST_ASSERT_TRUE(has_press);
 }
 
+void test_layout_process_key_release_counts_as_non_tap_hold_event(void) {
+    mock_eeconfig.profiles[0].keymap[0][1] = KC_A;
+
+    TEST_ASSERT_TRUE(layout_process_key(1, true));
+    TEST_ASSERT_TRUE(layout_process_key(1, false));
+}
+
 void test_poll_rate_toggle_persists_options_and_resets(void) {
     const uint32_t initial_options = 0x0000120f;
     mock_eeconfig.options.raw = initial_options;
@@ -125,6 +150,15 @@ void test_poll_rate_toggle_persists_options_and_resets(void) {
     TEST_ASSERT_FALSE(written_options.high_polling_rate_enabled);
     TEST_ASSERT_EQUAL_UINT32(initial_options ^ ((uint32_t)1 << 2),
                              written_options.raw);
+}
+
+void test_profile_switch_resets_runtime_state(void) {
+    layout_register(255, PF(1));
+
+    TEST_ASSERT_EQUAL_UINT32(2, wear_leveling_write_count);
+    TEST_ASSERT_EQUAL_UINT32(1, deferred_action_clear_count);
+    TEST_ASSERT_EQUAL_UINT32(1, hid_clear_runtime_state_count);
+    TEST_ASSERT_EQUAL_UINT32(1, xinput_reset_runtime_state_count);
 }
 
 void test_layout_sorts_same_timestamp_presses_by_distance(void) {
@@ -146,6 +180,23 @@ void test_layout_sorts_same_timestamp_presses_by_distance(void) {
     TEST_ASSERT_EQUAL_UINT8(KC_B, hid_added[1]);
 }
 
+void test_layout_processes_gamepad_keys_when_xinput_disabled(void) {
+    mock_eeconfig.options.xinput_enabled = false;
+    mock_eeconfig.profiles[0].keymap[0][1] = KC_A;
+    mock_eeconfig.profiles[0].gamepad_buttons[1] = GP_BUTTON_A;
+    mock_eeconfig.profiles[0].gamepad_options.keyboard_enabled = false;
+    mock_eeconfig.profiles[0].gamepad_options.gamepad_override = true;
+
+    key_matrix[1].is_pressed = true;
+    key_matrix[1].event_time = 5;
+
+    layout_task();
+
+    TEST_ASSERT_EQUAL_UINT8(1, xinput_process_count);
+    TEST_ASSERT_EQUAL_UINT8(1, xinput_processed[0]);
+    TEST_ASSERT_EQUAL_UINT8(0, hid_add_count);
+}
+
 #if defined(JOYSTICK_ENABLED)
 void test_joystick_scroll_mo_restores_previous_mode(void) {
     mock_joystick_config.mode = JOYSTICK_MODE_XINPUT_RS;
@@ -161,8 +212,11 @@ void test_joystick_scroll_mo_restores_previous_mode(void) {
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_layout_process_key);
+    RUN_TEST(test_layout_process_key_release_counts_as_non_tap_hold_event);
     RUN_TEST(test_poll_rate_toggle_persists_options_and_resets);
+    RUN_TEST(test_profile_switch_resets_runtime_state);
     RUN_TEST(test_layout_sorts_same_timestamp_presses_by_distance);
+    RUN_TEST(test_layout_processes_gamepad_keys_when_xinput_disabled);
 #if defined(JOYSTICK_ENABLED)
     RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
 #endif

@@ -184,6 +184,24 @@ static int8_t joystick_clamp_i16_to_i8(int16_t value) {
   return (int8_t)value;
 }
 
+static uint16_t joystick_radial_axis_limit(int8_t x, int8_t y) {
+  uint16_t limit = 0u;
+
+  if (x > 0) {
+    limit = 127u;
+  } else if (x < 0) {
+    limit = 128u;
+  }
+
+  if (y > 0) {
+    limit = M_MAX(limit, 127u);
+  } else if (y < 0) {
+    limit = M_MAX(limit, 128u);
+  }
+
+  return limit == 0u ? 127u : limit;
+}
+
 static void joystick_apply_radial_deadzone(int8_t *x, int8_t *y,
                                            uint8_t deadzone) {
   uint16_t magnitude = joystick_vector_length(*x, *y);
@@ -197,22 +215,14 @@ static void joystick_apply_radial_deadzone(int8_t *x, int8_t *y,
     return;
   }
 
-  // Calculate the maximum magnitude achievable in the current direction.
-  // Using the fixed diagonal-max (JOYSTICK_VECTOR_MAX = 181) would cause
-  // cardinal directions (max 127) to never reach full range after remapping.
-  uint16_t abs_x = (*x >= 0) ? (uint16_t)*x : (uint16_t)(-*x);
-  uint16_t abs_y = (*y >= 0) ? (uint16_t)*y : (uint16_t)(-*y);
-  uint16_t limit_x = (*x >= 0) ? 127 : 128;
-  uint16_t limit_y = (*y >= 0) ? 127 : 128;
-  uint16_t direction_max;
-  if (abs_x >= abs_y) {
-    direction_max = (uint16_t)((uint32_t)magnitude * limit_x / abs_x);
-  } else {
-    direction_max = (uint16_t)((uint32_t)magnitude * limit_y / abs_y);
+  // The physical joystick already travels in a circular gate. Remap the
+  // radial deadzone against that circular range instead of re-normalizing
+  // into a square, otherwise the diagonals collapse into a rounded rectangle.
+  uint16_t magnitude_norm = (uint16_t)((uint32_t)magnitude * 255u /
+                                       joystick_radial_axis_limit(*x, *y));
+  if (magnitude_norm > 255u) {
+    magnitude_norm = 255u;
   }
-
-  uint16_t magnitude_norm =
-      (uint16_t)((uint32_t)magnitude * 255u / direction_max);
   if (magnitude_norm <= deadzone) {
     *x = 0;
     *y = 0;

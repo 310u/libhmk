@@ -20,9 +20,12 @@
 #include "hardware/hardware.h"
 #include "keycodes.h"
 #include "layout.h"
+#include "lib/bitmap.h"
 #include "matrix.h"
 
 static advanced_key_state_t ak_states[NUM_ADVANCED_KEYS];
+static bitmap_t dks_rt_disabled_keys[BITMAP_SIZE(NUM_KEYS)] = {0};
+static void advanced_key_clear_combo_state(void);
 
 // Global state for quick_tap_ms: last tap release time per advanced key
 static uint32_t last_tap_hold_tap_time[NUM_ADVANCED_KEYS];
@@ -134,7 +137,9 @@ static void advanced_key_dynamic_keystroke(const advanced_key_event_t *event) {
     return;
 
   // Disable Rapid Trigger when the key is bound with Dynamic Keystroke
-  matrix_disable_rapid_trigger(event->key, event_type != AK_EVENT_TYPE_RELEASE);
+  const bool rt_disabled = event_type != AK_EVENT_TYPE_RELEASE;
+  matrix_disable_rapid_trigger(event->key, rt_disabled);
+  bitmap_set(dks_rt_disabled_keys, event->key, rt_disabled);
   for (uint32_t i = 0; i < 4; i++) {
     const uint8_t keycode = dks->keycodes[i];
     // We arrange the event types so that we can use the event type as an index
@@ -334,34 +339,16 @@ void advanced_key_abort_macros(void) {
 }
 
 void advanced_key_clear(void) {
-  // Release any keys that are currently pressed
-  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
-    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
-    const advanced_key_state_t *state = &ak_states[i];
-
-    switch (ak->type) {
-    case AK_TYPE_TAP_HOLD:
-      if (state->tap_hold.stage == TAP_HOLD_STAGE_HOLD)
-        layout_unregister(ak->key, ak->tap_hold.hold_keycode);
-      if (state->tap_hold.stage == TAP_HOLD_STAGE_QUICK_TAP)
-        layout_unregister(ak->key,
-                          ak->tap_hold.double_tap_keycode != KC_NO
-                              ? ak->tap_hold.double_tap_keycode
-                              : ak->tap_hold.tap_keycode);
-      memset(last_tap_hold_tap_time, 0, sizeof(last_tap_hold_tap_time));
-      break;
-
-    case AK_TYPE_TOGGLE:
-      if (state->toggle.stage != TOGGLE_STAGE_NONE || state->toggle.is_toggled)
-        layout_unregister(ak->key, ak->toggle.keycode);
-      break;
-
-    default:
-      break;
-    }
+  for (uint32_t key = 0; key < NUM_KEYS; key++) {
+    if (bitmap_get(dks_rt_disabled_keys, key))
+      matrix_disable_rapid_trigger((uint8_t)key, false);
   }
-  // Clear the advanced key states
+
+  memset(dks_rt_disabled_keys, 0, sizeof(dks_rt_disabled_keys));
+  memset(last_tap_hold_tap_time, 0, sizeof(last_tap_hold_tap_time));
+  last_non_mod_key_time = 0;
   memset(ak_states, 0, sizeof(ak_states));
+  advanced_key_clear_combo_state();
 }
 
 void advanced_key_process(const advanced_key_event_t *event) {
@@ -644,6 +631,17 @@ static void flush_events(uint8_t count_to_flush);
 
 // Recursion guard for flush_events
 static bool flush_in_progress = false;
+
+static void advanced_key_clear_combo_state(void) {
+  queue_head = 0;
+  queue_tail = 0;
+  queue_count = 0;
+  pending_activity = false;
+  flush_in_progress = false;
+  memset(event_queue, 0, sizeof(event_queue));
+  memset(combo_key_bitmap, 0, sizeof(combo_key_bitmap));
+  combo_key_bitmap_layer = 255;
+}
 
 static combo_event_t *queue_peek(uint8_t offset) {
   if (offset >= queue_count) return NULL;
