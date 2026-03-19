@@ -126,6 +126,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
+    key_matrix[i].rest_stable_since = 0;
   }
 
   // We only calibrate the rest value. The bottom-out value will be updated
@@ -159,83 +160,80 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 }
 
 void matrix_scan(void) {
+  const uint32_t scan_time = timer_read();
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    key_state_t *state = &key_matrix[i];
+    const uint16_t previous_filtered = state->adc_filtered;
     const uint16_t raw_adc = matrix_analog_read((uint8_t)i);
     const uint16_t new_adc_filtered =
         matrix_filter_adc((uint8_t)i, raw_adc);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
-    key_matrix[i].adc_raw = raw_adc;
-    key_matrix[i].adc_filtered = new_adc_filtered;
+    state->adc_raw = raw_adc;
+    state->adc_filtered = new_adc_filtered;
 
     if (new_adc_filtered >=
-        key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
+        state->adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
       // Only update the bottom-out value if the new value is larger and the
       // difference is at least the calibration epsilon.
-      key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+      state->adc_bottom_out_value = new_adc_filtered;
       matrix_bottom_out_threshold_dirty = true;
-    } else if (eeconfig->options.continuous_calibration &&
-               key_matrix[i].key_dir == KEY_DIR_INACTIVE) {
-      matrix_apply_continuous_calibration((uint8_t)i, new_adc_filtered);
     }
 
-    key_matrix[i].distance =
-        adc_to_distance(new_adc_filtered, key_matrix[i].adc_rest_value,
-                        key_matrix[i].adc_bottom_out_value);
+    state->distance = adc_to_distance(new_adc_filtered, state->adc_rest_value,
+                                      state->adc_bottom_out_value);
 
-    bool was_pressed = key_matrix[i].is_pressed;
+    bool was_pressed = state->is_pressed;
 
     if (bitmap_get(rapid_trigger_disabled, i) | (actuation->rt_down == 0)) {
-      key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-      key_matrix[i].is_pressed =
-          (key_matrix[i].distance >= actuation->actuation_point);
+      state->key_dir = KEY_DIR_INACTIVE;
+      state->is_pressed = (state->distance >= actuation->actuation_point);
     } else {
       const uint8_t reset_point =
           actuation->continuous ? 0 : actuation->actuation_point;
       const uint8_t rt_up =
           actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
 
-      switch (key_matrix[i].key_dir) {
+      switch (state->key_dir) {
       case KEY_DIR_INACTIVE:
-        if (key_matrix[i].distance > actuation->actuation_point) {
+        if (state->distance > actuation->actuation_point) {
           // Pressed down past actuation point
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_DOWN;
-          key_matrix[i].is_pressed = true;
+          state->extremum = state->distance;
+          state->key_dir = KEY_DIR_DOWN;
+          state->is_pressed = true;
         }
         break;
 
       case KEY_DIR_DOWN:
-        if (key_matrix[i].distance <= reset_point) {
+        if (state->distance <= reset_point) {
           // Released past reset point
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-          key_matrix[i].is_pressed = false;
-        } else if (key_matrix[i].distance + rt_up < key_matrix[i].extremum) {
+          state->extremum = state->distance;
+          state->key_dir = KEY_DIR_INACTIVE;
+          state->is_pressed = false;
+        } else if (state->distance + rt_up < state->extremum) {
           // Released by Rapid Trigger
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_UP;
-          key_matrix[i].is_pressed = false;
-        } else if (key_matrix[i].distance > key_matrix[i].extremum)
+          state->extremum = state->distance;
+          state->key_dir = KEY_DIR_UP;
+          state->is_pressed = false;
+        } else if (state->distance > state->extremum)
           // Pressed down further
-          key_matrix[i].extremum = key_matrix[i].distance;
+          state->extremum = state->distance;
         break;
 
       case KEY_DIR_UP:
-        if (key_matrix[i].distance <= reset_point) {
+        if (state->distance <= reset_point) {
           // Released past reset point
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-          key_matrix[i].is_pressed = false;
-        } else if (key_matrix[i].extremum + actuation->rt_down <
-                   key_matrix[i].distance) {
+          state->extremum = state->distance;
+          state->key_dir = KEY_DIR_INACTIVE;
+          state->is_pressed = false;
+        } else if (state->extremum + actuation->rt_down < state->distance) {
           // Pressed by Rapid Trigger
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_DOWN;
-          key_matrix[i].is_pressed = true;
-        } else if (key_matrix[i].distance < key_matrix[i].extremum)
+          state->extremum = state->distance;
+          state->key_dir = KEY_DIR_DOWN;
+          state->is_pressed = true;
+        } else if (state->distance < state->extremum)
           // Released further
-          key_matrix[i].extremum = key_matrix[i].distance;
+          state->extremum = state->distance;
         break;
 
       default:
@@ -243,14 +241,26 @@ void matrix_scan(void) {
       }
     }
 
+    const uint16_t filtered_delta =
+        new_adc_filtered > previous_filtered
+            ? (uint16_t)(new_adc_filtered - previous_filtered)
+            : (uint16_t)(previous_filtered - new_adc_filtered);
+    if (state->key_dir != KEY_DIR_INACTIVE || state->is_pressed ||
+        filtered_delta >= MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA)
+      state->rest_stable_since = scan_time;
+    else if (eeconfig->options.continuous_calibration &&
+             scan_time - state->rest_stable_since >=
+                 MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS)
+      matrix_apply_continuous_calibration((uint8_t)i, new_adc_filtered);
+
     // Record the time when the key state changes. This is used by
     // layout_task to process key events in chronological order instead of
     // preventing key input swapping on simultaneous presses.
-    if (key_matrix[i].is_pressed != was_pressed) {
-      key_matrix[i].event_time = timer_read();
+    if (state->is_pressed != was_pressed) {
+      state->event_time = timer_read();
       matrix_last_activity_time = timer_read();
 #if defined(RGB_ENABLED)
-      if (key_matrix[i].is_pressed) {
+      if (state->is_pressed) {
         rgb_matrix_record_keypress(i);
       }
 #endif

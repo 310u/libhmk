@@ -54,7 +54,7 @@
 #if !defined(MATRIX_CONTINUOUS_CALIBRATION_RANGE)
 // Maximum ADC drift from the current rest baseline that continuous
 // auto-calibration will track while a key is idle.
-#define MATRIX_CONTINUOUS_CALIBRATION_RANGE 80
+#define MATRIX_CONTINUOUS_CALIBRATION_RANGE 50
 #endif
 
 #if !defined(MATRIX_CONTINUOUS_CALIBRATION_ALPHA_EXPONENT)
@@ -71,6 +71,18 @@
 // Minimum ADC drift required to switch to the faster continuous calibration
 // path.
 #define MATRIX_CONTINUOUS_CALIBRATION_FAST_DELTA 24
+#endif
+
+#if !defined(MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA)
+// Maximum filtered ADC movement allowed while considering a key stable at
+// rest. A value of 1 means any filtered step resets the settle timer.
+#define MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA 1
+#endif
+
+#if !defined(MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS)
+// Continuous auto-calibration only runs after the key has been stably idle for
+// this long.
+#define MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS 200
 #endif
 
 #if !defined(MATRIX_INACTIVITY_TIMEOUT)
@@ -108,6 +120,8 @@ typedef struct {
   uint8_t key_dir;
   // Whether the key is pressed
   bool is_pressed;
+  // Timestamp when the key last left a stable resting state
+  uint32_t rest_stable_since;
   // Timestamp when is_pressed last changed (used for event ordering)
   uint32_t event_time;
 } key_state_t;

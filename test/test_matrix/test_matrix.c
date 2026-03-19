@@ -30,6 +30,7 @@ static void init_key_state(uint8_t key) {
   key_matrix[key].extremum = 0;
   key_matrix[key].key_dir = KEY_DIR_INACTIVE;
   key_matrix[key].is_pressed = false;
+  key_matrix[key].rest_stable_since = 0;
   key_matrix[key].event_time = 0;
   analog_values[key] = 2400;
 
@@ -97,7 +98,9 @@ void test_matrix_continuous_calibration_tracks_small_rest_drift(void) {
   key_matrix[0].adc_filtered = 2408;
   key_matrix[0].adc_rest_value = 2400;
   key_matrix[0].adc_bottom_out_value = 3050;
+  key_matrix[0].rest_stable_since = 0;
   analog_values[0] = 2408;
+  mock_timer = MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS;
 
   matrix_scan();
 
@@ -110,7 +113,24 @@ void test_matrix_continuous_calibration_ignores_large_rest_drift(void) {
   key_matrix[0].adc_filtered = 2490;
   key_matrix[0].adc_rest_value = 2400;
   key_matrix[0].adc_bottom_out_value = 3050;
+  key_matrix[0].rest_stable_since = 0;
   analog_values[0] = 2490;
+  mock_timer = MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS;
+
+  matrix_scan();
+
+  TEST_ASSERT_EQUAL_UINT16(2400, key_matrix[0].adc_rest_value);
+  TEST_ASSERT_EQUAL_UINT16(3050, key_matrix[0].adc_bottom_out_value);
+}
+
+void test_matrix_continuous_calibration_ignores_unstable_keystroke_motion(void) {
+  mock_eeconfig.options.continuous_calibration = true;
+  key_matrix[0].adc_filtered = 2408;
+  key_matrix[0].adc_rest_value = 2400;
+  key_matrix[0].adc_bottom_out_value = 3050;
+  key_matrix[0].rest_stable_since = 0;
+  analog_values[0] = 2440;
+  mock_timer = MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS;
 
   matrix_scan();
 
@@ -124,5 +144,6 @@ int main(void) {
   RUN_TEST(test_matrix_uses_faster_filter_for_large_adc_delta);
   RUN_TEST(test_matrix_continuous_calibration_tracks_small_rest_drift);
   RUN_TEST(test_matrix_continuous_calibration_ignores_large_rest_drift);
+  RUN_TEST(test_matrix_continuous_calibration_ignores_unstable_keystroke_motion);
   return UNITY_END();
 }
