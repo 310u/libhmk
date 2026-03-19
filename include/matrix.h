@@ -51,6 +51,28 @@
 #define MATRIX_CALIBRATION_EPSILON 5
 #endif
 
+#if !defined(MATRIX_CONTINUOUS_CALIBRATION_RANGE)
+// Maximum ADC drift from the current rest baseline that continuous
+// auto-calibration will track while a key is idle.
+#define MATRIX_CONTINUOUS_CALIBRATION_RANGE 80
+#endif
+
+#if !defined(MATRIX_CONTINUOUS_CALIBRATION_ALPHA_EXPONENT)
+// Baseline EMA used for small, stable rest drift.
+#define MATRIX_CONTINUOUS_CALIBRATION_ALPHA_EXPONENT 6
+#endif
+
+#if !defined(MATRIX_CONTINUOUS_CALIBRATION_FAST_ALPHA_EXPONENT)
+// Faster baseline EMA used once the rest drift becomes more noticeable.
+#define MATRIX_CONTINUOUS_CALIBRATION_FAST_ALPHA_EXPONENT 4
+#endif
+
+#if !defined(MATRIX_CONTINUOUS_CALIBRATION_FAST_DELTA)
+// Minimum ADC drift required to switch to the faster continuous calibration
+// path.
+#define MATRIX_CONTINUOUS_CALIBRATION_FAST_DELTA 24
+#endif
+
 #if !defined(MATRIX_INACTIVITY_TIMEOUT)
 // Inactivity timeout in milliseconds. Bottom-out threshold will be saved after
 // there is no change to the threshold of any key for this duration.

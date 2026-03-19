@@ -119,9 +119,8 @@ _Static_assert(M_ARRAY_SIZE(distance_lut) == DISTANCE_LUT_SIZE,
 __attribute__((always_inline)) static inline uint8_t
 adc_to_distance(uint16_t adc, uint16_t adc_rest_value,
                 uint16_t adc_bottom_out_value) {
-  // Handle edge cases. This is necessary since we no longer update the rest
-  // value during the runtime and the bottom-out value can be lower than the
-  // ADC value if their difference is less than the calibration epsilon.
+  // Handle edge cases. Runtime rest tracking and noisy bottom-out samples can
+  // temporarily shrink the effective span until the next full stroke.
   if ((adc <= adc_rest_value) | (adc_rest_value >= adc_bottom_out_value))
     return 0;
   if (adc >= adc_bottom_out_value)

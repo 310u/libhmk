@@ -63,6 +63,41 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
                ADC_MAX_VALUE);
 }
 
+__attribute__((always_inline)) static inline void
+matrix_apply_continuous_calibration(uint8_t key, uint16_t sample) {
+  key_state_t *state = &key_matrix[key];
+  const int32_t diff = (int32_t)sample - (int32_t)state->adc_rest_value;
+  const uint16_t diff_abs =
+      diff >= 0 ? (uint16_t)diff : (uint16_t)(-diff);
+
+  if (diff_abs < MATRIX_CALIBRATION_EPSILON ||
+      diff_abs >= MATRIX_CONTINUOUS_CALIBRATION_RANGE)
+    return;
+
+  const uint8_t exponent =
+      diff_abs >= MATRIX_CONTINUOUS_CALIBRATION_FAST_DELTA
+          ? MATRIX_CONTINUOUS_CALIBRATION_FAST_ALPHA_EXPONENT
+          : MATRIX_CONTINUOUS_CALIBRATION_ALPHA_EXPONENT;
+  const uint16_t previous_rest = state->adc_rest_value;
+  uint16_t new_rest = matrix_ema(sample, previous_rest, exponent);
+
+  // Integer EMA stalls on small deltas, so force 1-step progress once the
+  // drift is larger than the calibration noise floor.
+  if (new_rest == previous_rest)
+    new_rest = diff > 0 ? (uint16_t)(previous_rest + 1)
+                        : (uint16_t)(previous_rest - 1);
+
+  const uint16_t bottom_out_threshold =
+      state->adc_bottom_out_value > previous_rest
+          ? (uint16_t)(state->adc_bottom_out_value - previous_rest)
+          : (uint16_t)(matrix_bottom_out_value(key, previous_rest) -
+                       previous_rest);
+
+  state->adc_rest_value = new_rest;
+  state->adc_bottom_out_value =
+      M_MIN((uint32_t)new_rest + bottom_out_threshold, ADC_MAX_VALUE);
+}
+
 key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
@@ -141,18 +176,7 @@ void matrix_scan(void) {
       matrix_bottom_out_threshold_dirty = true;
     } else if (eeconfig->options.continuous_calibration &&
                key_matrix[i].key_dir == KEY_DIR_INACTIVE) {
-      // Continuous Auto-Calibration
-      // If the key is inactive and within a small drift range from rest
-      // baseline (e.g., ±50 units) apply a very slow EMA to track temperature
-      // drift.
-      int32_t diff =
-          (int32_t)new_adc_filtered - (int32_t)key_matrix[i].adc_rest_value;
-      if (diff > -50 && diff < 50) {
-        key_matrix[i].adc_rest_value =
-            (((uint32_t)key_matrix[i].adc_rest_value * 255) +
-             new_adc_filtered) /
-            256;
-      }
+      matrix_apply_continuous_calibration((uint8_t)i, new_adc_filtered);
     }
 
     key_matrix[i].distance =

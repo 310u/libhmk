@@ -92,9 +92,37 @@ void test_matrix_uses_faster_filter_for_large_adc_delta(void) {
   TEST_ASSERT_EQUAL_UINT16(2850, key_matrix[0].adc_filtered);
 }
 
+void test_matrix_continuous_calibration_tracks_small_rest_drift(void) {
+  mock_eeconfig.options.continuous_calibration = true;
+  key_matrix[0].adc_filtered = 2408;
+  key_matrix[0].adc_rest_value = 2400;
+  key_matrix[0].adc_bottom_out_value = 3050;
+  analog_values[0] = 2408;
+
+  matrix_scan();
+
+  TEST_ASSERT_EQUAL_UINT16(2401, key_matrix[0].adc_rest_value);
+  TEST_ASSERT_EQUAL_UINT16(3051, key_matrix[0].adc_bottom_out_value);
+}
+
+void test_matrix_continuous_calibration_ignores_large_rest_drift(void) {
+  mock_eeconfig.options.continuous_calibration = true;
+  key_matrix[0].adc_filtered = 2490;
+  key_matrix[0].adc_rest_value = 2400;
+  key_matrix[0].adc_bottom_out_value = 3050;
+  analog_values[0] = 2490;
+
+  matrix_scan();
+
+  TEST_ASSERT_EQUAL_UINT16(2400, key_matrix[0].adc_rest_value);
+  TEST_ASSERT_EQUAL_UINT16(3050, key_matrix[0].adc_bottom_out_value);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_matrix_large_delta_press_and_release_stay_responsive);
   RUN_TEST(test_matrix_uses_faster_filter_for_large_adc_delta);
+  RUN_TEST(test_matrix_continuous_calibration_tracks_small_rest_drift);
+  RUN_TEST(test_matrix_continuous_calibration_ignores_large_rest_drift);
   return UNITY_END();
 }
