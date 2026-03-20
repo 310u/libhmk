@@ -16,7 +16,9 @@
 #include "hardware/hardware.h"
 
 #include "at32f402_405.h"
+#include "hid.h"
 #include "tusb.h"
+#include "xinput.h"
 
 /**
  * @brief Initialize the clock
@@ -152,9 +154,13 @@ static void board_usb_init(void) {
 #if defined(BOARD_USB_FS)
   // Set NVIC priority for USB FS interrupt
   NVIC_SetPriority(OTGFS1_IRQn, 0);
+  NVIC_SetPriority(OTGFS1_WKUP_IRQn, 0);
+  NVIC_EnableIRQ(OTGFS1_WKUP_IRQn);
 #elif defined(BOARD_USB_HS)
   // Set NVIC priority for USB HS interrupt
   NVIC_SetPriority(OTGHS_IRQn, 0);
+  NVIC_SetPriority(OTGHS_WKUP_IRQn, 0);
+  NVIC_EnableIRQ(OTGHS_WKUP_IRQn);
 #endif
 }
 
@@ -259,9 +265,20 @@ void OTGFS1_IRQHandler(void) { tud_int_handler(0); }
 
 void OTGHS_IRQHandler(void) { tud_int_handler(1); }
 
+void OTGFS1_WKUP_IRQHandler(void) { tud_int_handler(0); }
+
+void OTGHS_WKUP_IRQHandler(void) { tud_int_handler(1); }
+
 //--------------------------------------------------------------------+
 // TinyUSB Callbacks
 //--------------------------------------------------------------------+
+
+static void usb_runtime_resync(void) {
+  hid_clear_runtime_state();
+  xinput_reset_runtime_state();
+}
+
+void tud_mount_cb(void) { usb_runtime_resync(); }
 
 void tud_suspend_cb(bool remote_wakeup_en) {
   (void)remote_wakeup_en;
@@ -271,4 +288,4 @@ void tud_suspend_cb(bool remote_wakeup_en) {
   // sleep if the device-side PHY is already gated off.
 }
 
-void tud_resume_cb(void) {}
+void tud_resume_cb(void) { usb_runtime_resync(); }

@@ -90,7 +90,12 @@ if __name__ == "__main__":
         "test_filter": "test_layout",
         "test_build_src": "yes",
         "build_src_filter": "+<layout.c>",
-        "build_flags": common_test_flags,
+        "build_flags": "\n".join(
+            [
+                common_test_flags,
+                "-DRGB_ENABLED=1",
+            ]
+        ),
     }
     pio_config["env:native_test_hid"] = {
         "platform": "native",

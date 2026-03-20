@@ -225,6 +225,33 @@ static void layout_adjust_rgb_brightness(bool increase) {
   rgb_get_config()->global_brightness = next_brightness;
   rgb_apply_config();
 }
+
+static void layout_cycle_rgb_effect(bool forward) {
+  uint8_t next_effect = rgb_get_config()->current_effect;
+
+  if (RGB_EFFECT_MAX <= RGB_EFFECT_SOLID_COLOR)
+    return;
+
+  if (next_effect <= RGB_EFFECT_OFF || next_effect >= RGB_EFFECT_MAX) {
+    next_effect = forward ? RGB_EFFECT_SOLID_COLOR : (uint8_t)(RGB_EFFECT_MAX - 1);
+  } else if (forward) {
+    next_effect++;
+    if (next_effect >= RGB_EFFECT_MAX)
+      next_effect = RGB_EFFECT_SOLID_COLOR;
+  } else {
+    next_effect = next_effect > RGB_EFFECT_SOLID_COLOR
+                      ? (uint8_t)(next_effect - 1)
+                      : (uint8_t)(RGB_EFFECT_MAX - 1);
+  }
+
+  if (!layout_write_current_profile_rgb_field(
+          offsetof(rgb_config_t, current_effect), &next_effect,
+          sizeof(next_effect)))
+    return;
+
+  rgb_get_config()->current_effect = next_effect;
+  rgb_apply_config();
+}
 #endif
 
 static void layout_toggle_polling_rate(void) {
@@ -661,6 +688,18 @@ void layout_register(uint8_t key, uint8_t keycode) {
   case SP_RGB_BRIGHTNESS_DOWN:
 #if defined(RGB_ENABLED)
     layout_adjust_rgb_brightness(false);
+#endif
+    break;
+
+  case SP_RGB_EFFECT_NEXT:
+#if defined(RGB_ENABLED)
+    layout_cycle_rgb_effect(true);
+#endif
+    break;
+
+  case SP_RGB_EFFECT_PREV:
+#if defined(RGB_ENABLED)
+    layout_cycle_rgb_effect(false);
 #endif
     break;
 

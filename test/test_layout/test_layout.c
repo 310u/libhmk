@@ -23,6 +23,7 @@ uint32_t wear_leveling_write_count = 0;
 uint32_t last_write_address = 0;
 uint32_t last_write_len = 0;
 uint32_t last_write_u32 = 0;
+uint32_t rgb_apply_config_count = 0;
 uint32_t deferred_action_clear_count = 0;
 uint32_t hid_clear_runtime_state_count = 0;
 uint32_t xinput_reset_runtime_state_count = 0;
@@ -80,6 +81,13 @@ void xinput_process(uint8_t key) {
 }
 void xinput_reset_runtime_state(void) { xinput_reset_runtime_state_count++; }
 
+#if defined(RGB_ENABLED)
+static rgb_config_t mock_rgb_config;
+
+rgb_config_t *rgb_get_config(void) { return &mock_rgb_config; }
+void rgb_apply_config(void) { rgb_apply_config_count++; }
+#endif
+
 #if defined(JOYSTICK_ENABLED)
 joystick_config_t mock_joystick_config = {
     .mode = JOYSTICK_MODE_MOUSE,
@@ -100,6 +108,7 @@ void setUp(void) {
     last_write_address = 0;
     last_write_len = 0;
     last_write_u32 = 0;
+    rgb_apply_config_count = 0;
     deferred_action_clear_count = 0;
     hid_clear_runtime_state_count = 0;
     xinput_reset_runtime_state_count = 0;
@@ -110,6 +119,11 @@ void setUp(void) {
     memset(xinput_processed, 0, sizeof(xinput_processed));
     xinput_process_count = 0;
     mock_eeconfig.profiles[0].gamepad_options.keyboard_enabled = true;
+#if defined(RGB_ENABLED)
+    memset(&mock_rgb_config, 0, sizeof(mock_rgb_config));
+    mock_eeconfig.profiles[0].rgb_config.enabled = 1;
+    mock_eeconfig.profiles[0].rgb_config.current_effect = RGB_EFFECT_SOLID_COLOR;
+#endif
 #if defined(JOYSTICK_ENABLED)
     mock_joystick_config.mode = JOYSTICK_MODE_MOUSE;
 #endif
@@ -197,6 +211,42 @@ void test_layout_processes_gamepad_keys_when_xinput_disabled(void) {
     TEST_ASSERT_EQUAL_UINT8(0, hid_add_count);
 }
 
+#if defined(RGB_ENABLED)
+void test_rgb_effect_next_persists_and_updates_live_config(void) {
+    mock_eeconfig.profiles[0].rgb_config.current_effect = RGB_EFFECT_SOLID_COLOR;
+    layout_init();
+    wear_leveling_write_count = 0;
+    rgb_apply_config_count = 0;
+
+    layout_register(255, SP_RGB_EFFECT_NEXT);
+
+    TEST_ASSERT_EQUAL_UINT32(1, wear_leveling_write_count);
+    TEST_ASSERT_EQUAL_UINT32(
+        offsetof(eeconfig_t, profiles) +
+            offsetof(eeconfig_profile_t, rgb_config) +
+            offsetof(rgb_config_t, current_effect),
+        last_write_address);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(uint8_t), last_write_len);
+    TEST_ASSERT_EQUAL_UINT8(RGB_EFFECT_ALPHAS_MODS, last_write_u32);
+    TEST_ASSERT_EQUAL_UINT8(RGB_EFFECT_ALPHAS_MODS, mock_rgb_config.current_effect);
+    TEST_ASSERT_EQUAL_UINT32(1, rgb_apply_config_count);
+}
+
+void test_rgb_effect_prev_wraps_without_hitting_off(void) {
+    mock_eeconfig.profiles[0].rgb_config.current_effect = RGB_EFFECT_SOLID_COLOR;
+    layout_init();
+    wear_leveling_write_count = 0;
+    rgb_apply_config_count = 0;
+
+    layout_register(255, SP_RGB_EFFECT_PREV);
+
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(RGB_EFFECT_MAX - 1), last_write_u32);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(RGB_EFFECT_MAX - 1),
+                            mock_rgb_config.current_effect);
+    TEST_ASSERT_EQUAL_UINT32(1, rgb_apply_config_count);
+}
+#endif
+
 #if defined(JOYSTICK_ENABLED)
 void test_joystick_scroll_mo_restores_previous_mode(void) {
     mock_joystick_config.mode = JOYSTICK_MODE_XINPUT_RS;
@@ -217,6 +267,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_profile_switch_resets_runtime_state);
     RUN_TEST(test_layout_sorts_same_timestamp_presses_by_distance);
     RUN_TEST(test_layout_processes_gamepad_keys_when_xinput_disabled);
+#if defined(RGB_ENABLED)
+    RUN_TEST(test_rgb_effect_next_persists_and_updates_live_config);
+    RUN_TEST(test_rgb_effect_prev_wraps_without_hitting_off);
+#endif
 #if defined(JOYSTICK_ENABLED)
     RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
 #endif
