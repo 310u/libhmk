@@ -11,6 +11,8 @@ typedef enum {
     JOYSTICK_MODE_XINPUT_LS = 2,
     JOYSTICK_MODE_XINPUT_RS = 3,
     JOYSTICK_MODE_SCROLL = 4,
+    JOYSTICK_MODE_CURSOR_4 = 5,
+    JOYSTICK_MODE_CURSOR_8 = 6,
 } joystick_mode_t;
 
 typedef struct __attribute__((packed)) {

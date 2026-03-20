@@ -4,6 +4,7 @@
 #include "hardware/hardware.h"
 #include "hid.h"
 #include "joystick.h"
+#include "keycodes.h"
 #include "layout.h"
 #include "wear_leveling.h"
 
@@ -59,6 +60,10 @@
 #define JOYSTICK_SCROLL_REPORT_INTERVAL_MS 8u
 #endif
 
+#ifndef JOYSTICK_CURSOR_THRESHOLD
+#define JOYSTICK_CURSOR_THRESHOLD 48u
+#endif
+
 #define JOYSTICK_MOUSE_FP_SHIFT 8
 #define JOYSTICK_MOUSE_FP_ONE (1L << JOYSTICK_MOUSE_FP_SHIFT)
 #define JOYSTICK_MOUSE_ACCELERATION_DEFAULT 255u
@@ -81,6 +86,14 @@ static int32_t mouse_accum_y = 0;
 static int32_t scroll_accum_x = 0;
 static int32_t scroll_accum_y = 0;
 static bool mouse_switch_reported = false;
+static uint8_t cursor_key_mask_reported = 0;
+
+enum {
+  JOYSTICK_CURSOR_LEFT = 1u << 0,
+  JOYSTICK_CURSOR_RIGHT = 1u << 1,
+  JOYSTICK_CURSOR_UP = 1u << 2,
+  JOYSTICK_CURSOR_DOWN = 1u << 3,
+};
 
 static bool joystick_sw_sends_mouse_button(void) {
 #if defined(JOYSTICK_SW_KEY_INDEX)
@@ -90,6 +103,69 @@ static bool joystick_sw_sends_mouse_button(void) {
 #else
   return true;
 #endif
+}
+
+static bool joystick_mode_is_cursor(uint8_t mode) {
+  return mode == JOYSTICK_MODE_CURSOR_4 || mode == JOYSTICK_MODE_CURSOR_8;
+}
+
+static uint8_t joystick_abs_i8(int8_t value) {
+  return value < 0 ? (uint8_t)(-value) : (uint8_t)value;
+}
+
+static void joystick_cursor_set_key(bool active, uint8_t keycode) {
+  if (active) {
+    hid_keycode_add(keycode);
+  } else {
+    hid_keycode_remove(keycode);
+  }
+}
+
+static void joystick_cursor_update_keys(uint8_t next_mask) {
+  const uint8_t changed = cursor_key_mask_reported ^ next_mask;
+
+  if (changed & JOYSTICK_CURSOR_LEFT) {
+    joystick_cursor_set_key((next_mask & JOYSTICK_CURSOR_LEFT) != 0u, KC_LEFT);
+  }
+  if (changed & JOYSTICK_CURSOR_RIGHT) {
+    joystick_cursor_set_key((next_mask & JOYSTICK_CURSOR_RIGHT) != 0u, KC_RIGHT);
+  }
+  if (changed & JOYSTICK_CURSOR_UP) {
+    joystick_cursor_set_key((next_mask & JOYSTICK_CURSOR_UP) != 0u, KC_UP);
+  }
+  if (changed & JOYSTICK_CURSOR_DOWN) {
+    joystick_cursor_set_key((next_mask & JOYSTICK_CURSOR_DOWN) != 0u, KC_DOWN);
+  }
+
+  cursor_key_mask_reported = next_mask;
+}
+
+static uint8_t joystick_cursor_compute_mask(int8_t x, int8_t y, bool allow_diagonal) {
+  const uint8_t abs_x = joystick_abs_i8(x);
+  const uint8_t abs_y = joystick_abs_i8(y);
+
+  if (allow_diagonal) {
+    uint8_t mask = 0u;
+
+    if (abs_x >= JOYSTICK_CURSOR_THRESHOLD) {
+      mask |= x < 0 ? JOYSTICK_CURSOR_LEFT : JOYSTICK_CURSOR_RIGHT;
+    }
+    if (abs_y >= JOYSTICK_CURSOR_THRESHOLD) {
+      mask |= y > 0 ? JOYSTICK_CURSOR_UP : JOYSTICK_CURSOR_DOWN;
+    }
+
+    return mask;
+  }
+
+  if (abs_x < JOYSTICK_CURSOR_THRESHOLD && abs_y < JOYSTICK_CURSOR_THRESHOLD) {
+    return 0u;
+  }
+
+  if (abs_x >= abs_y) {
+    return x < 0 ? JOYSTICK_CURSOR_LEFT : JOYSTICK_CURSOR_RIGHT;
+  }
+
+  return y > 0 ? JOYSTICK_CURSOR_UP : JOYSTICK_CURSOR_DOWN;
 }
 
 static joystick_config_t joystick_default_config(void) {
@@ -334,6 +410,7 @@ void joystick_init(void) {
   mouse_accum_y = 0;
   scroll_accum_x = 0;
   scroll_accum_y = 0;
+  cursor_key_mask_reported = 0;
 }
 
 // Global state getters/setters
@@ -347,6 +424,11 @@ void joystick_apply_config(joystick_config_t config) {
       prev_mode != config.mode && mouse_switch_reported) {
     hid_mouse_move(0, 0, 0);
     mouse_switch_reported = false;
+  }
+
+  if (joystick_mode_is_cursor(prev_mode) && prev_mode != config.mode &&
+      cursor_key_mask_reported != 0u) {
+    joystick_cursor_update_keys(0u);
   }
 }
 
@@ -482,6 +564,13 @@ void joystick_task(void) {
       }
       last_mouse_tick = tick;
     }
+  } else if (joystick_mode_is_cursor(config_cache.mode)) {
+    const uint8_t next_mask =
+        joystick_cursor_compute_mask(current_state.out_x, current_state.out_y,
+                                     config_cache.mode == JOYSTICK_MODE_CURSOR_8);
+    joystick_cursor_update_keys(next_mask);
+  } else if (cursor_key_mask_reported != 0u) {
+    joystick_cursor_update_keys(0u);
   }
 }
 
