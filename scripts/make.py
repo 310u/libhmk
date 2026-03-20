@@ -118,6 +118,26 @@ if "mux" in kb_json["analog"]:
         "ADC_MUX_INPUT_MATRIX", utils.to_c_array(list(map(list, zip(*mux["matrix"]))))
     )
 
+# Digital GPIO Input Configuration
+if "digital" in kb_json:
+    digital = kb_json["digital"]
+
+    build_flags.define("DIGITAL_NUM_INPUTS", len(digital["input"]))
+
+    ports, pin_nums = driver.metadata.adc.to_gpio_array(digital["input"])
+    build_flags.define("DIGITAL_INPUT_PORTS", utils.to_c_array(ports))
+    build_flags.define("DIGITAL_INPUT_PINS", utils.to_c_array(pin_nums))
+    build_flags.define("DIGITAL_INPUT_VECTOR", utils.to_c_array(digital["vector"]))
+
+    match digital.get("pull", "up"):
+        case "up":
+            build_flags.define("DIGITAL_INPUT_PULLUP")
+        case "down":
+            build_flags.define("DIGITAL_INPUT_PULLDOWN")
+
+    if not digital.get("active_low", True):
+        build_flags.define("DIGITAL_INPUT_ACTIVE_HIGH")
+
 # Calibration Configuration
 build_flags.define("DEFAULT_CALIBRATION", utils.to_c_struct(kb_json["calibration"]))
 
@@ -143,6 +163,21 @@ build_flags.define("NUM_PROFILES", kb["num_profiles"])
 build_flags.define("NUM_LAYERS", kb["num_layers"])
 build_flags.define("NUM_KEYS", kb["num_keys"])
 build_flags.define("NUM_ADVANCED_KEYS", kb["num_advanced_keys"])
+
+# Rotary Encoder Keymap Configuration
+if "encoder" in kb_json:
+    encoder_map = kb_json["encoder"]["map"]
+    encoder_cw_keys = [entry["cw"] for entry in encoder_map]
+    encoder_ccw_keys = [entry["ccw"] for entry in encoder_map]
+
+    for key in encoder_cw_keys + encoder_ccw_keys:
+        if key < 0 or key >= kb["num_keys"]:
+            raise ValueError(
+                f"Encoder key index {key} is out of range for {kb['num_keys']} keys"
+            )
+
+    build_flags.define("ENCODER_CW_KEYS", utils.to_c_array(encoder_cw_keys))
+    build_flags.define("ENCODER_CCW_KEYS", utils.to_c_array(encoder_ccw_keys))
 
 # Default Keymaps (per profile)
 default_keymaps = utils.resolve_default_keymaps(kb_json)

@@ -18,6 +18,7 @@
 #include "crc32.h"
 #include "deferred_actions.h"
 #include "eeconfig.h"
+#include "encoder.h"
 #include "hardware/hardware.h"
 #include "hid.h"
 #include "joystick.h"
@@ -54,6 +55,7 @@ int main(void) {
   advanced_key_init();
   xinput_init();
   layout_init();
+  encoder_init();
 #if defined(JOYSTICK_ENABLED)
   joystick_init();
 #endif
@@ -67,6 +69,7 @@ int main(void) {
 
     analog_task();
     matrix_scan();
+    encoder_task();
     layout_task();
 #if defined(RGB_ENABLED)
     rgb_task();

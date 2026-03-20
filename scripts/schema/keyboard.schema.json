@@ -133,6 +133,62 @@
         }
       }
     },
+    "digital": {
+      "type": "object",
+      "description": "Direct GPIO digital input configuration",
+      "properties": {
+        "input": {
+          "type": "array",
+          "description": "Array of GPIO pin names for digital inputs",
+          "items": { "type": "string" }
+        },
+        "vector": {
+          "type": "array",
+          "description": "Array of physical key number mappings for each digital input",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "pull": {
+          "enum": ["none", "up", "down"],
+          "description": "Internal pull resistor configuration. Defaults to pull-up."
+        },
+        "active_low": {
+          "type": "boolean",
+          "description": "Set to false when a high logic level means the switch is pressed"
+        }
+      },
+      "required": ["input", "vector"]
+    },
+    "encoder": {
+      "type": "object",
+      "description": "Rotary encoder key index mapping for configurator integration",
+      "properties": {
+        "map": {
+          "type": "array",
+          "description": "Array of rotary encoder direction mappings",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Display label for this encoder in the configurator"
+              },
+              "cw": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based key index triggered by clockwise rotation"
+              },
+              "ccw": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based key index triggered by counterclockwise rotation"
+              }
+            },
+            "required": ["cw", "ccw"]
+          }
+        }
+      },
+      "required": ["map"]
+    },
     "calibration": {
       "type": "object",
       "description": "Calibration configuration",

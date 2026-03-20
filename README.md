@@ -2,7 +2,7 @@
 
 Fork of [peppapighs/libhmk](https://github.com/peppapighs/libhmk) — Libraries for building a Hall-effect keyboard firmware.
 
-This fork adds joystick support, RGB lighting, combo/macro keys, and various improvements for custom keyboard builds.
+This fork adds joystick support, rotary encoder support, RGB lighting, combo/macro keys, and various improvements for custom keyboard builds.
 
 ## Table of Contents
 
@@ -66,6 +66,23 @@ On-board analog joystick support with 5 operating modes:
 - Joystick switch (click) is mapped as the 41st key and fully remappable
 - Mode cycling via `SP_JOY_MODE_NEXT` keycode
 - Hold `SP_JOY_SCROLL_MO` to temporarily switch the joystick to scroll mode
+
+#### Direct GPIO Digital Inputs
+Extra non-analog switches can be added through `keyboard.json.digital`:
+
+- Map spare GPIO pins to normal key indices without implementing a row/column matrix
+- Use the same keymap / `hmkconf` remap flow as any other key once the input is assigned to a key index
+- Works well for a few extra buttons such as encoder push-buttons, side buttons, or mode toggles
+
+#### Rotary Encoder Support
+On-board rotary encoder support via `board_def.h` and optional `keyboard.json` metadata:
+
+- Supports multiple quadrature encoders
+- Each direction can emit either a fixed compile-time keycode or an `hmkconf`-remappable virtual key
+- `hmkconf` remapping uses `keyboard.json.encoder.map`; reserve hidden 0-based key indices for CW/CCW and include them in `keyboard.num_keys` plus the default keymap arrays
+- Works with normal HID keycodes and existing special keycodes handled by `layout.c`
+- Encoder push-buttons can be exposed separately via `digital` GPIO inputs
+- The firmware implementation is included and build-tested, but it has not been validated on real hardware yet
 
 #### RGB Lighting
 Per-key RGB backlighting via SK6812MINI-E LEDs with 50+ effects:
@@ -139,7 +156,7 @@ Record and playback key sequences:
 To develop a new keyboard, create a new directory under `keyboards/` with your keyboard's name. This directory should include the following files:
 
 - `keyboard.json`: A JSON file containing metadata about your keyboard, used for both firmware compilation and the web configurator. Refer to [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json) for the schema.
-- `board_def.h` (Optional): Per-keyboard hardware macro definitions for optional features such as RGB, joystick, or slider.
+- `board_def.h` (Optional): Per-keyboard hardware macro definitions for optional features such as RGB, joystick, rotary encoder, or slider.
 - `config.h` (Optional): Additional configuration header for your keyboard to define custom configurations beyond what's specified in `keyboard.json`.
 
 For a step-by-step guide on creating a new keyboard definition, see the [New Keyboard Setup Guide](docs/new_keyboard_setup.md).
@@ -160,8 +177,8 @@ Hardware drivers follow this directory structure:
 
 Current in-tree MCU drivers are:
 
-- `at32f405xx`: ADC matrix scanning, joystick support, and DMA/PWM RGB driver
-- `stm32f446xx`: ADC matrix scanning, joystick support, and bitbang RGB driver
+- `at32f405xx`: ADC matrix scanning, joystick/encoder support, and DMA/PWM RGB driver
+- `stm32f446xx`: ADC matrix scanning, joystick/encoder support, and bitbang RGB driver
 
 You can refer to existing hardware drivers as examples when implementing support for new hardware.
 

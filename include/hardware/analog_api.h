@@ -74,6 +74,33 @@ _Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
 #endif
 #endif
 
+//--------------------------------------------------------------------+
+// Digital GPIO Input Configuration
+//--------------------------------------------------------------------+
+
+#if !defined(DIGITAL_NUM_INPUTS)
+// Number of GPIO-backed digital inputs exposed as keys.
+#define DIGITAL_NUM_INPUTS 0
+#endif
+
+#if DIGITAL_NUM_INPUTS > 0
+#if !defined(DIGITAL_INPUT_PORTS)
+#error "DIGITAL_INPUT_PORTS is not defined"
+#endif
+
+#if !defined(DIGITAL_INPUT_PINS)
+#error "DIGITAL_INPUT_PINS is not defined"
+#endif
+
+#if !defined(DIGITAL_INPUT_VECTOR)
+#error "DIGITAL_INPUT_VECTOR is not defined"
+#endif
+
+#if defined(DIGITAL_INPUT_PULLUP) && defined(DIGITAL_INPUT_PULLDOWN)
+#error "DIGITAL_INPUT_PULLUP and DIGITAL_INPUT_PULLDOWN are mutually exclusive"
+#endif
+#endif
+
 #if !(0 < (ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS) &&                         \
       (ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS) <= ADC_NUM_CHANNELS)
 #error "Invalid number of ADC inputs"

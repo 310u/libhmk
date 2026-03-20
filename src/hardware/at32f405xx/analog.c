@@ -81,6 +81,113 @@ _Static_assert(M_ARRAY_SIZE(raw_input_vector) == ADC_NUM_RAW_INPUTS,
                "Invalid number of ADC raw inputs");
 #endif
 
+#if DIGITAL_NUM_INPUTS > 0
+// GPIO ports for each digital input.
+static gpio_type *digital_input_ports[] = DIGITAL_INPUT_PORTS;
+
+_Static_assert(M_ARRAY_SIZE(digital_input_ports) == DIGITAL_NUM_INPUTS,
+               "Invalid number of digital input ports");
+
+// GPIO pins for each digital input.
+static const uint16_t digital_input_pins[] = DIGITAL_INPUT_PINS;
+
+_Static_assert(M_ARRAY_SIZE(digital_input_pins) == DIGITAL_NUM_INPUTS,
+               "Invalid number of digital input pins");
+
+// Vector containing the physical key number for each digital input.
+static const uint16_t digital_input_vector[] = DIGITAL_INPUT_VECTOR;
+
+_Static_assert(M_ARRAY_SIZE(digital_input_vector) == DIGITAL_NUM_INPUTS,
+               "Invalid number of digital input mappings");
+
+static void analog_enable_gpio_clock(gpio_type *port) {
+  if (port == NULL) {
+    return;
+  }
+#if defined(GPIOA)
+  if (port == GPIOA) {
+    crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE);
+    return;
+  }
+#endif
+#if defined(GPIOB)
+  if (port == GPIOB) {
+    crm_periph_clock_enable(CRM_GPIOB_PERIPH_CLOCK, TRUE);
+    return;
+  }
+#endif
+#if defined(GPIOC)
+  if (port == GPIOC) {
+    crm_periph_clock_enable(CRM_GPIOC_PERIPH_CLOCK, TRUE);
+    return;
+  }
+#endif
+#if defined(GPIOD)
+  if (port == GPIOD) {
+    crm_periph_clock_enable(CRM_GPIOD_PERIPH_CLOCK, TRUE);
+    return;
+  }
+#endif
+#if defined(GPIOE)
+  if (port == GPIOE) {
+    crm_periph_clock_enable(CRM_GPIOE_PERIPH_CLOCK, TRUE);
+    return;
+  }
+#endif
+#if defined(GPIOF)
+  if (port == GPIOF) {
+    crm_periph_clock_enable(CRM_GPIOF_PERIPH_CLOCK, TRUE);
+    return;
+  }
+#endif
+}
+
+static void analog_init_digital_inputs(void) {
+  for (uint32_t i = 0; i < DIGITAL_NUM_INPUTS; i++) {
+    gpio_init_type digital_gpio_init;
+
+    analog_enable_gpio_clock(digital_input_ports[i]);
+
+    gpio_default_para_init(&digital_gpio_init);
+    digital_gpio_init.gpio_pins = digital_input_pins[i];
+    digital_gpio_init.gpio_mode = GPIO_MODE_INPUT;
+#if defined(DIGITAL_INPUT_PULLUP)
+    digital_gpio_init.gpio_pull = GPIO_PULL_UP;
+#elif defined(DIGITAL_INPUT_PULLDOWN)
+    digital_gpio_init.gpio_pull = GPIO_PULL_DOWN;
+#else
+    digital_gpio_init.gpio_pull = GPIO_PULL_NONE;
+#endif
+    gpio_init(digital_input_ports[i], &digital_gpio_init);
+  }
+}
+
+static bool analog_digital_input_pressed(uint32_t index) {
+#if defined(DIGITAL_INPUT_ACTIVE_HIGH)
+  return gpio_input_data_bit_read(digital_input_ports[index],
+                                  digital_input_pins[index]) != RESET;
+#else
+  return gpio_input_data_bit_read(digital_input_ports[index],
+                                  digital_input_pins[index]) == RESET;
+#endif
+}
+
+static bool analog_read_digital_input(uint8_t key, uint16_t *value) {
+  const uint16_t physical_key = (uint16_t)key + 1u;
+
+  for (uint32_t i = 0; i < DIGITAL_NUM_INPUTS; i++) {
+    if (digital_input_vector[i] != physical_key) {
+      continue;
+    }
+
+    *value = analog_digital_input_pressed(i) ? ADC_MAX_VALUE : 0u;
+    return true;
+  }
+
+  return false;
+}
+#endif
+
 static adc_base_config_type adc_base_struct;
 static dma_init_type dma_init_struct;
 static gpio_init_type gpio_init_struct;
@@ -106,6 +213,10 @@ void analog_init(void) {
   crm_periph_clock_enable(CRM_GPIOC_PERIPH_CLOCK, TRUE);
 #if ADC_NUM_MUX_INPUTS > 0
   crm_periph_clock_enable(CRM_TMR6_PERIPH_CLOCK, TRUE);
+#endif
+
+#if DIGITAL_NUM_INPUTS > 0
+  analog_init_digital_inputs();
 #endif
 
   // Initialize the ADC peripheral
@@ -230,6 +341,14 @@ uint16_t analog_read(uint8_t key) {
     return gpio_input_data_bit_read(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == RESET ? ADC_MAX_VALUE : 0;
   }
 #endif
+
+#if DIGITAL_NUM_INPUTS > 0
+  uint16_t digital_value = 0;
+  if (analog_read_digital_input(key, &digital_value)) {
+    return digital_value;
+  }
+#endif
+
   return adc_values[key]; 
 }
 

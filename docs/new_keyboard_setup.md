@@ -26,19 +26,56 @@ The `keyboard.json` file is the heart of your keyboard definition. It defines th
 - **`analog`**: Configure the scanning matrix.
     - `mux`: Define multiplexer select pins and input pins.
     - `matrix`: A 2D array mapping matrix intersections to physical key numbers.
+- **`digital`**: (Optional) Configure direct GPIO-backed switch inputs.
+- **`encoder`**: (Optional) Reserve virtual key indices for rotary encoder CW/CCW actions so they can be remapped in `hmkconf`.
 - **`rgb`**: (If applicable) Define RGB LED layout metadata for the configurator and effect engine.
 - **`layout`**: Defines how the keys are physically positioned for the web configurator.
 
 Refer to [`keyboards/mochiko39he/keyboard.json`](../keyboards/mochiko39he/keyboard.json) as a complete example.
 
 > [!IMPORTANT]
-> `analog.mux.matrix` and `analog.raw.vector` use 1-based physical key numbers, with `0` meaning "not connected". In contrast, `layout.key` and default keymaps use 0-based key indices.
+> `analog.mux.matrix`, `analog.raw.vector`, and `digital.vector` use 1-based physical key numbers, with `0` meaning "not connected". In contrast, `layout.key` and default keymaps use 0-based key indices.
+
+Example direct digital switch configuration:
+```json
+"digital": {
+  "input": ["B8", "B9"],
+  "vector": [42, 43],
+  "pull": "up",
+  "active_low": true
+}
+```
+
+`digital` inputs become normal keys once they are mapped to a physical key
+number, so they can be remapped from `hmkconf` just like any other key.
+
+Example rotary encoder mapping for `hmkconf`:
+```json
+"encoder": {
+  "map": [
+    {
+      "label": "Main Encoder",
+      "cw": 41,
+      "ccw": 42
+    }
+  ]
+}
+```
+
+`encoder.map` uses 0-based key indices. These are usually hidden virtual keys,
+so `keyboard.num_keys` and the default keymap arrays must include them even if
+they are not present in `layout.keymap`.
+
+When keyboard metadata contains `encoder.map`, `hmkconf` exposes those virtual
+keys in a dedicated `Encoder` tab. If you instead use fixed
+`ENCODER_CW_KEYCODES` / `ENCODER_CCW_KEYCODES` in `board_def.h`, the encoder
+still works, but its directions are no longer remappable from `hmkconf`.
 
 ## 3. Optional Headers
 
 Use `board_def.h` for hardware-backed optional features, and `config.h` for any extra compile-time overrides.
 
-- `board_def.h` is optional. You only need it when your keyboard uses optional hardware features such as RGB, joystick, slider, or board-specific tuning macros.
+- `board_def.h` is optional. You only need it when your keyboard uses optional hardware features such as RGB, joystick, rotary encoder, slider, or board-specific tuning macros.
 - `config.h` is also optional, and is the right place for compile-time overrides that are not simple pin/feature definitions.
 - GPIO macro names are driver-specific. For example, AT32 uses `GPIO_PINS_10`, while STM32 uses `GPIO_PIN_10`.
 
@@ -47,6 +84,23 @@ Example `board_def.h` for a slider or joystick switch mapped into the matrix:
 #define SLIDER_KEY_INDEX 39
 #define JOYSTICK_SW_KEY_INDEX 40
 ```
+
+Example `board_def.h` for a rotary encoder:
+```c
+#define ENCODER_NUM 1
+#define ENCODER_A_PORTS {GPIOA}
+#define ENCODER_A_PINS {GPIO_PINS_0}
+#define ENCODER_B_PORTS {GPIOA}
+#define ENCODER_B_PINS {GPIO_PINS_1}
+```
+
+Note: Rotary encoder support is implemented in the firmware, but it has not
+been verified on real hardware yet. Treat the pin assignment and direction
+settings above as the expected configuration, and confirm them on your board.
+
+If you want a fixed compile-time encoder output instead of an `hmkconf`
+remappable binding, you can omit `keyboard.json.encoder` and define
+`ENCODER_CW_KEYCODES` / `ENCODER_CCW_KEYCODES` in `board_def.h` instead.
 
 Example RGB definitions:
 
@@ -103,6 +157,6 @@ If you switch to another keyboard target later, run `python setup.py -k ...` aga
 
 - **Check Pins**: Double-check that your pin names (e.g., `A3`, `B10`) match your PCB schematic and the MCU datasheet.
 - **Start Simple**: Disable RGB and advanced features until your basic matrix scanning is confirmed working.
-- **Keep Indexing Straight**: `analog.mux.matrix` / `analog.raw.vector` are 1-based, but `layout.key` is 0-based.
+- **Keep Indexing Straight**: `analog.mux.matrix` / `analog.raw.vector` / `digital.vector` are 1-based, but `layout.key` is 0-based.
 - **Match the Driver**: `stm32f446xx` and `at32f405xx` do not use exactly the same `board_def.h` macros for RGB.
 - **Use the Console**: Use debug logging (if enabled) to monitor ADC raw values during development.

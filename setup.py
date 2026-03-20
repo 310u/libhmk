@@ -136,6 +136,27 @@ if __name__ == "__main__":
         "build_src_filter": "+<matrix.c>",
         "build_flags": common_test_flags,
     }
+    pio_config["env:native_test_encoder"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_encoder",
+        "test_build_src": "yes",
+        "build_src_filter": "+<encoder.c>",
+        "build_flags": "\n".join(
+            [
+                common_test_flags,
+                "-I test/test_encoder",
+                "-DENCODER_NUM=1",
+                "-DENCODER_A_PORTS='{GPIOA}'",
+                "-DENCODER_A_PINS='{GPIO_PIN_0}'",
+                "-DENCODER_B_PORTS='{GPIOA}'",
+                "-DENCODER_B_PINS='{GPIO_PIN_1}'",
+                "-DENCODER_CW_KEYS='{4}'",
+                "-DENCODER_CCW_KEYS='{5}'",
+                "-DENCODER_INPUT_ACTIVE_HIGH",
+            ]
+        ),
+    }
     pio_config["env:native_test_stm32_rgb"] = {
         "platform": "native",
         "test_framework": "unity",

@@ -55,6 +55,9 @@ def keyboard_metadata_def():
     metadata_features = {
         "rgb": bool(features.get("rgb", False)),
         "joystick": bool(features.get("joystick", False)),
+        "encoder": bool(
+            features.get("encoder", False) or kb_json.get("encoder", {}).get("map", [])
+        ),
     }
 
     analog_keys = set()
@@ -69,6 +72,7 @@ def keyboard_metadata_def():
     led_map = []
     led_coords = []
     mod_led_indices = []
+    encoder_keys = []
     rgb = kb_json.get("rgb", {})
     if metadata_features["rgb"] and "led_map" in rgb:
         led_map = [key for key in rgb.get("led_map", []) if isinstance(key, int)]
@@ -120,6 +124,23 @@ def keyboard_metadata_def():
                 else:
                     led_coords.append({"x": 0, "y": 0})
 
+    for encoder_index, encoder in enumerate(kb_json.get("encoder", {}).get("map", [])):
+        label = encoder.get("label", f"Encoder {encoder_index + 1}")
+        for direction in ("cw", "ccw"):
+            key_index = encoder[direction]
+            if not isinstance(key_index, int) or not 0 <= key_index < num_keys:
+                raise ValueError(
+                    f"encoder.map[{encoder_index}].{direction} must be between 0 and {num_keys - 1}"
+                )
+            encoder_keys.append(
+                {
+                    "key": key_index,
+                    "encoder": encoder_index,
+                    "direction": direction,
+                    "label": f"{label} {'Clockwise' if direction == 'cw' else 'Counterclockwise'}",
+                }
+            )
+
     metadata = {
         "name": kb_json["name"],
         "vendorId": kb_json["usb"]["vid"],
@@ -133,6 +154,7 @@ def keyboard_metadata_def():
         "features": metadata_features,
         "layout": kb_json["layout"],
         "analogKeys": analog_keys,
+        "encoderKeys": encoder_keys,
         "ledMap": led_map,
         "ledCoords": led_coords,
         "modLedIndices": mod_led_indices,

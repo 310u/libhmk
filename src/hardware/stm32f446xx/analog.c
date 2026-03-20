@@ -80,6 +80,132 @@ _Static_assert(M_ARRAY_SIZE(raw_input_vector) == ADC_NUM_RAW_INPUTS,
                "Invalid number of ADC raw inputs");
 #endif
 
+#if DIGITAL_NUM_INPUTS > 0
+// GPIO ports for each digital input.
+static GPIO_TypeDef *digital_input_ports[] = DIGITAL_INPUT_PORTS;
+
+_Static_assert(M_ARRAY_SIZE(digital_input_ports) == DIGITAL_NUM_INPUTS,
+               "Invalid number of digital input ports");
+
+// GPIO pins for each digital input.
+static const uint16_t digital_input_pins[] = DIGITAL_INPUT_PINS;
+
+_Static_assert(M_ARRAY_SIZE(digital_input_pins) == DIGITAL_NUM_INPUTS,
+               "Invalid number of digital input pins");
+
+// Vector containing the physical key number for each digital input.
+static const uint16_t digital_input_vector[] = DIGITAL_INPUT_VECTOR;
+
+_Static_assert(M_ARRAY_SIZE(digital_input_vector) == DIGITAL_NUM_INPUTS,
+               "Invalid number of digital input mappings");
+
+static void analog_enable_gpio_clock(GPIO_TypeDef *port) {
+  if (port == NULL) {
+    return;
+  }
+#if defined(GPIOA)
+  if (port == GPIOA) {
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOB)
+  if (port == GPIOB) {
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOC)
+  if (port == GPIOC) {
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOD)
+  if (port == GPIOD) {
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOE)
+  if (port == GPIOE) {
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOF)
+  if (port == GPIOF) {
+    __HAL_RCC_GPIOF_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOG)
+  if (port == GPIOG) {
+    __HAL_RCC_GPIOG_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOH)
+  if (port == GPIOH) {
+    __HAL_RCC_GPIOH_CLK_ENABLE();
+    return;
+  }
+#endif
+#if defined(GPIOI)
+  if (port == GPIOI) {
+    __HAL_RCC_GPIOI_CLK_ENABLE();
+    return;
+  }
+#endif
+}
+
+static void analog_init_digital_inputs(void) {
+  for (uint32_t i = 0; i < DIGITAL_NUM_INPUTS; i++) {
+    GPIO_InitTypeDef gpio_init = {0};
+
+    analog_enable_gpio_clock(digital_input_ports[i]);
+
+    gpio_init.Pin = digital_input_pins[i];
+    gpio_init.Mode = GPIO_MODE_INPUT;
+#if defined(DIGITAL_INPUT_PULLUP)
+    gpio_init.Pull = GPIO_PULLUP;
+#elif defined(DIGITAL_INPUT_PULLDOWN)
+    gpio_init.Pull = GPIO_PULLDOWN;
+#else
+    gpio_init.Pull = GPIO_NOPULL;
+#endif
+    gpio_init.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    HAL_GPIO_Init(digital_input_ports[i], &gpio_init);
+  }
+}
+
+static bool analog_digital_input_pressed(uint32_t index) {
+  const GPIO_PinState pin_state =
+      HAL_GPIO_ReadPin(digital_input_ports[index], digital_input_pins[index]);
+
+#if defined(DIGITAL_INPUT_ACTIVE_HIGH)
+  return pin_state == GPIO_PIN_SET;
+#else
+  return pin_state == GPIO_PIN_RESET;
+#endif
+}
+
+static bool analog_read_digital_input(uint8_t key, uint16_t *value) {
+  const uint16_t physical_key = (uint16_t)key + 1u;
+
+  for (uint32_t i = 0; i < DIGITAL_NUM_INPUTS; i++) {
+    if (digital_input_vector[i] != physical_key) {
+      continue;
+    }
+
+    *value = analog_digital_input_pressed(i) ? ADC_MAX_VALUE : 0u;
+    return true;
+  }
+
+  return false;
+}
+#endif
+
 static ADC_HandleTypeDef adc_handle;
 static DMA_HandleTypeDef dma_handle;
 #if ADC_NUM_MUX_INPUTS > 0
@@ -110,6 +236,10 @@ void analog_init(void) {
   __HAL_RCC_GPIOC_CLK_ENABLE();
 #if ADC_NUM_MUX_INPUTS > 0
   __HAL_RCC_TIM10_CLK_ENABLE();
+#endif
+
+#if DIGITAL_NUM_INPUTS > 0
+  analog_init_digital_inputs();
 #endif
 
   // Initialize the ADC peripheral
@@ -230,6 +360,13 @@ uint16_t analog_read(uint8_t key) {
     return HAL_GPIO_ReadPin(JOYSTICK_SW_PORT, JOYSTICK_SW_PIN) == GPIO_PIN_RESET
                ? ADC_MAX_VALUE
                : 0;
+  }
+#endif
+
+#if DIGITAL_NUM_INPUTS > 0
+  uint16_t digital_value = 0;
+  if (analog_read_digital_input(key, &digital_value)) {
+    return digital_value;
   }
 #endif
 
