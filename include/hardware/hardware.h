@@ -24,4 +24,6 @@
 #include "hardware/analog_api.h"
 #include "hardware/board_api.h"
 #include "hardware/flash_api.h"
+#include "hardware/i2c_api.h"
+#include "hardware/spi_api.h"
 #include "hardware/timer_api.h"
