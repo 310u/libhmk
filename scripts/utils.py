@@ -62,10 +62,8 @@ def get_kb_json(keyboard: str):
         return json.load(f)
 
 
-# Load the driver based on the keyboard configuration
-def get_driver(keyboard: str):
-    kb_json = get_kb_json(keyboard)
-    driver = kb_json["hardware"]["driver"]
+# Load the driver based on the driver name
+def get_driver_by_name(driver: str):
     match driver:
         case "stm32f446xx":
             return STM32F446XX
@@ -73,6 +71,12 @@ def get_driver(keyboard: str):
             return AT32F405XX
         case _:
             raise ValueError(f"Unsupported driver: {driver}")
+
+
+# Load the driver based on the keyboard configuration
+def get_driver(keyboard: str):
+    kb_json = get_kb_json(keyboard)
+    return get_driver_by_name(kb_json["hardware"]["driver"])
 
 
 # Convert a Python list to a C array initializer

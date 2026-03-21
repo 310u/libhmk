@@ -163,6 +163,16 @@ For a step-by-step guide on creating a new keyboard definition, see the [New Key
 
 For a short overview of the current runtime boundaries, see [Runtime Architecture Notes](docs/runtime_architecture.md). This is the quickest reference for where input routing, profile reloads, USB runtime behavior, and future analog backend work should live.
 
+### Regression Checks
+
+For day-to-day regression checks, use:
+
+```bash
+python scripts/run_regression.py -k mochiko40he
+```
+
+This regenerates `platformio.ini` for the selected keyboard, runs the maintained native unit test set, and then builds both `<keyboard>` and `<keyboard>_recovery`.
+
 You can use an existing keyboard implementation as a reference. If your keyboard hardware isn't currently supported by the firmware, you'll need to implement the necessary drivers and features. See the [Porting](#porting) section for more details.
 
 ## Porting

@@ -723,8 +723,8 @@ bool v1_E_profile_config_func(uint8_t profile, uint8_t *dst,
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_JOYSTICK_SIZE);
   memcpy(joystick_config, dst - MIGRATION_PROFILE_JOYSTICK_SIZE,
          sizeof(joystick_config));
-  if (joystick_config[15] == 0)
-    joystick_config[15] = 5;
+  if (joystick_config[offsetof(joystick_config_t, sw_debounce_ms)] == 0)
+    joystick_config[offsetof(joystick_config_t, sw_debounce_ms)] = 5;
   memcpy(dst - MIGRATION_PROFILE_JOYSTICK_SIZE, joystick_config,
          sizeof(joystick_config));
 #endif

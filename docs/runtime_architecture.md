@@ -39,5 +39,7 @@ This keeps USB suspend/resume policy out of MCU-specific `board.c` files.
 - `keyboard.json.analog.backend` defaults to `mcu_adc`.
 - `spi_adc` is reserved for future external ADC support.
 - A future SPI ADC backend should only gather samples and then feed them into `analog_scan_store_samples()`.
+- Current candidate parts are TI `ADS7953` and ADI `AD7490`.
+- Keep chip-specific SPI framing, channel sequencing, and pipeline latency handling below the generic analog backend boundary.
 
 That split is intentional: adding a new ADC transport should not require reworking `matrix.c`, `layout.c`, or profile handling.

@@ -23,6 +23,11 @@ static void write_u32(uint8_t **dst, uint32_t value) {
   *dst += sizeof(value);
 }
 
+static void write_bytes(uint8_t **dst, const void *src, uint32_t len) {
+  memcpy(*dst, src, len);
+  *dst += len;
+}
+
 static void write_fill(uint8_t **dst, uint8_t value, uint32_t len) {
   memset(*dst, value, len);
   *dst += len;
@@ -69,9 +74,45 @@ static void write_legacy_gamepad_options(uint8_t **dst, uint8_t options) {
       {255, 255},
   };
 
-  memcpy(*dst, curve, sizeof(curve));
-  *dst += sizeof(curve);
+  write_bytes(dst, curve, sizeof(curve));
   write_u8(dst, options);
+}
+
+static joystick_config_t make_legacy_joystick_config(uint8_t seed,
+                                                     uint8_t mouse_acceleration,
+                                                     uint8_t sw_debounce_ms) {
+  joystick_config_t config = {
+      .x = {(uint16_t)(100 + seed), (uint16_t)(200 + seed),
+            (uint16_t)(300 + seed)},
+      .y = {(uint16_t)(400 + seed), (uint16_t)(500 + seed),
+            (uint16_t)(600 + seed)},
+      .deadzone = (uint8_t)(10 + seed),
+      .mode = JOYSTICK_MODE_SCROLL,
+      .mouse_speed = (uint8_t)(20 + seed),
+      .mouse_acceleration = mouse_acceleration,
+      .sw_debounce_ms = sw_debounce_ms,
+  };
+
+  config.reserved[0] = (uint8_t)(0xA0u + seed);
+  config.reserved[1] = (uint8_t)(0xB0u + seed);
+  config.reserved[2] = (uint8_t)(0xC0u + seed);
+  return config;
+}
+
+static void write_legacy_rgb_per_key(uint8_t **dst, uint8_t seed) {
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    write_u8(dst, (uint8_t)(seed + i));
+    write_u8(dst, (uint8_t)(seed + i + 1));
+    write_u8(dst, (uint8_t)(seed + i + 2));
+  }
+}
+
+static void write_legacy_rgb_layer_colors(uint8_t **dst, uint8_t seed) {
+  for (uint32_t layer = 0; layer < NUM_LAYERS; layer++) {
+    write_u8(dst, (uint8_t)(seed + layer * 3));
+    write_u8(dst, (uint8_t)(seed + layer * 3 + 1));
+    write_u8(dst, (uint8_t)(seed + layer * 3 + 2));
+  }
 }
 
 static void write_legacy_profile_v1_0(uint8_t **dst, uint8_t seed) {
@@ -81,7 +122,7 @@ static void write_legacy_profile_v1_0(uint8_t **dst, uint8_t seed) {
   write_u8(dst, (uint8_t)(30 + seed));
 }
 
-static void write_legacy_profile_v1_9(uint8_t **dst, uint8_t seed) {
+static void write_legacy_profile_prefix_v1_8_plus(uint8_t **dst, uint8_t seed) {
   write_legacy_keymap(dst, seed);
   write_legacy_actuation(dst, (uint8_t)(seed + 32));
   write_legacy_advanced_keys(dst, 13, (uint8_t)(seed + 64));
@@ -89,22 +130,78 @@ static void write_legacy_profile_v1_9(uint8_t **dst, uint8_t seed) {
   write_legacy_gamepad_options(dst, 0b00001001);
   write_u8(dst, (uint8_t)(24 + seed));
   write_legacy_macros(dst, (uint8_t)(seed + 112));
+}
 
-  write_u8(dst, 1);                          // enabled
-  write_u8(dst, (uint8_t)(40 + seed));      // brightness
-  write_u8(dst, RGB_EFFECT_ALPHAS_MODS);    // effect
-  write_u8(dst, (uint8_t)(10 + seed));      // solid r
-  write_u8(dst, (uint8_t)(20 + seed));      // solid g
-  write_u8(dst, (uint8_t)(30 + seed));      // solid b
-  write_u8(dst, (uint8_t)(90 + seed));      // speed
+static void write_legacy_profile_v1_8(uint8_t **dst, uint8_t seed) {
+  joystick_config_t joystick_config =
+      make_legacy_joystick_config(seed, (uint8_t)(180 + seed), 9);
 
-  for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    write_u8(dst, (uint8_t)(seed + i));
-    write_u8(dst, (uint8_t)(seed + i + 1));
-    write_u8(dst, (uint8_t)(seed + i + 2));
-  }
+  write_legacy_profile_prefix_v1_8_plus(dst, seed);
+  write_u8(dst, 1);
+  write_u8(dst, (uint8_t)(40 + seed));
+  write_u8(dst, RGB_EFFECT_PIXEL_FLOW);
+  write_u8(dst, (uint8_t)(10 + seed));
+  write_u8(dst, (uint8_t)(20 + seed));
+  write_u8(dst, (uint8_t)(30 + seed));
+  write_u8(dst, (uint8_t)(90 + seed));
+  write_legacy_rgb_per_key(dst, seed);
+  write_bytes(dst, &joystick_config, sizeof(joystick_config));
+}
 
+static void write_legacy_profile_v1_9(uint8_t **dst, uint8_t seed) {
+  write_legacy_profile_prefix_v1_8_plus(dst, seed);
+  write_u8(dst, 1);
+  write_u8(dst, (uint8_t)(40 + seed));
+  write_u8(dst, RGB_EFFECT_ALPHAS_MODS);
+  write_u8(dst, (uint8_t)(10 + seed));
+  write_u8(dst, (uint8_t)(20 + seed));
+  write_u8(dst, (uint8_t)(30 + seed));
+  write_u8(dst, (uint8_t)(90 + seed));
+  write_legacy_rgb_per_key(dst, seed);
   write_fill(dst, 0, sizeof(joystick_config_t));
+}
+
+static void write_legacy_profile_v1_A(uint8_t **dst, uint8_t seed) {
+  joystick_config_t joystick_config =
+      make_legacy_joystick_config(seed, (uint8_t)(170 + seed), 7);
+
+  write_legacy_profile_prefix_v1_8_plus(dst, seed);
+  write_u8(dst, 1);
+  write_u8(dst, (uint8_t)(50 + seed));
+  write_u8(dst, RGB_EFFECT_RAINBOW_BEACON);
+  write_u8(dst, (uint8_t)(11 + seed));
+  write_u8(dst, (uint8_t)(21 + seed));
+  write_u8(dst, (uint8_t)(31 + seed));
+  write_u8(dst, (uint8_t)(80 + seed));
+  write_u8(dst, (uint8_t)(5 + seed));
+  write_u8(dst, 1);
+  write_u8(dst, (uint8_t)(2 + seed));
+  write_legacy_rgb_layer_colors(dst, (uint8_t)(70 + seed));
+  write_legacy_rgb_per_key(dst, (uint8_t)(5 + seed));
+  write_bytes(dst, &joystick_config, sizeof(joystick_config));
+}
+
+static void write_legacy_profile_v1_D(uint8_t **dst, uint8_t seed) {
+  joystick_config_t joystick_config =
+      make_legacy_joystick_config(seed, (uint8_t)(200 + seed), 0);
+
+  write_legacy_profile_prefix_v1_8_plus(dst, seed);
+  write_u8(dst, 1);
+  write_u8(dst, (uint8_t)(60 + seed));
+  write_u8(dst, RGB_EFFECT_DIGITAL_RAIN);
+  write_u8(dst, (uint8_t)(10 + seed));
+  write_u8(dst, (uint8_t)(20 + seed));
+  write_u8(dst, (uint8_t)(30 + seed));
+  write_u8(dst, (uint8_t)(70 + seed));
+  write_u8(dst, (uint8_t)(80 + seed));
+  write_u8(dst, (uint8_t)(90 + seed));
+  write_u8(dst, (uint8_t)(100 + seed));
+  write_u8(dst, (uint8_t)(6 + seed));
+  write_u8(dst, 2);
+  write_u8(dst, (uint8_t)(3 + seed));
+  write_legacy_rgb_layer_colors(dst, (uint8_t)(90 + seed));
+  write_legacy_rgb_per_key(dst, (uint8_t)(10 + seed));
+  write_bytes(dst, &joystick_config, sizeof(joystick_config));
 }
 
 static void build_legacy_config_v1_0(void) {
@@ -125,6 +222,25 @@ static void build_legacy_config_v1_0(void) {
   legacy_config[13] = 0x72;
 }
 
+static void build_legacy_config_v1_8(void) {
+  uint8_t *dst = legacy_config;
+
+  write_u32(&dst, EECONFIG_MAGIC_START);
+  write_u16(&dst, 0x0108);
+  write_u16(&dst, 1080);
+  write_u16(&dst, 580);
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    write_u16(&dst, (uint16_t)(650 + i));
+  }
+  write_u16(&dst, 0x0009);
+  write_u8(&dst, 2);
+  write_u8(&dst, 1);
+
+  for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
+    write_legacy_profile_v1_8(&dst, (uint8_t)(profile * 16));
+  }
+}
+
 static void build_legacy_config_v1_9(void) {
   uint8_t *dst = legacy_config;
 
@@ -142,6 +258,53 @@ static void build_legacy_config_v1_9(void) {
   for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
     write_legacy_profile_v1_9(&dst, (uint8_t)(profile * 16));
   }
+}
+
+static void build_legacy_config_v1_B(uint16_t options) {
+  uint8_t *dst = legacy_config;
+
+  write_u32(&dst, EECONFIG_MAGIC_START);
+  write_u16(&dst, 0x010B);
+  write_u16(&dst, 1200);
+  write_u16(&dst, 620);
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    write_u16(&dst, (uint16_t)(710 + i));
+  }
+  write_u16(&dst, options);
+  write_u8(&dst, 1);
+  write_u8(&dst, 2);
+
+  for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
+    write_legacy_profile_v1_A(&dst, (uint8_t)(profile * 16));
+  }
+}
+
+static void build_legacy_config_v1_D(uint32_t options) {
+  uint8_t *dst = legacy_config;
+
+  write_u32(&dst, EECONFIG_MAGIC_START);
+  write_u16(&dst, 0x010D);
+  write_u16(&dst, 1300);
+  write_u16(&dst, 630);
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    write_u16(&dst, (uint16_t)(720 + i));
+  }
+  write_u32(&dst, options);
+  write_u8(&dst, 0);
+  write_u8(&dst, 1);
+
+  for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
+    write_legacy_profile_v1_D(&dst, (uint8_t)(profile * 16));
+  }
+}
+
+static void assert_rgb_per_key_color(const rgb_config_t *config, uint8_t seed,
+                                     uint8_t index) {
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index), config->per_key_colors[index].r);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index + 1),
+                          config->per_key_colors[index].g);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index + 2),
+                          config->per_key_colors[index].b);
 }
 
 bool wear_leveling_write(uint32_t addr, const void *buf, uint32_t len) {
@@ -195,6 +358,42 @@ void test_migration_v1_0_reaches_current_and_preserves_profile_data(void) {
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.b);
 }
 
+void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) {
+  build_legacy_config_v1_8();
+
+  TEST_ASSERT_TRUE(migration_try_migrate());
+  TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
+  TEST_ASSERT_EQUAL_UINT8(2, written_config.current_profile);
+  TEST_ASSERT_EQUAL_UINT8(1, written_config.last_non_default_profile);
+
+  const eeconfig_profile_t *profile = &written_config.profiles[1];
+  TEST_ASSERT_EQUAL_UINT8(40, profile->tick_rate);
+  TEST_ASSERT_EQUAL_UINT8(56, profile->rgb_config.global_brightness);
+  TEST_ASSERT_EQUAL_UINT8(RGB_EFFECT_PIXEL_FLOW,
+                          profile->rgb_config.current_effect);
+  TEST_ASSERT_EQUAL_UINT8(26, profile->rgb_config.solid_color.r);
+  TEST_ASSERT_EQUAL_UINT8(36, profile->rgb_config.solid_color.g);
+  TEST_ASSERT_EQUAL_UINT8(46, profile->rgb_config.solid_color.b);
+  TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.r);
+  TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.g);
+  TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.b);
+  TEST_ASSERT_EQUAL_UINT8(0, profile->rgb_config.layer_colors[0].r);
+  TEST_ASSERT_EQUAL_UINT8(0, profile->rgb_config.layer_colors[0].g);
+  TEST_ASSERT_EQUAL_UINT8(0, profile->rgb_config.layer_colors[0].b);
+  assert_rgb_per_key_color(&profile->rgb_config, 16, 0);
+  assert_rgb_per_key_color(&profile->rgb_config, 16, 9);
+
+  TEST_ASSERT_EQUAL_UINT16(116, profile->joystick_config.x.min);
+  TEST_ASSERT_EQUAL_UINT16(216, profile->joystick_config.x.center);
+  TEST_ASSERT_EQUAL_UINT16(616, profile->joystick_config.y.max);
+  TEST_ASSERT_EQUAL_UINT8(26, profile->joystick_config.deadzone);
+  TEST_ASSERT_EQUAL_UINT8(JOYSTICK_MODE_SCROLL, profile->joystick_config.mode);
+  TEST_ASSERT_EQUAL_UINT8(36, profile->joystick_config.mouse_speed);
+  TEST_ASSERT_EQUAL_UINT8(196, profile->joystick_config.mouse_acceleration);
+  TEST_ASSERT_EQUAL_UINT8(9, profile->joystick_config.sw_debounce_ms);
+  TEST_ASSERT_EQUAL_UINT8(0xB0, profile->joystick_config.reserved[0]);
+}
+
 void test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors(void) {
   build_legacy_config_v1_9();
 
@@ -215,19 +414,56 @@ void test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors(void) {
   TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.sleep_timeout);
   TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.layer_indicator_mode);
   TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.layer_indicator_key);
+  assert_rgb_per_key_color(&written_config.profiles[0].rgb_config, 0, 0);
+  assert_rgb_per_key_color(&written_config.profiles[0].rgb_config, 0, 9);
+}
 
-  TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.per_key_colors[0].r);
-  TEST_ASSERT_EQUAL_UINT8(1, written_config.profiles[0].rgb_config.per_key_colors[0].g);
-  TEST_ASSERT_EQUAL_UINT8(2, written_config.profiles[0].rgb_config.per_key_colors[0].b);
-  TEST_ASSERT_EQUAL_UINT8(9, written_config.profiles[0].rgb_config.per_key_colors[9].r);
-  TEST_ASSERT_EQUAL_UINT8(10, written_config.profiles[0].rgb_config.per_key_colors[9].g);
-  TEST_ASSERT_EQUAL_UINT8(11, written_config.profiles[0].rgb_config.per_key_colors[9].b);
+void test_migration_v1_B_promotes_options_and_preserves_layer_colors(void) {
+  build_legacy_config_v1_B(0x0A55);
+
+  TEST_ASSERT_TRUE(migration_try_migrate());
+  TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
+  TEST_ASSERT_EQUAL_HEX32(0x00000A55, written_config.options.raw);
+
+  const eeconfig_profile_t *profile = &written_config.profiles[2];
+  TEST_ASSERT_EQUAL_UINT8(102, profile->rgb_config.layer_colors[0].r);
+  TEST_ASSERT_EQUAL_UINT8(103, profile->rgb_config.layer_colors[0].g);
+  TEST_ASSERT_EQUAL_UINT8(104, profile->rgb_config.layer_colors[0].b);
+  TEST_ASSERT_EQUAL_UINT8(105, profile->rgb_config.layer_colors[1].r);
+  TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.r);
+  TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.g);
+  TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.b);
+  TEST_ASSERT_EQUAL_UINT8(34, profile->rgb_config.layer_indicator_key);
+  assert_rgb_per_key_color(&profile->rgb_config, 37, 0);
+  TEST_ASSERT_EQUAL_UINT8(202, profile->joystick_config.mouse_acceleration);
+  TEST_ASSERT_EQUAL_UINT8(7, profile->joystick_config.sw_debounce_ms);
+}
+
+void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_fields(
+    void) {
+  build_legacy_config_v1_D(0x00001234);
+
+  TEST_ASSERT_TRUE(migration_try_migrate());
+  TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
+  TEST_ASSERT_EQUAL_HEX32(0x00001234, written_config.options.raw);
+
+  const eeconfig_profile_t *profile = &written_config.profiles[0];
+  TEST_ASSERT_EQUAL_UINT8(70, profile->rgb_config.secondary_color.r);
+  TEST_ASSERT_EQUAL_UINT8(80, profile->rgb_config.secondary_color.g);
+  TEST_ASSERT_EQUAL_UINT8(90, profile->rgb_config.secondary_color.b);
+  TEST_ASSERT_EQUAL_UINT8(200, profile->joystick_config.mouse_acceleration);
+  TEST_ASSERT_EQUAL_UINT8(5, profile->joystick_config.sw_debounce_ms);
+  TEST_ASSERT_EQUAL_UINT8(0xA0, profile->joystick_config.reserved[0]);
 }
 
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_migration_rejects_invalid_magic);
   RUN_TEST(test_migration_v1_0_reaches_current_and_preserves_profile_data);
+  RUN_TEST(test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks);
   RUN_TEST(test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors);
+  RUN_TEST(test_migration_v1_B_promotes_options_and_preserves_layer_colors);
+  RUN_TEST(
+      test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_fields);
   return UNITY_END();
 }
