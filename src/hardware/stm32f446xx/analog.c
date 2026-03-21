@@ -16,6 +16,7 @@
 #include "hardware/hardware.h"
 
 #include "stm32f4xx_hal.h"
+#include "analog_scan.h"
 
 // GPIO ports for each ADC channel
 static GPIO_TypeDef *channel_ports[] = {
@@ -54,15 +55,6 @@ static const uint16_t mux_select_pins[] = ADC_MUX_SELECT_PINS;
 
 _Static_assert(M_ARRAY_SIZE(mux_select_pins) == ADC_NUM_MUX_SELECT_PINS,
                "Invalid number of multiplexer select pins");
-
-// Matrix containing the key index for each multiplexer input channel and each
-// ADC channel. If the value is at least `NUM_KEYS`, the corresponding key is
-// not connected.
-static const uint16_t mux_input_matrix[][ADC_NUM_MUX_INPUTS] =
-    ADC_MUX_INPUT_MATRIX;
-
-_Static_assert(M_ARRAY_SIZE(mux_input_matrix) == (1 << ADC_NUM_MUX_SELECT_PINS),
-               "Invalid number of multiplexer select pins");
 #endif
 
 #if ADC_NUM_RAW_INPUTS > 0
@@ -70,13 +62,6 @@ _Static_assert(M_ARRAY_SIZE(mux_input_matrix) == (1 << ADC_NUM_MUX_SELECT_PINS),
 static const uint8_t raw_input_channels[] = ADC_RAW_INPUT_CHANNELS;
 
 _Static_assert(M_ARRAY_SIZE(raw_input_channels) == ADC_NUM_RAW_INPUTS,
-               "Invalid number of ADC raw inputs");
-
-// Vector containing the key index for each raw input channel. If the value is
-// at least `NUM_KEYS`, the corresponding key is not connected.
-static const uint16_t raw_input_vector[] = ADC_RAW_INPUT_VECTOR;
-
-_Static_assert(M_ARRAY_SIZE(raw_input_vector) == ADC_NUM_RAW_INPUTS,
                "Invalid number of ADC raw inputs");
 #endif
 
@@ -218,13 +203,6 @@ static volatile bool adc_initialized = false;
 // Buffer for DMA transfer
 __attribute__((aligned(8))) static volatile uint16_t
     adc_buffer[ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS];
-// ADC values for each key
-static volatile uint16_t adc_values[NUM_KEYS];
-#if ADC_NUM_RAW_INPUTS > 0
-// ADC values for raw inputs (like joystick)
-static volatile uint16_t adc_raw_values[ADC_NUM_RAW_INPUTS];
-#endif
-
 void analog_init(void) {
   ADC_ChannelConfTypeDef channel_config = {0};
 
@@ -241,6 +219,7 @@ void analog_init(void) {
 #if DIGITAL_NUM_INPUTS > 0
   analog_init_digital_inputs();
 #endif
+  analog_scan_reset();
 
   // Initialize the ADC peripheral
   adc_handle.Instance = ADC1;
@@ -370,11 +349,11 @@ uint16_t analog_read(uint8_t key) {
   }
 #endif
 
-  return adc_values[key];
+  return analog_scan_read_key(key);
 }
 
 #if ADC_NUM_RAW_INPUTS > 0
-uint16_t analog_read_raw(uint8_t index) { return adc_raw_values[index]; }
+uint16_t analog_read_raw(uint8_t index) { return analog_scan_read_raw(index); }
 #endif
 
 //--------------------------------------------------------------------+
@@ -395,22 +374,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 #endif
 
   if (hadc == &adc_handle) {
+    uint8_t mux_channel = 0;
 #if ADC_NUM_MUX_INPUTS > 0
-    for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS; i++) {
-      const uint16_t key = mux_input_matrix[current_mux_channel][i];
-      if (key)
-        adc_values[key - 1] = adc_buffer[i];
-    }
+    mux_channel = current_mux_channel;
 #endif
-
-#if ADC_NUM_RAW_INPUTS > 0
-    for (uint32_t i = 0; i < ADC_NUM_RAW_INPUTS; i++) {
-      adc_raw_values[i] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
-      const uint16_t key = raw_input_vector[i];
-      if (key && key <= NUM_KEYS)
-        adc_values[key - 1] = adc_buffer[ADC_NUM_MUX_INPUTS + i];
-    }
-#endif
+    analog_scan_store_samples(adc_buffer, mux_channel);
 
 #if ADC_NUM_MUX_INPUTS > 0
     current_mux_channel =

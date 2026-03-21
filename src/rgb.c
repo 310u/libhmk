@@ -2,8 +2,6 @@
 
 #if defined(RGB_ENABLED)
 
-#include <math.h>
-
 #if defined(NUM_LEDS)
 // Use custom if provided
 #else
@@ -16,6 +14,10 @@
 #include "layout.h"
 #include "eeconfig.h"
 #include "rgb_coords.h"
+#include "rgb_animated.h"
+#include "rgb_internal.h"
+#include "rgb_math.h"
+#include "rgb_reactive.h"
 
 /*
  * Attribution:
@@ -42,128 +44,14 @@ static uint8_t random8_min_max(uint8_t min, uint8_t max) {
     if (min >= max) return min;
     return min + (random8() % (max - min));
 }
-static uint8_t qadd8(uint8_t a, uint8_t b) {
-    uint16_t res = (uint16_t)a + b;
-    return (res > 255) ? 255 : (uint8_t)res;
-}
-static uint8_t qsub8(uint8_t a, uint8_t b) {
-    return (a > b) ? (a - b) : 0;
-}
-static uint8_t scale8(uint8_t value, uint8_t scale) {
-    return (uint8_t)(((uint16_t)value * (uint16_t)(scale + 1)) >> 8);
-}
-static uint16_t scale16by8(uint16_t value, uint8_t scale) {
-    return (uint16_t)(((uint32_t)value * (uint32_t)(scale + 1)) >> 8);
-}
-static uint8_t abs8(int16_t v) {
-    return (uint8_t)((v < 0) ? -v : v);
-}
-static uint8_t sin8(uint8_t theta) {
-    float rad = (float)theta * (2.0f * (float)M_PI / 256.0f);
-    int16_t s = (int16_t)(sinf(rad) * 127.0f) + 128;
-    if (s < 0) s = 0;
-    if (s > 255) s = 255;
-    return (uint8_t)s;
-}
-static uint8_t cos8(uint8_t theta) {
-    return sin8(theta + 64);
-}
 
 // We need an array to hold the current LED colors
 static rgb_color_t current_colors[NUM_LEDS];
 static rgb_config_t rgb_config;
-static rgb_color_t pixel_flow_state[NUM_LEDS];
-static uint8_t pixel_fractal_state[NUM_LEDS];
-static uint8_t digital_rain_state[NUM_LEDS];
-static uint8_t digital_rain_col_count = 0;
-static uint8_t digital_rain_col_x[NUM_LEDS];
-static uint8_t digital_rain_led_col[NUM_LEDS];
-static uint8_t pixel_rain_index = 0;
-static uint32_t pixel_flow_wait = 0;
-static uint32_t pixel_fractal_wait = 0;
-static uint32_t pixel_rain_wait = 0;
-static uint8_t digital_rain_drop = 0;
-static uint8_t digital_rain_decay = 0;
-
-static uint8_t abs_diff_u8(uint8_t a, uint8_t b) {
-    return (a > b) ? (a - b) : (b - a);
-}
-
-static void digital_rain_build_columns(void) {
-    digital_rain_col_count = 0;
-    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-        uint8_t x = rgb_led_coords[i].x;
-        int8_t col = -1;
-        for (uint8_t c = 0; c < digital_rain_col_count; c++) {
-            if (abs_diff_u8(digital_rain_col_x[c], x) <= 12) {
-                col = (int8_t)c;
-                break;
-            }
-        }
-        if (col < 0) {
-            col = (int8_t)digital_rain_col_count;
-            digital_rain_col_x[digital_rain_col_count++] = x;
-        }
-        digital_rain_led_col[i] = (uint8_t)col;
-    }
-}
 
 // Heatmap state
-static uint8_t rgb_heatmap[NUM_LEDS] = {0};
-// QMK-like last-hit tracking for reactive/splash effects
-#define RGB_LAST_HITS 10
-typedef struct {
-    uint8_t index;
-    uint8_t x;
-    uint8_t y;
-    uint32_t time_ms;
-} rgb_hit_t;
-static rgb_hit_t rgb_last_hits[RGB_LAST_HITS] = {0};
-static uint8_t rgb_last_hits_count = 0;
-
-static uint8_t reactive_clip_scale(uint8_t source_led, uint8_t target_led, uint8_t value);
-static uint8_t reactive_clip_effect(uint8_t target_led, const rgb_hit_t *hit, uint8_t effect);
-
 void rgb_matrix_record_keypress(uint8_t index) {
-    if (index < NUM_KEYS) {
-        uint8_t led_index = rgb_key_to_led[index];
-        if (led_index >= NUM_LEDS) {
-            return;
-        }
-        rgb_hit_t hit = {
-            .index = led_index,
-            .x = rgb_led_coords[led_index].x,
-            .y = rgb_led_coords[led_index].y,
-            .time_ms = timer_read(),
-        };
-        if (rgb_last_hits_count < RGB_LAST_HITS) {
-            rgb_last_hits[rgb_last_hits_count++] = hit;
-        } else {
-            for (uint8_t i = 1; i < RGB_LAST_HITS; i++) {
-                rgb_last_hits[i - 1] = rgb_last_hits[i];
-            }
-            rgb_last_hits[RGB_LAST_HITS - 1] = hit;
-        }
-
-        // QMK-like heatmap increase step
-        rgb_heatmap[led_index] = qadd8(rgb_heatmap[led_index], 32);
-        
-        // Slightly heat up neighbors based on coordinate proximity
-        led_point_t p1 = rgb_led_coords[led_index];
-        for (uint8_t i = 0; i < NUM_LEDS; i++) {
-            if (i == led_index) continue;
-            led_point_t p2 = rgb_led_coords[i];
-            int dx = p1.x - p2.x;
-            int dy = p1.y - p2.y;
-            uint8_t distance = (uint8_t)sqrt(dx * dx + dy * dy);
-            if (distance <= 40) {
-                uint8_t amount = qsub8(40, distance);
-                if (amount > 16) amount = 16;
-                amount = reactive_clip_scale(led_index, i, amount);
-                rgb_heatmap[i] = qadd8(rgb_heatmap[i], amount);
-            }
-        }
-    }
+    rgb_reactive_record_keypress(index);
 }
 
 void rgb_init(void) {
@@ -233,136 +121,6 @@ static uint8_t rgb_to_hue(rgb_color_t rgb) {
     return (uint8_t)h;
 }
 
-typedef enum {
-    REACTIVE_MODE_SIMPLE = 0,
-    REACTIVE_MODE_WIDE,
-    REACTIVE_MODE_CROSS,
-    REACTIVE_MODE_NEXUS,
-} reactive_mode_t;
-
-static reactive_mode_t reactive_mode_from_effect(uint8_t effect) {
-    switch (effect) {
-        case RGB_EFFECT_SOLID_REACTIVE_WIDE:
-        case RGB_EFFECT_SOLID_REACTIVE_MULTIWIDE:
-            return REACTIVE_MODE_WIDE;
-        case RGB_EFFECT_SOLID_REACTIVE_CROSS:
-        case RGB_EFFECT_SOLID_REACTIVE_MULTICROSS:
-            return REACTIVE_MODE_CROSS;
-        case RGB_EFFECT_SOLID_REACTIVE_NEXUS:
-        case RGB_EFFECT_SOLID_REACTIVE_MULTINEXUS:
-            return REACTIVE_MODE_NEXUS;
-        default:
-            return REACTIVE_MODE_SIMPLE;
-    }
-}
-
-static bool reactive_is_multi(uint8_t effect) {
-    return effect == RGB_EFFECT_SOLID_REACTIVE_MULTIWIDE ||
-           effect == RGB_EFFECT_SOLID_REACTIVE_MULTICROSS ||
-           effect == RGB_EFFECT_SOLID_REACTIVE_MULTINEXUS;
-}
-
-static bool splash_is_multi(uint8_t effect) {
-    return effect == RGB_EFFECT_MULTISPLASH ||
-           effect == RGB_EFFECT_SOLID_MULTISPLASH;
-}
-
-static uint8_t hit_elapsed_tick(const rgb_hit_t *hit, uint8_t speed) {
-    uint32_t elapsed = timer_elapsed(hit->time_ms);
-    uint32_t t = (elapsed * ((uint32_t)qadd8(speed, 8))) / 16;
-    return (t > 255) ? 255 : (uint8_t)t;
-}
-
-static uint8_t reactive_clip_scale(uint8_t source_led, uint8_t target_led, uint8_t value) {
-    return scale8(value, rgb_reactive_clip[source_led][target_led]);
-}
-
-static uint8_t reactive_clip_effect(uint8_t target_led, const rgb_hit_t *hit, uint8_t effect) {
-    uint8_t visible = (uint8_t)(255u - effect);
-    visible = reactive_clip_scale(hit->index, target_led, visible);
-    return (uint8_t)(255u - visible);
-}
-
-static uint8_t reactive_strength_for_hit(uint8_t led, const rgb_hit_t *hit, reactive_mode_t mode, uint8_t speed) {
-    uint8_t tick = hit_elapsed_tick(hit, speed);
-    int16_t dx = (int16_t)rgb_led_coords[led].x - (int16_t)hit->x;
-    int16_t dy = (int16_t)rgb_led_coords[led].y - (int16_t)hit->y;
-    uint8_t dist = (uint8_t)sqrt(dx * dx + dy * dy);
-    int16_t effect = tick;
-
-    switch (mode) {
-        case REACTIVE_MODE_SIMPLE:
-            effect = tick;
-            break;
-        case REACTIVE_MODE_WIDE:
-            effect = tick + dist * 5;
-            break;
-        case REACTIVE_MODE_CROSS: {
-            uint16_t ax = (dx < 0) ? -dx : dx;
-            uint16_t ay = (dy < 0) ? -dy : dy;
-            ax = (ax * 16 > 255) ? 255 : ax * 16;
-            ay = (ay * 16 > 255) ? 255 : ay * 16;
-            effect = tick + ((ax > ay) ? ay : ax);
-            break;
-        }
-        case REACTIVE_MODE_NEXUS:
-            effect = tick - dist;
-            if (effect < 0) effect = 255;
-            if (dist > 72) effect = 255;
-            if ((dx > 8 || dx < -8) && (dy > 8 || dy < -8)) effect = 255;
-            break;
-        default:
-            effect = tick;
-            break;
-    }
-    if (effect > 255) effect = 255;
-    return reactive_clip_effect(led, hit, (uint8_t)effect);
-}
-
-static uint8_t splash_strength_for_hit(uint8_t led, const rgb_hit_t *hit, uint8_t speed) {
-    uint8_t tick = hit_elapsed_tick(hit, speed);
-    int16_t dx = (int16_t)rgb_led_coords[led].x - (int16_t)hit->x;
-    int16_t dy = (int16_t)rgb_led_coords[led].y - (int16_t)hit->y;
-    uint8_t dist = (uint8_t)sqrt(dx * dx + dy * dy);
-    int16_t effect = (int16_t)tick - dist;
-    if (effect < 0) effect = 255;
-    if (effect > 255) effect = 255;
-    return reactive_clip_effect(led, hit, (uint8_t)effect);
-}
-
-static uint8_t compute_reactive_intensity(uint8_t led, uint8_t effect, uint8_t speed) {
-    reactive_mode_t mode = reactive_mode_from_effect(effect);
-    bool multi = reactive_is_multi(effect);
-    if (rgb_last_hits_count == 0) return 0;
-
-    if (!multi) {
-        return reactive_strength_for_hit(led, &rgb_last_hits[rgb_last_hits_count - 1], mode, speed);
-    }
-
-    uint8_t best = 255;
-    for (uint8_t i = 0; i < rgb_last_hits_count; i++) {
-        uint8_t v = reactive_strength_for_hit(led, &rgb_last_hits[i], mode, speed);
-        if (v < best) best = v;
-    }
-    return best;
-}
-
-static uint8_t compute_splash_intensity(uint8_t led, uint8_t effect, uint8_t speed) {
-    bool multi = splash_is_multi(effect);
-    if (rgb_last_hits_count == 0) return 0;
-
-    if (!multi) {
-        return splash_strength_for_hit(led, &rgb_last_hits[rgb_last_hits_count - 1], speed);
-    }
-
-    uint8_t best = 255;
-    for (uint8_t i = 0; i < rgb_last_hits_count; i++) {
-        uint8_t v = splash_strength_for_hit(led, &rgb_last_hits[i], speed);
-        if (v < best) best = v;
-    }
-    return best;
-}
-
 rgb_color_t hsv_to_rgb(hsv_t hsv) {
     rgb_color_t rgb = {0, 0, 0};
     if (hsv.s == 0) {
@@ -388,22 +146,25 @@ rgb_color_t hsv_to_rgb(hsv_t hsv) {
     return rgb;
 }
 
+uint8_t rgb_coord_x_at(uint8_t led) { return rgb_led_coords[led].x; }
+
+uint8_t rgb_coord_y_at(uint8_t led) { return rgb_led_coords[led].y; }
+
+uint8_t rgb_key_to_led_at(uint8_t key) { return rgb_key_to_led[key]; }
+
+uint8_t rgb_reactive_clip_at(uint8_t source_led, uint8_t target_led) {
+    return rgb_reactive_clip[source_led][target_led];
+}
+
 void rgb_task(void) {
     rgb_driver_task();
 
     if (!rgb_config.enabled) return;
 
     static uint32_t last_render_tick = 0;
-    static uint32_t heatmap_tick = 0;
     uint32_t current_tick = timer_read();
-    
-    // Heatmap decay process (every 25ms)
-    if (timer_elapsed(heatmap_tick) >= 25) {
-        for (uint8_t i = 0; i < NUM_LEDS; i++) {
-            if (rgb_heatmap[i] > 0) rgb_heatmap[i] = qsub8(rgb_heatmap[i], 1);
-        }
-        heatmap_tick = current_tick;
-    }
+
+    rgb_reactive_decay_heatmap(current_tick);
 
     // Limit render framerate to ~60fps (16ms)
     if (timer_elapsed(last_render_tick) < 16) return;
@@ -451,6 +212,12 @@ void rgb_task(void) {
     static uint8_t prev_effect = 0xff;
     bool effect_changed = (prev_effect != rgb_config.current_effect);
     prev_effect = rgb_config.current_effect;
+    rgb_animated_context_t animated_context = {
+        .base_hue = base_hue,
+        .effective_brightness = effective_brightness,
+        .effect_speed = rgb_config.effect_speed,
+        .effect_changed = effect_changed,
+    };
 
     switch (rgb_config.current_effect) {
         case RGB_EFFECT_OFF:
@@ -532,70 +299,17 @@ void rgb_task(void) {
         }
 
         case RGB_EFFECT_PIXEL_FLOW: {
-            uint16_t interval = 3000 / (scale16by8(qadd8(rgb_config.effect_speed, 16), 16) ? scale16by8(qadd8(rgb_config.effect_speed, 16), 16) : 1);
-            if (effect_changed) {
-                for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                    if (random8() & 2) {
-                        pixel_flow_state[i] = (rgb_color_t){0, 0, 0};
-                    } else {
-                        pixel_flow_state[i] = hsv_to_rgb((hsv_t){random8(), random8_min_max(127, 255), effective_brightness});
-                    }
-                }
-                pixel_flow_wait = timer_read();
-            }
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                rgb_set_color(i, pixel_flow_state[i].r, pixel_flow_state[i].g, pixel_flow_state[i].b);
-            }
-            if (timer_elapsed(pixel_flow_wait) >= interval) {
-                for (uint8_t i = 0; i + 1 < NUM_LEDS; i++) pixel_flow_state[i] = pixel_flow_state[i + 1];
-                pixel_flow_state[NUM_LEDS - 1] = (random8() & 2)
-                    ? (rgb_color_t){0, 0, 0}
-                    : hsv_to_rgb((hsv_t){random8(), random8_min_max(127, 255), effective_brightness});
-                pixel_flow_wait = timer_read();
-            }
+            rgb_animated_render(RGB_EFFECT_PIXEL_FLOW, &animated_context);
             break;
         }
 
         case RGB_EFFECT_PIXEL_FRACTAL: {
-            uint16_t interval = 3000 / (scale16by8(qadd8(rgb_config.effect_speed, 16), 16) ? scale16by8(qadd8(rgb_config.effect_speed, 16), 16) : 1);
-            if (effect_changed) {
-                for (uint8_t i = 0; i < NUM_LEDS; i++) pixel_fractal_state[i] = 0;
-                pixel_fractal_wait = timer_read();
-            }
-            if (timer_elapsed(pixel_fractal_wait) >= interval) {
-                uint8_t next[NUM_LEDS];
-                for (uint8_t i = 0; i < NUM_LEDS; i++) next[i] = 0;
-                uint8_t half = NUM_LEDS / 2;
-                for (uint8_t l = 0; l < half; l++) {
-                    uint8_t bit = (l + 1 < half) ? pixel_fractal_state[l + 1] : ((random8() & 3) == 0);
-                    next[l] = bit;
-                    next[NUM_LEDS - 1 - l] = bit;
-                }
-                if (NUM_LEDS & 1) next[half] = (random8() & 3) == 0;
-                for (uint8_t i = 0; i < NUM_LEDS; i++) pixel_fractal_state[i] = next[i];
-                pixel_fractal_wait = timer_read();
-            }
-            rgb_color_t base = hsv_to_rgb((hsv_t){base_hue, 255, effective_brightness});
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                if (pixel_fractal_state[i]) rgb_set_color(i, base.r, base.g, base.b);
-                else rgb_set_color(i, 0, 0, 0);
-            }
+            rgb_animated_render(RGB_EFFECT_PIXEL_FRACTAL, &animated_context);
             break;
         }
 
         case RGB_EFFECT_PIXEL_RAIN: {
-            if (effect_changed) {
-                pixel_rain_index = random8_max(NUM_LEDS);
-                pixel_rain_wait = timer_read();
-            }
-            uint32_t rain_interval = 2048u - (uint32_t)scale16by8(1792u, rgb_config.effect_speed);
-            if (timer_elapsed(pixel_rain_wait) >= rain_interval) {
-                hsv_t hsv = (random8() & 2) ? (hsv_t){0, 0, 0} : (hsv_t){random8(), random8_min_max(127, 255), effective_brightness};
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(pixel_rain_index, c.r, c.g, c.b);
-                pixel_rain_index = random8_max(NUM_LEDS);
-                pixel_rain_wait = timer_read();
-            }
+            rgb_animated_render(RGB_EFFECT_PIXEL_RAIN, &animated_context);
             break;
         }
 
@@ -859,96 +573,12 @@ void rgb_task(void) {
         }
 
         case RGB_EFFECT_TYPING_HEATMAP: {
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t temp = rgb_heatmap[i];
-                if (temp == 0) {
-                    rgb_set_color(i, 0, 0, 0);
-                    continue;
-                }
-                uint8_t sub = qsub8(temp, 85);
-                uint8_t hue = (170 > sub) ? (170 - sub) : 0;
-                uint8_t heat = qsub8(qadd8(170, temp), 170);
-                uint8_t v = scale8((uint8_t)(heat * 3), effective_brightness);
-                hsv_t hsv = { .h = hue, .s = 255, .v = v };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
+            rgb_reactive_render_heatmap(effective_brightness);
             break;
         }
 
         case RGB_EFFECT_DIGITAL_RAIN: {
-            const uint8_t drop_ticks = 28;
-            const uint8_t pure_green = (((uint16_t)effective_brightness) * 3) >> 2;
-            const uint8_t max_boost = (((uint16_t)effective_brightness) * 3) >> 2;
-            const uint8_t max_intensity = effective_brightness;
-            const uint8_t decay_ticks = max_intensity ? (0xff / max_intensity) : 0xff;
-            if (effect_changed) {
-                digital_rain_build_columns();
-                for (uint8_t i = 0; i < NUM_LEDS; i++) digital_rain_state[i] = 0;
-                digital_rain_drop = 0;
-                digital_rain_decay = 0;
-            }
-            digital_rain_decay++;
-            if (digital_rain_drop == 0) {
-                for (uint8_t c = 0; c < digital_rain_col_count; c++) {
-                    if (random8_max(24) != 0) continue;
-                    uint8_t top = 0xff;
-                    uint8_t top_y = 0xff;
-                    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                        if (digital_rain_led_col[i] != c) continue;
-                        uint8_t y = rgb_led_coords[i].y;
-                        if (y < top_y) {
-                            top_y = y;
-                            top = i;
-                        }
-                    }
-                    if (top != 0xff) digital_rain_state[top] = max_intensity;
-                }
-            }
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                if (digital_rain_state[i] > 0 && digital_rain_state[i] < max_intensity) {
-                    if (digital_rain_decay >= decay_ticks) digital_rain_state[i]--;
-                }
-                if (digital_rain_state[i] > pure_green) {
-                    uint8_t boost = (uint8_t)((uint16_t)max_boost * (digital_rain_state[i] - pure_green) / ((max_intensity > pure_green) ? (max_intensity - pure_green) : 1));
-                    rgb_set_color(i, boost, max_intensity, boost);
-                } else {
-                    uint8_t green = (pure_green > 0) ? (uint8_t)((uint16_t)max_intensity * digital_rain_state[i] / pure_green) : 0;
-                    rgb_set_color(i, 0, green, 0);
-                }
-            }
-            if (digital_rain_decay >= decay_ticks) digital_rain_decay = 0;
-            if (++digital_rain_drop > drop_ticks) {
-                digital_rain_drop = 0;
-                for (uint8_t c = 0; c < digital_rain_col_count; c++) {
-                    uint8_t col_leds[NUM_LEDS];
-                    uint8_t count = 0;
-                    for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                        if (digital_rain_led_col[i] == c) col_leds[count++] = i;
-                    }
-                    // Sort by y descending (bottom -> top)
-                    for (uint8_t a = 0; a < count; a++) {
-                        for (uint8_t b = a + 1; b < count; b++) {
-                            if (rgb_led_coords[col_leds[a]].y < rgb_led_coords[col_leds[b]].y) {
-                                uint8_t t = col_leds[a];
-                                col_leds[a] = col_leds[b];
-                                col_leds[b] = t;
-                            }
-                        }
-                    }
-                    if (count > 0 && digital_rain_state[col_leds[0]] == max_intensity) {
-                        digital_rain_state[col_leds[0]]--;
-                    }
-                    for (uint8_t j = 0; j + 1 < count; j++) {
-                        uint8_t below = col_leds[j];
-                        uint8_t above = col_leds[j + 1];
-                        if (digital_rain_state[above] >= max_intensity) {
-                            digital_rain_state[above] = max_intensity - 1;
-                            digital_rain_state[below] = max_intensity;
-                        }
-                    }
-                }
-            }
+            rgb_animated_render(RGB_EFFECT_DIGITAL_RAIN, &animated_context);
             break;
         }
 
@@ -1019,40 +649,18 @@ void rgb_task(void) {
         case RGB_EFFECT_SOLID_REACTIVE_MULTICROSS:
         case RGB_EFFECT_SOLID_REACTIVE_NEXUS:
         case RGB_EFFECT_SOLID_REACTIVE_MULTINEXUS: {
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t effect = compute_reactive_intensity(i, rgb_config.current_effect, rgb_config.effect_speed);
-                hsv_t hsv = { .h = base_hue, .s = 255, .v = effective_brightness };
-                if (rgb_config.current_effect == RGB_EFFECT_SOLID_REACTIVE_SIMPLE) {
-                    hsv.v = scale8((uint8_t)(255 - effect), hsv.v);
-                } else if (rgb_config.current_effect == RGB_EFFECT_SOLID_REACTIVE) {
-                    hsv.h = (uint8_t)(base_hue + scale8((uint8_t)(255 - effect), 64));
-                } else {
-                    if (rgb_config.current_effect == RGB_EFFECT_SOLID_REACTIVE_NEXUS ||
-                        rgb_config.current_effect == RGB_EFFECT_SOLID_REACTIVE_MULTINEXUS) {
-                        int16_t dy = (int16_t)rgb_led_coords[i].y - 127;
-                        hsv.h = (uint8_t)(base_hue + (dy / 4));
-                    }
-                    hsv.v = qadd8(hsv.v, (uint8_t)(255 - effect));
-                }
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
+            rgb_reactive_render_effect(rgb_config.current_effect, base_hue,
+                                       effective_brightness,
+                                       rgb_config.effect_speed);
             break;
         }
         case RGB_EFFECT_SPLASH:
         case RGB_EFFECT_MULTISPLASH:
         case RGB_EFFECT_SOLID_SPLASH:
         case RGB_EFFECT_SOLID_MULTISPLASH: {
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t effect = compute_splash_intensity(i, rgb_config.current_effect, rgb_config.effect_speed);
-                hsv_t hsv = { .h = base_hue, .s = 255, .v = effective_brightness };
-                if (rgb_config.current_effect == RGB_EFFECT_SPLASH || rgb_config.current_effect == RGB_EFFECT_MULTISPLASH) {
-                    hsv.h = (uint8_t)(hsv.h + effect);
-                }
-                hsv.v = qadd8(hsv.v, (uint8_t)(255 - effect));
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
+            rgb_reactive_render_splash(rgb_config.current_effect, base_hue,
+                                       effective_brightness,
+                                       rgb_config.effect_speed);
             break;
         }
         case RGB_EFFECT_PER_KEY: {

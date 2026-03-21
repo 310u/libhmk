@@ -32,16 +32,6 @@
 void board_init(void);
 
 /**
- * @brief Run periodic board maintenance
- *
- * This function should be called regularly from the main loop after the USB
- * stack has had a chance to process pending events.
- *
- * @return None
- */
-void board_task(void);
-
-/**
  * @brief Error handler
  *
  * This function should be called when an unrecoverable error occurs. It should

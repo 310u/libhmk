@@ -88,3 +88,19 @@ void usb_runtime_resume(void) {
   usb_runtime_state.suspend_observed = false;
   usb_runtime_resync();
 }
+
+//--------------------------------------------------------------------+
+// TinyUSB Callbacks
+//--------------------------------------------------------------------+
+
+void tud_mount_cb(void) { usb_runtime_mount(); }
+
+void tud_suspend_cb(bool remote_wakeup_en) {
+  (void)remote_wakeup_en;
+
+  // Avoid controller-specific link changes inside the suspend callback itself.
+  // We only record timing here and defer any recovery action until resume/task.
+  usb_runtime_suspend();
+}
+
+void tud_resume_cb(void) { usb_runtime_resume(); }

@@ -22,6 +22,7 @@
 #include "layout.h"
 #include "matrix.h"
 #include "metadata.h"
+#include "profile_runtime.h"
 #include "rgb.h"
 #include "tusb.h"
 
@@ -45,16 +46,25 @@ static bool command_validate_gamepad_options(
   return true;
 }
 
-static void command_reload_current_profile_state(void) {
-  layout_reset_runtime_state();
-  layout_load_advanced_keys();
-#if defined(RGB_ENABLED)
-  memcpy(rgb_get_config(), &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
-  rgb_apply_config();
-#endif
-#if defined(JOYSTICK_ENABLED)
-  joystick_apply_config(CURRENT_PROFILE.joystick_config);
-#endif
+static uint32_t command_profile_base_addr(uint8_t profile) {
+  return offsetof(eeconfig_t, profiles) +
+         (uint32_t)profile * sizeof(eeconfig_profile_t);
+}
+
+static bool command_write_profile_bytes(uint8_t profile, uint32_t field_offset,
+                                        const void *data, uint32_t len) {
+  return wear_leveling_write(command_profile_base_addr(profile) + field_offset,
+                             data, len);
+}
+
+static void command_reset_if_current_profile(uint8_t profile) {
+  if (profile == eeconfig->current_profile)
+    layout_reset_runtime_state();
+}
+
+static void command_reload_if_current_profile(uint8_t profile) {
+  if (profile == eeconfig->current_profile)
+    profile_runtime_reload_current();
 }
 
 void command_init(void) {}
@@ -80,7 +90,7 @@ void command_process(const uint8_t *buf) {
   case COMMAND_FACTORY_RESET: {
     success = eeconfig_reset();
     if (success)
-      command_reload_current_profile_state();
+      profile_runtime_reload_current();
     break;
   }
   case COMMAND_RECALIBRATE: {
@@ -140,7 +150,7 @@ void command_process(const uint8_t *buf) {
 
     success = eeconfig_reset_profile(p->profile);
     if (success && p->profile == eeconfig->current_profile)
-      command_reload_current_profile_state();
+      profile_runtime_reload_current();
     break;
   }
   case COMMAND_DUPLICATE_PROFILE: {
@@ -152,7 +162,7 @@ void command_process(const uint8_t *buf) {
     success = EECONFIG_WRITE(profiles[p->profile],
                              &eeconfig->profiles[p->src_profile]);
     if (success && p->profile == eeconfig->current_profile)
-      command_reload_current_profile_state();
+      profile_runtime_reload_current();
     break;
   }
   case COMMAND_GET_KEYMAP: {
@@ -205,14 +215,14 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->keymap) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, keymap) +
-                    p->layer * sizeof(eeconfig->profiles[0].keymap[0]) +
-                    p->offset * sizeof(uint8_t);
-    success = wear_leveling_write(addr, p->keymap, sizeof(uint8_t) * p->len);
-    if (success && p->profile == eeconfig->current_profile)
-      layout_reset_runtime_state();
+    const uint32_t field_offset = offsetof(eeconfig_profile_t, keymap) +
+                                  p->layer *
+                                      sizeof(eeconfig->profiles[0].keymap[0]) +
+                                  p->offset * sizeof(uint8_t);
+    success = command_write_profile_bytes(p->profile, field_offset, p->keymap,
+                                          sizeof(uint8_t) * p->len);
+    if (success)
+      command_reset_if_current_profile(p->profile);
     break;
   }
   case COMMAND_GET_ACTUATION_MAP: {
@@ -236,11 +246,11 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->actuation_map) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, actuation_map) +
-                    p->offset * sizeof(actuation_t);
-    success = wear_leveling_write(addr, p->actuation_map, sizeof(actuation_t) * p->len);
+    const uint32_t field_offset = offsetof(eeconfig_profile_t, actuation_map) +
+                                  p->offset * sizeof(actuation_t);
+    success = command_write_profile_bytes(
+        p->profile, field_offset, p->actuation_map,
+        sizeof(actuation_t) * p->len);
     break;
   }
   case COMMAND_GET_ADVANCED_KEYS: {
@@ -264,14 +274,13 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->advanced_keys) &&
                    p->len <= NUM_ADVANCED_KEYS - p->offset);
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, advanced_keys) +
-                    p->offset * sizeof(advanced_key_t);
-    success =
-        wear_leveling_write(addr, p->advanced_keys, sizeof(advanced_key_t) * p->len);
-    if (success && p->profile == eeconfig->current_profile)
-      command_reload_current_profile_state();
+    const uint32_t field_offset = offsetof(eeconfig_profile_t, advanced_keys) +
+                                  p->offset * sizeof(advanced_key_t);
+    success = command_write_profile_bytes(
+        p->profile, field_offset, p->advanced_keys,
+        sizeof(advanced_key_t) * p->len);
+    if (success)
+      command_reload_if_current_profile(p->profile);
     break;
   }
   case COMMAND_GET_TICK_RATE: {
@@ -287,10 +296,9 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, tick_rate);
-    success = wear_leveling_write(addr, &p->tick_rate, sizeof(p->tick_rate));
+    success = command_write_profile_bytes(p->profile,
+                                          offsetof(eeconfig_profile_t, tick_rate),
+                                          &p->tick_rate, sizeof(p->tick_rate));
     break;
   }
   case COMMAND_GET_GAMEPAD_BUTTONS: {
@@ -314,13 +322,13 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->gamepad_buttons) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, gamepad_buttons) +
-                    p->offset * sizeof(uint8_t);
-    success = wear_leveling_write(addr, p->gamepad_buttons, sizeof(uint8_t) * p->len);
-    if (success && p->profile == eeconfig->current_profile)
-      layout_reset_runtime_state();
+    const uint32_t field_offset = offsetof(eeconfig_profile_t, gamepad_buttons) +
+                                  p->offset * sizeof(uint8_t);
+    success = command_write_profile_bytes(
+        p->profile, field_offset, p->gamepad_buttons,
+        sizeof(uint8_t) * p->len);
+    if (success)
+      command_reset_if_current_profile(p->profile);
     break;
   }
   case COMMAND_GET_GAMEPAD_OPTIONS: {
@@ -337,12 +345,11 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
     COMMAND_VERIFY(command_validate_gamepad_options(&p->gamepad_options));
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, gamepad_options);
-    success = wear_leveling_write(addr, &p->gamepad_options, sizeof(p->gamepad_options));
-    if (success && p->profile == eeconfig->current_profile)
-      layout_reset_runtime_state();
+    success = command_write_profile_bytes(
+        p->profile, offsetof(eeconfig_profile_t, gamepad_options),
+        &p->gamepad_options, sizeof(p->gamepad_options));
+    if (success)
+      command_reset_if_current_profile(p->profile);
     break;
   }
   case COMMAND_GET_MACROS: {
@@ -367,14 +374,12 @@ void command_process(const uint8_t *buf) {
 
     // EECONFIG_WRITE_N cannot be used here because the field contains variables
     // (p->profile, p->offset), which are not allowed in offsetof().
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, macros) +
-                    p->offset * sizeof(macro_t);
-
-    success = wear_leveling_write(addr, p->macros, sizeof(macro_t) * p->len);
-    if (success && p->profile == eeconfig->current_profile)
-      layout_reset_runtime_state();
+    const uint32_t field_offset = offsetof(eeconfig_profile_t, macros) +
+                                  p->offset * sizeof(macro_t);
+    success = command_write_profile_bytes(p->profile, field_offset, p->macros,
+                                          sizeof(macro_t) * p->len);
+    if (success)
+      command_reset_if_current_profile(p->profile);
     break;
   }
 #if defined(RGB_ENABLED)
@@ -398,11 +403,10 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->data) &&
                    p->len <= sizeof(rgb_config_t) - p->offset);
 
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, rgb_config) +
-                    p->offset * sizeof(uint8_t);
-    success = wear_leveling_write(addr, p->data, sizeof(uint8_t) * p->len);
+    const uint32_t field_offset = offsetof(eeconfig_profile_t, rgb_config) +
+                                  p->offset * sizeof(uint8_t);
+    success = command_write_profile_bytes(p->profile, field_offset, p->data,
+                                          sizeof(uint8_t) * p->len);
 
     if (success && p->profile == eeconfig->current_profile) {
       memcpy(rgb_get_config(), &eeconfig->profiles[p->profile].rgb_config,
@@ -434,15 +438,12 @@ void command_process(const uint8_t *buf) {
     const command_in_joystick_config_t *p = &in->joystick_config;
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
     
-    uint32_t addr = offsetof(eeconfig_t, profiles) +
-                    p->profile * sizeof(eeconfig_profile_t) +
-                    offsetof(eeconfig_profile_t, joystick_config);
-    
-    success = wear_leveling_write(addr, &p->joystick_config, sizeof(joystick_config_t));
-    
-    if (success && p->profile == eeconfig->current_profile) {
-      layout_reset_runtime_state();
-    }
+    success = command_write_profile_bytes(
+        p->profile, offsetof(eeconfig_profile_t, joystick_config),
+        &p->joystick_config, sizeof(joystick_config_t));
+
+    if (success)
+      command_reset_if_current_profile(p->profile);
     break;
   }
 #endif

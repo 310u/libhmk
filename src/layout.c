@@ -24,6 +24,7 @@
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
+#include "profile_runtime.h"
 #include "rgb.h"
 #include "xinput.h"
 
@@ -166,17 +167,6 @@ static void joystick_scroll_mo_unregister(void) {
 }
 #endif
 
-static void layout_apply_current_profile_state(void) {
-  layout_load_advanced_keys();
-#if defined(RGB_ENABLED)
-  memcpy(rgb_get_config(), &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
-  rgb_apply_config();
-#endif
-#if defined(JOYSTICK_ENABLED)
-  joystick_apply_config(CURRENT_PROFILE.joystick_config);
-#endif
-}
-
 #if defined(RGB_ENABLED)
 static bool layout_write_current_profile_rgb_field(uint32_t field_offset,
                                                    const void *value,
@@ -261,7 +251,7 @@ static void layout_toggle_polling_rate(void) {
     board_reset();
 }
 
-void layout_init(void) { layout_apply_current_profile_state(); }
+void layout_init(void) { profile_runtime_apply_current(); }
 
 void layout_reset_runtime_state(void) {
   advanced_key_clear();
@@ -375,6 +365,106 @@ bool layout_process_key(uint8_t key, bool pressed) {
   return has_non_tap_hold_event;
 }
 
+static void layout_flush_pending_events(void) {
+  for (uint8_t i = 0; i < pending_count; i++)
+    layout_process_key(pending_events[i].key, pending_events[i].pressed);
+  pending_count = 0;
+}
+
+static void layout_buffer_pending_event(uint8_t key, bool pressed) {
+  if (pending_count >= MAX_PENDING_EVENTS)
+    layout_flush_pending_events();
+
+  pending_events[pending_count++] =
+      (typeof(pending_events[0])){.key = key, .pressed = pressed};
+}
+
+static bool layout_pending_has_press(uint8_t key) {
+  for (uint8_t i = 0; i < pending_count; i++) {
+    if (pending_events[i].key == key && pending_events[i].pressed)
+      return true;
+  }
+
+  return false;
+}
+
+static bool layout_key_is_tap_hold(uint8_t key) {
+  const uint8_t current_layer = layout_get_current_layer();
+  const uint8_t ak_index = advanced_key_indices[current_layer][key];
+
+  return ak_index &&
+         CURRENT_PROFILE.advanced_keys[ak_index - 1].type == AK_TYPE_TAP_HOLD;
+}
+
+static bool layout_should_skip_key_processing(uint8_t key,
+                                              const key_state_t *state,
+                                              uint8_t current_layer) {
+  if (current_layer == 0) {
+    if (CURRENT_PROFILE.gamepad_buttons[key] != GP_BUTTON_NONE) {
+      xinput_process(key);
+
+      if (CURRENT_PROFILE.gamepad_options.gamepad_override) {
+        bitmap_set(key_press_states, key, state->is_pressed);
+        return true;
+      }
+    }
+
+    if (!CURRENT_PROFILE.gamepad_options.keyboard_enabled) {
+      bitmap_set(key_press_states, key, state->is_pressed);
+      return true;
+    }
+  }
+
+  if (current_layer == 0 && bitmap_get(key_disabled, key)) {
+    bitmap_set(key_press_states, key, state->is_pressed);
+    return true;
+  }
+
+  return false;
+}
+
+static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
+                                  uint8_t current_layer) {
+  *event_count = 0;
+
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    const key_state_t *state = &key_matrix[i];
+    const bool last_key_press = bitmap_get(key_press_states, i);
+
+    if (layout_should_skip_key_processing((uint8_t)i, state, current_layer))
+      continue;
+
+    if (state->is_pressed & !last_key_press) {
+      events[(*event_count)++] = (layout_event_t){
+          .key = (uint8_t)i,
+          .pressed = true,
+          .event_time = state->event_time,
+          .distance = state->distance,
+      };
+    } else if (!state->is_pressed & last_key_press) {
+      events[(*event_count)++] = (layout_event_t){
+          .key = (uint8_t)i,
+          .pressed = false,
+          .event_time = state->event_time,
+          .distance = state->distance,
+      };
+    } else if (state->is_pressed) {
+      const uint8_t keycode = active_keycodes[i];
+      const uint8_t ak_index = active_advanced_keys[i];
+
+      if (ak_index) {
+        advanced_key_event_t ak_event = (advanced_key_event_t){
+            .type = AK_EVENT_TYPE_HOLD,
+            .key = (uint8_t)i,
+            .keycode = keycode,
+            .ak_index = ak_index - 1,
+        };
+        advanced_key_process(&ak_event);
+      }
+    }
+  }
+}
+
 static bool layout_event_should_swap(const layout_event_t *lhs,
                                      const layout_event_t *rhs) {
   if (lhs->event_time != rhs->event_time)
@@ -395,87 +485,9 @@ static bool layout_event_should_swap(const layout_event_t *lhs,
   return lhs->distance > rhs->distance;
 }
 
-void layout_task(void) {
-  static uint32_t last_ak_tick = 0;
-
-  const uint8_t current_layer = layout_get_current_layer();
-  bool has_non_tap_hold_press = false;
-  bool has_non_tap_hold_release = false;
-
-  // Buffer for key press/release events to be sorted by event_time
-  layout_event_t events[NUM_KEYS];
-  uint8_t event_count = 0;
-
-  // First pass: collect key events and process XInput/hold events
-  for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    const key_state_t *k = &key_matrix[i];
-    const bool last_key_press = bitmap_get(key_press_states, i);
-
-    if (current_layer == 0) {
-      // Gamepad key processing only applies to layer 0. We process it first
-      // since the subsequent key processing may be skipped due to the
-      // gamepad options, regardless of whether the transport is XInput or HID.
-      if (CURRENT_PROFILE.gamepad_buttons[i] != GP_BUTTON_NONE) {
-        xinput_process(i);
-
-        if (CURRENT_PROFILE.gamepad_options.gamepad_override) {
-          // If the key is mapped to a gamepad button, and the gamepad override
-          // is enabled, we skip the key processing.
-          bitmap_set(key_press_states, i, k->is_pressed);
-          continue;
-        }
-      }
-
-      if (!CURRENT_PROFILE.gamepad_options.keyboard_enabled) {
-        // If the keyboard is disabled for this profile, we skip the key
-        // processing.
-        bitmap_set(key_press_states, i, k->is_pressed);
-        continue;
-      }
-    }
-
-    if (current_layer == 0 && bitmap_get(key_disabled, i)) {
-      // Only keys in layer 0 can be disabled.
-      bitmap_set(key_press_states, i, k->is_pressed);
-      continue;
-    }
-
-    if (k->is_pressed & !last_key_press) {
-      // Key press event: buffer for sorted processing
-      events[event_count++] = (typeof(events[0])){
-          .key = i,
-          .pressed = true,
-          .event_time = k->event_time,
-          .distance = k->distance,
-      };
-    } else if (!k->is_pressed & last_key_press) {
-      // Key release event: buffer for sorted processing
-      events[event_count++] = (typeof(events[0])){
-          .key = i,
-          .pressed = false,
-          .event_time = k->event_time,
-          .distance = k->distance,
-      };
-    } else if (k->is_pressed) {
-      // Key hold event: process immediately (ordering doesn't matter)
-      const uint8_t keycode = active_keycodes[i];
-      const uint8_t ak_index = active_advanced_keys[i];
-
-      if (ak_index) {
-        advanced_key_event_t ak_event = (advanced_key_event_t){
-            .type = AK_EVENT_TYPE_HOLD,
-            .key = i,
-            .keycode = keycode,
-            .ak_index = ak_index - 1,
-        };
-        advanced_key_process(&ak_event);
-      }
-    }
-  }
-
-  // Sort events by event_time (insertion sort, small N)
+static void layout_sort_events(layout_event_t *events, uint8_t event_count) {
   for (uint8_t i = 1; i < event_count; i++) {
-    typeof(events[0]) tmp = events[i];
+    const layout_event_t tmp = events[i];
     uint8_t j = i;
     while (j > 0 && layout_event_should_swap(&events[j - 1], &tmp)) {
       events[j] = events[j - 1];
@@ -483,82 +495,64 @@ void layout_task(void) {
     }
     events[j] = tmp;
   }
+}
 
-  // Process events in chronological order
+static bool layout_handle_press_event(const layout_event_t *event) {
+  if (advanced_key_combo_process(event->key, true, event->event_time))
+    return false;
+
+  if (!layout_key_is_tap_hold(event->key) && advanced_key_has_undecided()) {
+    layout_buffer_pending_event(event->key, true);
+    return true;
+  }
+
+  return layout_process_key(event->key, true);
+}
+
+static bool layout_handle_release_event(const layout_event_t *event) {
+  if (advanced_key_combo_process(event->key, false, event->event_time))
+    return false;
+
+  if (layout_pending_has_press(event->key)) {
+    layout_buffer_pending_event(event->key, false);
+    return true;
+  }
+
+  return layout_process_key(event->key, false);
+}
+
+static void layout_process_events(const layout_event_t *events,
+                                  uint8_t event_count,
+                                  bool *has_non_tap_hold_press,
+                                  bool *has_non_tap_hold_release) {
   for (uint8_t i = 0; i < event_count; i++) {
-    const uint8_t key = events[i].key;
-    const bool pressed = events[i].pressed;
+    const layout_event_t *event = &events[i];
 
-    if (pressed) {
-      if (advanced_key_combo_process(key, true, events[i].event_time))
-        goto update_event_state;
-
-      // Check if this is a non-hold-tap key and any hold-tap is undecided.
-      // If so, buffer the event instead of processing it immediately.
-      // This prevents keys from being registered before a modifier
-      // (hold) is resolved.
-      const uint8_t current_layer_for_key = layout_get_current_layer();
-      const uint8_t ak_idx = advanced_key_indices[current_layer_for_key][key];
-      const bool is_hold_tap =
-          ak_idx &&
-          CURRENT_PROFILE.advanced_keys[ak_idx - 1].type == AK_TYPE_TAP_HOLD;
-
-      if (!is_hold_tap && advanced_key_has_undecided()) {
-        if (pending_count >= MAX_PENDING_EVENTS) {
-          // Buffer full: force-flush all pending events to make room.
-          // This prevents press/release pair mismatches that cause stuck keys.
-          for (uint8_t p = 0; p < pending_count; p++)
-            layout_process_key(pending_events[p].key,
-                               pending_events[p].pressed);
-          pending_count = 0;
-        }
-        pending_events[pending_count++] =
-            (typeof(pending_events[0])){.key = key, .pressed = true};
-        // Still signal that a non-hold-tap key was pressed so that
-        // advanced_key_tick can set the 'interrupted' flag correctly.
-        has_non_tap_hold_press = true;
-        goto update_event_state;
-      }
-
-      if (layout_process_key(key, true))
-        has_non_tap_hold_press = true;
+    if (event->pressed) {
+      if (layout_handle_press_event(event))
+        *has_non_tap_hold_press = true;
     } else {
-      if (advanced_key_combo_process(key, false, events[i].event_time))
-        goto update_event_state;
-
-      // If this key was buffered as a press, also buffer its release
-      // to maintain correct ordering.
-      bool is_pending = false;
-      for (uint8_t p = 0; p < pending_count; p++) {
-        if (pending_events[p].key == key && pending_events[p].pressed) {
-          is_pending = true;
-          break;
-        }
-      }
-      if (is_pending) {
-        if (pending_count >= MAX_PENDING_EVENTS) {
-          // Buffer full: force-flush all pending events to make room.
-          // Without this, the release would bypass the buffer while its
-          // corresponding press remains buffered, causing the key to get
-          // stuck in the pressed state when the buffer eventually flushes.
-          for (uint8_t p = 0; p < pending_count; p++)
-            layout_process_key(pending_events[p].key,
-                               pending_events[p].pressed);
-          pending_count = 0;
-        }
-        pending_events[pending_count++] =
-            (typeof(pending_events[0])){.key = key, .pressed = false};
-        has_non_tap_hold_release = true;
-        goto update_event_state;
-      }
-
-      if (layout_process_key(key, false))
-        has_non_tap_hold_release = true;
+      if (layout_handle_release_event(event))
+        *has_non_tap_hold_release = true;
     }
 
-  update_event_state:
-    bitmap_set(key_press_states, key, key_matrix[key].is_pressed);
+    bitmap_set(key_press_states, event->key, key_matrix[event->key].is_pressed);
   }
+}
+
+void layout_task(void) {
+  static uint32_t last_ak_tick = 0;
+
+  const uint8_t current_layer = layout_get_current_layer();
+  bool has_non_tap_hold_press = false;
+  bool has_non_tap_hold_release = false;
+  layout_event_t events[NUM_KEYS];
+  uint8_t event_count = 0;
+
+  layout_collect_events(events, &event_count, current_layer);
+  layout_sort_events(events, event_count);
+  layout_process_events(events, event_count, &has_non_tap_hold_press,
+                        &has_non_tap_hold_release);
 
   if (advanced_key_combo_task())
     has_non_tap_hold_press = true;
@@ -572,15 +566,8 @@ void layout_task(void) {
   }
 
   // After tick, if no hold-tap is undecided anymore, flush pending events
-  if (pending_count > 0 && !advanced_key_has_undecided()) {
-    for (uint8_t i = 0; i < pending_count; i++) {
-      if (pending_events[i].pressed)
-        layout_process_key(pending_events[i].key, true);
-      else
-        layout_process_key(pending_events[i].key, false);
-    }
-    pending_count = 0;
-  }
+  if (pending_count > 0 && !advanced_key_has_undecided())
+    layout_flush_pending_events();
 
   hid_send_reports();
 
@@ -608,8 +595,7 @@ static bool layout_set_profile(uint8_t profile) {
     status = EECONFIG_WRITE(last_non_default_profile, &profile);
 
   if (current_profile_written) {
-    layout_reset_runtime_state();
-    layout_apply_current_profile_state();
+    profile_runtime_reload_current();
   }
 
   return status;

@@ -26,6 +26,7 @@
 #include "matrix.h"
 #include "rgb.h"
 #include "tusb.h"
+#include "usb_runtime.h"
 #include "wear_leveling.h"
 #include "xinput.h"
 #include "slider.h"
@@ -34,6 +35,7 @@ int main(void) {
   // Initialize the hardware
   board_init();
   timer_init();
+  usb_runtime_init();
   crc32_init();
   flash_init();
 
@@ -66,7 +68,7 @@ int main(void) {
 
   while (1) {
     tud_task();
-    board_task();
+    usb_runtime_task();
 
     analog_task();
     matrix_scan();

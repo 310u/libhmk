@@ -1,7 +1,7 @@
 #include "slider.h"
 #include "eeconfig.h"
+#include "input_routing.h"
 #include "matrix.h"
-#include "hid.h"
 #include "keycodes.h"
 #include "hardware/hardware.h"
 
@@ -38,14 +38,14 @@ void slider_task(void) {
     // Dispatch one volume step for a sufficiently large analog delta.
     uint8_t threshold = 8;
 
-    hid_keycode_remove(KC_AUDIO_VOL_UP);
-    hid_keycode_remove(KC_AUDIO_VOL_DOWN);
+    input_keyboard_release(KC_AUDIO_VOL_UP);
+    input_keyboard_release(KC_AUDIO_VOL_DOWN);
 
     if (current_val > last_slider_val + threshold) {
-      hid_keycode_add(KC_AUDIO_VOL_UP);
+      input_keyboard_press(KC_AUDIO_VOL_UP);
       last_slider_val = current_val;
     } else if (current_val + threshold < last_slider_val) {
-      hid_keycode_add(KC_AUDIO_VOL_DOWN);
+      input_keyboard_press(KC_AUDIO_VOL_DOWN);
       last_slider_val = current_val;
     }
   } else if (eeconfig->options.slider_mode == 2) { // Gamepad override

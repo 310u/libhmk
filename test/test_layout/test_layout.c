@@ -5,6 +5,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "input_routing.h"
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
@@ -153,7 +154,7 @@ void test_poll_rate_toggle_persists_options_and_resets(void) {
     const uint32_t initial_options = 0x0000120f;
     mock_eeconfig.options.raw = initial_options;
 
-    layout_register(255, SP_POLL_RATE_TOGGLE);
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_POLL_RATE_TOGGLE);
 
     TEST_ASSERT_EQUAL_UINT32(1, wear_leveling_write_count);
     TEST_ASSERT_EQUAL_UINT32(offsetof(eeconfig_t, options), last_write_address);
@@ -167,7 +168,7 @@ void test_poll_rate_toggle_persists_options_and_resets(void) {
 }
 
 void test_profile_switch_resets_runtime_state(void) {
-    layout_register(255, PF(1));
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, PF(1));
 
     TEST_ASSERT_EQUAL_UINT32(2, wear_leveling_write_count);
     TEST_ASSERT_EQUAL_UINT32(1, deferred_action_clear_count);
@@ -218,7 +219,7 @@ void test_rgb_effect_next_persists_and_updates_live_config(void) {
     wear_leveling_write_count = 0;
     rgb_apply_config_count = 0;
 
-    layout_register(255, SP_RGB_EFFECT_NEXT);
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_RGB_EFFECT_NEXT);
 
     TEST_ASSERT_EQUAL_UINT32(1, wear_leveling_write_count);
     TEST_ASSERT_EQUAL_UINT32(
@@ -238,7 +239,7 @@ void test_rgb_effect_prev_wraps_without_hitting_off(void) {
     wear_leveling_write_count = 0;
     rgb_apply_config_count = 0;
 
-    layout_register(255, SP_RGB_EFFECT_PREV);
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_RGB_EFFECT_PREV);
 
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(RGB_EFFECT_MAX - 1), last_write_u32);
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(RGB_EFFECT_MAX - 1),
@@ -251,10 +252,10 @@ void test_rgb_effect_prev_wraps_without_hitting_off(void) {
 void test_joystick_scroll_mo_restores_previous_mode(void) {
     mock_joystick_config.mode = JOYSTICK_MODE_XINPUT_RS;
 
-    layout_register(255, SP_JOY_SCROLL_MO);
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_JOY_SCROLL_MO);
     TEST_ASSERT_EQUAL_UINT8(JOYSTICK_MODE_SCROLL, mock_joystick_config.mode);
 
-    layout_unregister(255, SP_JOY_SCROLL_MO);
+    layout_unregister(INPUT_ROUTING_VIRTUAL_KEY, SP_JOY_SCROLL_MO);
     TEST_ASSERT_EQUAL_UINT8(JOYSTICK_MODE_XINPUT_RS, mock_joystick_config.mode);
 }
 #endif

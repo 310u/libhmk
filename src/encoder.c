@@ -15,8 +15,8 @@
 
 #include "encoder.h"
 
+#include "input_routing.h"
 #include "keycodes.h"
-#include "layout.h"
 
 #if ENCODER_NUM == 0
 
@@ -294,17 +294,17 @@ static bool encoder_queue_pop(uint8_t *keycode) {
 
 static void encoder_output_press(uint8_t output) {
 #if defined(ENCODER_CW_KEYS)
-  (void)layout_process_key(output, true);
+  (void)input_key_press(output);
 #else
-  layout_register(255, output);
+  input_keycode_press(output);
 #endif
 }
 
 static void encoder_output_release(uint8_t output) {
 #if defined(ENCODER_CW_KEYS)
-  (void)layout_process_key(output, false);
+  (void)input_key_release(output);
 #else
-  layout_unregister(255, output);
+  input_keycode_release(output);
 #endif
 }
 

@@ -21,7 +21,7 @@
 // Analog Configuration
 //--------------------------------------------------------------------+
 
-// Maximum ADC value
+// Maximum sampled analog value.
 #define ADC_MAX_VALUE ((1 << ADC_RESOLUTION) - 1)
 
 #if !defined(ADC_NUM_MUX_INPUTS)
@@ -113,9 +113,10 @@ _Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
 /**
  * @brief Initialize the analog module
  *
- * This function should initialize the ADC peripheral and any other peripherals
- * needed to scan the keys. In a non-blocking implementation, this function
- * can be used to start the ADC conversion loop.
+ * This function should initialize the analog sampling backend and any other
+ * peripherals needed to scan the keys. This may be the MCU ADC, or an external
+ * converter such as an SPI ADC. In a non-blocking implementation, this
+ * function can be used to start the conversion loop.
  *
  * @return None
  */
@@ -124,8 +125,8 @@ void analog_init(void);
 /**
  * @brief Analog task
  *
- * This function will be called before reading the ADC values. In a blocking
- * implementation, this function can be used to start and wait for the ADC
+ * This function will be called before reading the sampled values. In a
+ * blocking implementation, this function can be used to start and wait for a
  * conversion to complete.
  *
  * @return None
@@ -133,21 +134,21 @@ void analog_init(void);
 void analog_task(void);
 
 /**
- * @brief Read the raw ADC value of the specified key
+ * @brief Read the raw sampled value of the specified key
  *
  * @param key Key index
  *
- * @return Raw ADC value
+ * @return Raw sampled value
  */
 uint16_t analog_read(uint8_t key);
 
 #if ADC_NUM_RAW_INPUTS > 0
 /**
- * @brief Read the raw ADC value of the specified raw input index
+ * @brief Read the raw sampled value of the specified raw input index
  *
  * @param index Raw input index
  *
- * @return Raw ADC value
+ * @return Raw sampled value
  */
 uint16_t analog_read_raw(uint8_t index);
 #endif

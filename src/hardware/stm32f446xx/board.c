@@ -17,7 +17,6 @@
 
 #include "stm32f4xx_hal.h"
 #include "tusb.h"
-#include "usb_runtime.h"
 
 /**
  * @brief Initialize the clock
@@ -156,15 +155,12 @@ void board_init(void) {
 
   board_clock_init();
   board_usb_init();
-  usb_runtime_init();
 
   // Enable cycle counter
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
   DWT->CYCCNT = 0;
 }
-
-void board_task(void) { usb_runtime_task(); }
 
 void board_error_handler(void) {
   __disable_irq();
@@ -212,16 +208,3 @@ void SysTick_Handler(void) { HAL_IncTick(); }
 void OTG_FS_IRQHandler(void) { tud_int_handler(0); }
 
 void OTG_HS_IRQHandler(void) { tud_int_handler(1); }
-
-//--------------------------------------------------------------------+
-// TinyUSB Callbacks
-//--------------------------------------------------------------------+
-
-void tud_mount_cb(void) { usb_runtime_mount(); }
-
-void tud_suspend_cb(bool remote_wakeup_en) {
-  (void)remote_wakeup_en;
-  usb_runtime_suspend();
-}
-
-void tud_resume_cb(void) { usb_runtime_resume(); }

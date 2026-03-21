@@ -43,7 +43,7 @@ typedef enum {
 typedef struct {
   // Action to perform
   uint8_t type;
-  // Key index
+  // Key index, or INPUT_ROUTING_VIRTUAL_KEY for synthetic keycodes
   uint8_t key;
   // Keycode associated with the action
   uint8_t keycode;

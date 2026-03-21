@@ -3,9 +3,9 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "input_routing.h"
 #include "joystick.h"
 #include "keycodes.h"
-#include "layout.h"
 #include "wear_leveling.h"
 
 #if defined(JOYSTICK_ENABLED)
@@ -115,9 +115,9 @@ static uint8_t joystick_abs_i8(int8_t value) {
 
 static void joystick_cursor_set_key(bool active, uint8_t keycode) {
   if (active) {
-    hid_keycode_add(keycode);
+    input_keyboard_press(keycode);
   } else {
-    hid_keycode_remove(keycode);
+    input_keyboard_release(keycode);
   }
 }
 
@@ -355,6 +355,176 @@ static uint8_t joystick_effective_mouse_acceleration(uint8_t raw) {
   return raw == 0u ? JOYSTICK_MOUSE_ACCELERATION_DEFAULT : raw;
 }
 
+static bool joystick_switch_pressed(void);
+
+static void joystick_release_mouse_buttons(void) {
+  if (mouse_switch_reported) {
+    hid_mouse_move(0, 0, 0);
+    mouse_switch_reported = false;
+  }
+}
+
+static void joystick_release_cursor_keys(void) {
+  if (cursor_key_mask_reported != 0u) {
+    joystick_cursor_update_keys(0u);
+  }
+}
+
+static void joystick_reset_signal_state(void) {
+  current_state.raw_x = 0;
+  current_state.raw_y = 0;
+  current_state.out_x = 0;
+  current_state.out_y = 0;
+  current_state.sw = false;
+  filtered_x = 0;
+  filtered_y = 0;
+  sw_raw = false;
+  sw_debounced = false;
+  sw_last_change_tick = 0;
+}
+
+static void joystick_reset_output_state(void) {
+  last_mouse_tick = timer_read();
+  mouse_accum_x = 0;
+  mouse_accum_y = 0;
+  scroll_accum_x = 0;
+  scroll_accum_y = 0;
+  mouse_switch_reported = false;
+  cursor_key_mask_reported = 0;
+}
+
+static void joystick_update_switch_state(void) {
+  const bool sw_current = joystick_switch_pressed();
+  if (sw_current != sw_raw) {
+    sw_raw = sw_current;
+    sw_last_change_tick = timer_read();
+  }
+
+  if (config_cache.sw_debounce_ms == 0) {
+    sw_debounced = sw_raw;
+  } else if (timer_elapsed(sw_last_change_tick) >=
+             (uint32_t)config_cache.sw_debounce_ms) {
+    sw_debounced = sw_raw;
+  }
+
+  current_state.sw = sw_debounced;
+}
+
+static void joystick_update_signal_state(void) {
+  const uint16_t x_raw = analog_read_raw(JOYSTICK_X_ADC_INDEX);
+  const uint16_t y_raw = analog_read_raw(JOYSTICK_Y_ADC_INDEX);
+  current_state.raw_x = x_raw;
+  current_state.raw_y = y_raw;
+  filtered_x = joystick_filter_adc(filtered_x, x_raw);
+  filtered_y = joystick_filter_adc(filtered_y, y_raw);
+
+  joystick_update_switch_state();
+
+  current_state.out_x = apply_calibration(filtered_x, &config_cache.x);
+  current_state.out_y = apply_calibration(filtered_y, &config_cache.y);
+  joystick_apply_radial_deadzone(&current_state.out_x, &current_state.out_y,
+                                 config_cache.deadzone);
+}
+
+static void joystick_apply_sniper_scaling(int32_t *dx_fp, int32_t *dy_fp) {
+  if (is_sniper_active) {
+    *dx_fp = (*dx_fp * eeconfig->options.sniper_mode_multiplier) / 255;
+    *dy_fp = (*dy_fp * eeconfig->options.sniper_mode_multiplier) / 255;
+  }
+}
+
+static void joystick_compute_pointer_delta(int32_t *dx_fp, int32_t *dy_fp,
+                                           uint8_t acceleration,
+                                           int32_t divisor) {
+  const uint16_t magnitude =
+      joystick_vector_length(current_state.out_x, current_state.out_y);
+  *dx_fp = 0;
+  *dy_fp = 0;
+
+  if (magnitude == 0u) {
+    return;
+  }
+
+  const int32_t delta_fp = joystick_vector_delta_fp(
+      magnitude, config_cache.mouse_speed, acceleration, divisor);
+  *dx_fp = ((int32_t)current_state.out_x * delta_fp) / (int32_t)magnitude;
+  *dy_fp = ((int32_t)current_state.out_y * delta_fp) / (int32_t)magnitude;
+  joystick_apply_sniper_scaling(dx_fp, dy_fp);
+}
+
+static bool joystick_pointer_output_active(bool sw_mouse_button) {
+  return current_state.out_x != 0 || current_state.out_y != 0 ||
+         sw_mouse_button || mouse_switch_reported;
+}
+
+static void joystick_task_mouse_mode(uint32_t tick) {
+  if (timer_elapsed(last_mouse_tick) < JOYSTICK_MOUSE_REPORT_INTERVAL_MS) {
+    return;
+  }
+
+  const bool sw_mouse_button = joystick_sw_sends_mouse_button() && current_state.sw;
+  if (joystick_pointer_output_active(sw_mouse_button)) {
+    const uint8_t acceleration =
+        joystick_effective_mouse_acceleration(config_cache.mouse_acceleration);
+    int32_t dx_fp = 0;
+    int32_t dy_fp = 0;
+    joystick_compute_pointer_delta(&dx_fp, &dy_fp, acceleration,
+                                   JOYSTICK_MOUSE_DIVISOR);
+
+    mouse_accum_x += dx_fp;
+    mouse_accum_y -= dy_fp;
+
+    const int8_t dx = joystick_consume_mouse_accum(&mouse_accum_x);
+    const int8_t dy = joystick_consume_mouse_accum(&mouse_accum_y);
+
+    uint8_t buttons = 0;
+    if (sw_mouse_button)
+      buttons |= 1u;
+
+    hid_mouse_move(dx, dy, buttons);
+    mouse_switch_reported = buttons != 0u;
+  }
+
+  last_mouse_tick = tick;
+}
+
+static void joystick_task_scroll_mode(uint32_t tick) {
+  if (timer_elapsed(last_mouse_tick) < JOYSTICK_SCROLL_REPORT_INTERVAL_MS) {
+    return;
+  }
+
+  const bool sw_mouse_button = joystick_sw_sends_mouse_button() && current_state.sw;
+  if (joystick_pointer_output_active(sw_mouse_button)) {
+    int32_t dx_fp = 0;
+    int32_t dy_fp = 0;
+    joystick_compute_pointer_delta(&dx_fp, &dy_fp,
+                                   JOYSTICK_MOUSE_ACCELERATION_DEFAULT,
+                                   JOYSTICK_SCROLL_DIVISOR);
+
+    scroll_accum_x += dx_fp;
+    scroll_accum_y += dy_fp;
+
+    const int8_t pan = joystick_consume_mouse_accum(&scroll_accum_x);
+    const int8_t wheel = joystick_consume_mouse_accum(&scroll_accum_y);
+
+    uint8_t buttons = 0;
+    if (sw_mouse_button)
+      buttons |= 1u;
+
+    hid_mouse_scroll(wheel, pan, buttons);
+    mouse_switch_reported = buttons != 0u;
+  }
+
+  last_mouse_tick = tick;
+}
+
+static void joystick_task_cursor_mode(void) {
+  const uint8_t next_mask =
+      joystick_cursor_compute_mask(current_state.out_x, current_state.out_y,
+                                   config_cache.mode == JOYSTICK_MODE_CURSOR_8);
+  joystick_cursor_update_keys(next_mask);
+}
+
 static void joystick_init_switch_pin(void) {
 #if defined(JOYSTICK_GPIO_BACKEND_AT32)
   gpio_init_type gpio_init_struct;
@@ -391,26 +561,8 @@ void joystick_init(void) {
   // Initial load of config cache
   config_cache = eeconfig != NULL ? CURRENT_PROFILE.joystick_config
                                   : joystick_default_config();
-
-  // Reset state
-  current_state.raw_x = 0;
-  current_state.raw_y = 0;
-  current_state.out_x = 0;
-  current_state.out_y = 0;
-  current_state.sw = false;
-  filtered_x = 0;
-  filtered_y = 0;
-
-  // Initialize debounce state
-  sw_raw = false;
-  sw_debounced = false;
-  sw_last_change_tick = 0;
-  last_mouse_tick = timer_read();
-  mouse_accum_x = 0;
-  mouse_accum_y = 0;
-  scroll_accum_x = 0;
-  scroll_accum_y = 0;
-  cursor_key_mask_reported = 0;
+  joystick_reset_signal_state();
+  joystick_reset_output_state();
 }
 
 // Global state getters/setters
@@ -422,13 +574,12 @@ void joystick_apply_config(joystick_config_t config) {
 
   if ((prev_mode == JOYSTICK_MODE_MOUSE || prev_mode == JOYSTICK_MODE_SCROLL) &&
       prev_mode != config.mode && mouse_switch_reported) {
-    hid_mouse_move(0, 0, 0);
-    mouse_switch_reported = false;
+    joystick_release_mouse_buttons();
   }
 
   if (joystick_mode_is_cursor(prev_mode) && prev_mode != config.mode &&
       cursor_key_mask_reported != 0u) {
-    joystick_cursor_update_keys(0u);
+    joystick_release_cursor_keys();
   }
 }
 
@@ -445,132 +596,16 @@ void joystick_set_config(joystick_config_t config) {
 joystick_state_t joystick_get_state(void) { return current_state; }
 
 void joystick_task(void) {
-  // Read raw ADC values
-  uint16_t x_raw = analog_read_raw(JOYSTICK_X_ADC_INDEX);
-  uint16_t y_raw = analog_read_raw(JOYSTICK_Y_ADC_INDEX);
-  current_state.raw_x = x_raw;
-  current_state.raw_y = y_raw;
-  filtered_x = joystick_filter_adc(filtered_x, x_raw);
-  filtered_y = joystick_filter_adc(filtered_y, y_raw);
-  // Read push switch with debounce
-  bool sw_current = joystick_switch_pressed();
-  if (sw_current != sw_raw) {
-    sw_raw = sw_current;
-    sw_last_change_tick = timer_read();
-  }
-  if (config_cache.sw_debounce_ms == 0) {
-    // Debounce disabled
-    sw_debounced = sw_raw;
-  } else if (timer_elapsed(sw_last_change_tick) >=
-             (uint32_t)config_cache.sw_debounce_ms) {
-    sw_debounced = sw_raw;
-  }
-  current_state.sw = sw_debounced;
+  joystick_update_signal_state();
 
-  // Apply calibration
-  current_state.out_x = apply_calibration(filtered_x, &config_cache.x);
-  current_state.out_y = apply_calibration(filtered_y, &config_cache.y);
-  joystick_apply_radial_deadzone(&current_state.out_x, &current_state.out_y,
-                                 config_cache.deadzone);
-
-  // Handle Output Modes
-  // XInput modes are handled directly by xinput.c querying joystick_get_state()
-
-  // Mouse mode
   if (config_cache.mode == JOYSTICK_MODE_MOUSE) {
-    // Needs a tick pacing mechanism so it doesn't slam the host with max speed
-    // HID reports
-    uint32_t tick = timer_read();
-    if (timer_elapsed(last_mouse_tick) >= JOYSTICK_MOUSE_REPORT_INTERVAL_MS) {
-      const bool sw_mouse_button =
-          joystick_sw_sends_mouse_button() && current_state.sw;
-      if (current_state.out_x != 0 || current_state.out_y != 0 ||
-          sw_mouse_button || mouse_switch_reported) {
-        uint8_t acceleration = joystick_effective_mouse_acceleration(
-            config_cache.mouse_acceleration);
-        uint16_t magnitude =
-            joystick_vector_length(current_state.out_x, current_state.out_y);
-        int32_t dx_fp = 0;
-        int32_t dy_fp = 0;
-        if (magnitude != 0u) {
-          int32_t delta_fp =
-              joystick_vector_delta_fp(magnitude, config_cache.mouse_speed,
-                                       acceleration, JOYSTICK_MOUSE_DIVISOR);
-          dx_fp =
-              ((int32_t)current_state.out_x * delta_fp) / (int32_t)magnitude;
-          dy_fp =
-              ((int32_t)current_state.out_y * delta_fp) / (int32_t)magnitude;
-        }
-
-        if (is_sniper_active) {
-          dx_fp = (dx_fp * eeconfig->options.sniper_mode_multiplier) / 255;
-          dy_fp = (dy_fp * eeconfig->options.sniper_mode_multiplier) / 255;
-        }
-
-        mouse_accum_x += dx_fp;
-        mouse_accum_y -= dy_fp; // Up should be negative Y in mouse coordinates.
-
-        int8_t dx = joystick_consume_mouse_accum(&mouse_accum_x);
-        int8_t dy = joystick_consume_mouse_accum(&mouse_accum_y);
-
-        // For some reason Y axis might be inverted depending on hardware
-        // orientation, adjust here if needed
-        uint8_t buttons = 0;
-        if (sw_mouse_button)
-          buttons |= 1; // Left click
-
-        hid_mouse_move(dx, dy, buttons);
-        mouse_switch_reported = buttons != 0;
-      }
-      last_mouse_tick = tick;
-    }
+    joystick_task_mouse_mode(timer_read());
   } else if (config_cache.mode == JOYSTICK_MODE_SCROLL) {
-    uint32_t tick = timer_read();
-    if (timer_elapsed(last_mouse_tick) >= JOYSTICK_SCROLL_REPORT_INTERVAL_MS) {
-      const bool sw_mouse_button =
-          joystick_sw_sends_mouse_button() && current_state.sw;
-      if (current_state.out_x != 0 || current_state.out_y != 0 ||
-          sw_mouse_button || mouse_switch_reported) {
-        uint16_t magnitude =
-            joystick_vector_length(current_state.out_x, current_state.out_y);
-        int32_t dx_fp = 0;
-        int32_t dy_fp = 0;
-        if (magnitude != 0u) {
-          int32_t delta_fp = joystick_vector_delta_fp(
-              magnitude, config_cache.mouse_speed,
-              JOYSTICK_MOUSE_ACCELERATION_DEFAULT, JOYSTICK_SCROLL_DIVISOR);
-          dx_fp =
-              ((int32_t)current_state.out_x * delta_fp) / (int32_t)magnitude;
-          dy_fp =
-              ((int32_t)current_state.out_y * delta_fp) / (int32_t)magnitude;
-        }
-
-        if (is_sniper_active) {
-          dx_fp = (dx_fp * eeconfig->options.sniper_mode_multiplier) / 255;
-          dy_fp = (dy_fp * eeconfig->options.sniper_mode_multiplier) / 255;
-        }
-
-        scroll_accum_x += dx_fp;
-        scroll_accum_y += dy_fp;
-
-        int8_t pan = joystick_consume_mouse_accum(&scroll_accum_x);
-        int8_t wheel = joystick_consume_mouse_accum(&scroll_accum_y);
-
-        uint8_t buttons = 0;
-        if (sw_mouse_button)
-          buttons |= 1;
-        hid_mouse_scroll(wheel, pan, buttons);
-        mouse_switch_reported = buttons != 0;
-      }
-      last_mouse_tick = tick;
-    }
+    joystick_task_scroll_mode(timer_read());
   } else if (joystick_mode_is_cursor(config_cache.mode)) {
-    const uint8_t next_mask =
-        joystick_cursor_compute_mask(current_state.out_x, current_state.out_y,
-                                     config_cache.mode == JOYSTICK_MODE_CURSOR_8);
-    joystick_cursor_update_keys(next_mask);
-  } else if (cursor_key_mask_reported != 0u) {
-    joystick_cursor_update_keys(0u);
+    joystick_task_cursor_mode();
+  } else {
+    joystick_release_cursor_keys();
   }
 }
 
