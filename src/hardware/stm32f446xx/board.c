@@ -15,36 +15,9 @@
 
 #include "hardware/hardware.h"
 
-#include "hid.h"
 #include "stm32f4xx_hal.h"
 #include "tusb.h"
-#include "xinput.h"
-
-#define USB_RESUME_RECOVERY_THRESHOLD_MS 5000u
-#define USB_RESUME_RECOVERY_DISCONNECT_MS 20u
-
-typedef struct {
-  bool suspend_observed;
-  bool reconnect_pending;
-  bool disconnected;
-  uint32_t suspend_start_ms;
-  uint32_t disconnect_start_ms;
-} usb_resume_recovery_state_t;
-
-static usb_resume_recovery_state_t usb_resume_recovery;
-
-static void usb_runtime_resync(void);
-
-static void usb_resume_recovery_reset(void) {
-  usb_resume_recovery.suspend_observed = false;
-  usb_resume_recovery.reconnect_pending = false;
-  usb_resume_recovery.disconnected = false;
-}
-
-static void usb_runtime_resync(void) {
-  hid_clear_runtime_state();
-  xinput_reset_runtime_state();
-}
+#include "usb_runtime.h"
 
 /**
  * @brief Initialize the clock
@@ -183,7 +156,7 @@ void board_init(void) {
 
   board_clock_init();
   board_usb_init();
-  usb_resume_recovery_reset();
+  usb_runtime_init();
 
   // Enable cycle counter
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
@@ -191,29 +164,7 @@ void board_init(void) {
   DWT->CYCCNT = 0;
 }
 
-void board_task(void) {
-  if (usb_resume_recovery.reconnect_pending) {
-    usb_resume_recovery.reconnect_pending = false;
-    usb_resume_recovery.disconnected = true;
-    usb_resume_recovery.disconnect_start_ms = timer_read();
-
-    usb_runtime_resync();
-    (void)tud_disconnect();
-    return;
-  }
-
-  if (!usb_resume_recovery.disconnected) {
-    return;
-  }
-
-  if (timer_elapsed(usb_resume_recovery.disconnect_start_ms) <
-      USB_RESUME_RECOVERY_DISCONNECT_MS) {
-    return;
-  }
-
-  usb_resume_recovery.disconnected = false;
-  (void)tud_connect();
-}
+void board_task(void) { usb_runtime_task(); }
 
 void board_error_handler(void) {
   __disable_irq();
@@ -266,24 +217,11 @@ void OTG_HS_IRQHandler(void) { tud_int_handler(1); }
 // TinyUSB Callbacks
 //--------------------------------------------------------------------+
 
-void tud_mount_cb(void) {
-  usb_resume_recovery_reset();
-  usb_runtime_resync();
-}
+void tud_mount_cb(void) { usb_runtime_mount(); }
 
 void tud_suspend_cb(bool remote_wakeup_en) {
   (void)remote_wakeup_en;
-  usb_resume_recovery.suspend_observed = true;
-  usb_resume_recovery.suspend_start_ms = timer_read();
+  usb_runtime_suspend();
 }
 
-void tud_resume_cb(void) {
-  if (usb_resume_recovery.suspend_observed &&
-      timer_elapsed(usb_resume_recovery.suspend_start_ms) >=
-          USB_RESUME_RECOVERY_THRESHOLD_MS) {
-    usb_resume_recovery.reconnect_pending = true;
-  }
-
-  usb_resume_recovery.suspend_observed = false;
-  usb_runtime_resync();
-}
+void tud_resume_cb(void) { usb_runtime_resume(); }
