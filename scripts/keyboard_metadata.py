@@ -19,10 +19,19 @@ def build_keyboard_metadata(kb_json: dict, driver):
     analog_keys = set()
     analog = kb_json.get("analog", {})
     mux = analog.get("mux", {})
+
+    def add_analog_key(key):
+        if isinstance(key, int) and 1 <= key <= num_keys:
+            analog_keys.add(key - 1)
+
     for row in mux.get("matrix", []):
         for key in row:
-            if isinstance(key, int) and 0 <= key < num_keys:
-                analog_keys.add(key)
+            add_analog_key(key)
+
+    raw = analog.get("raw", {})
+    for key in raw.get("vector", []):
+        add_analog_key(key)
+
     analog_keys = sorted(analog_keys)
 
     led_map = []
