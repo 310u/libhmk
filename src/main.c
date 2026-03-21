@@ -66,6 +66,7 @@ int main(void) {
 
   while (1) {
     tud_task();
+    board_task();
 
     analog_task();
     matrix_scan();
