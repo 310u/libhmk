@@ -79,18 +79,31 @@ build_flags.define("USB_VENDOR_ID", kb_json["usb"]["vid"])
 build_flags.define("USB_PRODUCT_ID", kb_json["usb"]["pid"])
 
 # Analog Configuration
+analog = kb_json["analog"]
+analog_backend = analog.get("backend", "mcu_adc")
+
+match analog_backend:
+    case "mcu_adc":
+        build_flags.define("ANALOG_BACKEND_MCU_ADC")
+    case "spi_adc":
+        raise ValueError(
+            "analog.backend='spi_adc' is reserved for future external SPI ADC support and is not implemented yet"
+        )
+    case _:
+        raise ValueError(f"Unsupported analog backend: {analog_backend}")
+
 build_flags.define("ADC_NUM_CHANNELS", len(driver.metadata.adc.input_pins))
 build_flags.define("ADC_RESOLUTION", utils.get_adc_resolution(kb_json, driver))
 
-if kb_json["analog"].get("invert_adc", False):
+if analog.get("invert_adc", False):
     build_flags.define("MATRIX_INVERT_ADC_VALUES")
 
-if "delay" in kb_json["analog"]:
-    build_flags.define("ADC_SAMPLE_DELAY", kb_json["analog"]["delay"])
+if "delay" in analog:
+    build_flags.define("ADC_SAMPLE_DELAY", analog["delay"])
 
 # Raw ADC Input Configuration
-if "raw" in kb_json["analog"]:
-    raw = kb_json["analog"]["raw"]
+if "raw" in analog:
+    raw = analog["raw"]
 
     build_flags.define("ADC_NUM_RAW_INPUTS", len(raw["input"]))
     build_flags.define(
@@ -100,8 +113,8 @@ if "raw" in kb_json["analog"]:
     build_flags.define("ADC_RAW_INPUT_VECTOR", utils.to_c_array(raw["vector"]))
 
 # Analog Multiplexer ADC Input Configuration
-if "mux" in kb_json["analog"]:
-    mux = kb_json["analog"]["mux"]
+if "mux" in analog:
+    mux = analog["mux"]
 
     build_flags.define("ADC_NUM_MUX_INPUTS", len(mux["input"]))
     build_flags.define(

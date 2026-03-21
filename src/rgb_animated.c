@@ -43,6 +43,22 @@ static uint8_t abs_diff_u8(uint8_t a, uint8_t b) {
     return (a > b) ? (a - b) : (b - a);
 }
 
+void rgb_animated_reset(void) {
+    random_state = 0x12345678;
+    memset(pixel_flow_state, 0, sizeof(pixel_flow_state));
+    memset(pixel_fractal_state, 0, sizeof(pixel_fractal_state));
+    memset(digital_rain_state, 0, sizeof(digital_rain_state));
+    memset(digital_rain_col_x, 0, sizeof(digital_rain_col_x));
+    memset(digital_rain_led_col, 0, sizeof(digital_rain_led_col));
+    digital_rain_col_count = 0;
+    pixel_rain_index = 0;
+    pixel_flow_wait = 0;
+    pixel_fractal_wait = 0;
+    pixel_rain_wait = 0;
+    digital_rain_drop = 0;
+    digital_rain_decay = 0;
+}
+
 static void digital_rain_build_columns(void) {
     digital_rain_col_count = 0;
     for (uint8_t i = 0; i < NUM_LEDS; i++) {

@@ -161,6 +161,8 @@ To develop a new keyboard, create a new directory under `keyboards/` with your k
 
 For a step-by-step guide on creating a new keyboard definition, see the [New Keyboard Setup Guide](docs/new_keyboard_setup.md).
 
+For a short overview of the current runtime boundaries, see [Runtime Architecture Notes](docs/runtime_architecture.md). This is the quickest reference for where input routing, profile reloads, USB runtime behavior, and future analog backend work should live.
+
 You can use an existing keyboard implementation as a reference. If your keyboard hardware isn't currently supported by the firmware, you'll need to implement the necessary drivers and features. See the [Porting](#porting) section for more details.
 
 ## Porting

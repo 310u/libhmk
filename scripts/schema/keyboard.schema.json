@@ -76,6 +76,11 @@
       "type": "object",
       "description": "Analog configuration",
       "properties": {
+        "backend": {
+          "enum": ["mcu_adc", "spi_adc"],
+          "default": "mcu_adc",
+          "description": "Analog sampling backend. `mcu_adc` uses the MCU's built-in ADC. `spi_adc` is reserved for future external SPI ADC support and is not implemented yet."
+        },
         "adc_resolution": {
           "type": "integer",
           "description": "ADC resolution for this keyboard. A higher value means higher accuracy but slower matrix scans. Default to the maximum resolution supported by the MCU if not provided."

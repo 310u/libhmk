@@ -117,6 +117,8 @@ static bool v1_D_profile_config_func(uint8_t profile, uint8_t *dst,
 static bool v1_E_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_E_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
+static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
+                                     uint32_t old_size, uint32_t new_size);
 
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
@@ -256,22 +258,32 @@ bool migration_try_migrate(void) {
 
     const uint8_t *src = bufs[current_buf];
     uint8_t *dst = bufs[current_buf ^ 1];
+    memset(dst, 0, sizeof(bufs[0]));
 
-    if (m->global_config_func && !m->global_config_func(dst, src))
-      // Migration failed for the global configuration
-      return false;
+    if (m->global_config_func) {
+      if (!m->global_config_func(dst, src))
+        // Migration failed for the global configuration
+        return false;
+    } else {
+      migration_copy_unchanged(dst, src, prev_m->global_config_size,
+                               m->global_config_size);
+    }
 
-    if (m->profile_config_func) {
-      for (uint8_t p = 0; p < NUM_PROFILES; p++) {
-        // Move the pointers to the start of each profile configuration
-        const uint8_t *profile_src =
-            src + prev_m->global_config_size + p * prev_m->profile_config_size;
-        uint8_t *profile_dst =
-            dst + m->global_config_size + p * m->profile_config_size;
+    for (uint8_t p = 0; p < NUM_PROFILES; p++) {
+      // Move the pointers to the start of each profile configuration
+      const uint8_t *profile_src =
+          src + prev_m->global_config_size + p * prev_m->profile_config_size;
+      uint8_t *profile_dst =
+          dst + m->global_config_size + p * m->profile_config_size;
 
+      if (m->profile_config_func) {
         if (!m->profile_config_func(p, profile_dst, profile_src))
           // Migration failed for the profile configuration
           return false;
+      } else {
+        migration_copy_unchanged(profile_dst, profile_src,
+                                 prev_m->profile_config_size,
+                                 m->profile_config_size);
       }
     }
 
@@ -300,6 +312,15 @@ static void migration_memcpy(uint8_t **dst, const uint8_t **src, uint32_t len) {
 static void migration_memset(uint8_t **dst, uint8_t value, uint32_t len) {
   memset(*dst, value, len);
   *dst += len;
+}
+
+static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
+                                     uint32_t old_size, uint32_t new_size) {
+  const uint32_t common_size = M_MIN(old_size, new_size);
+  memcpy(dst, src, common_size);
+  if (new_size > common_size) {
+    memset(dst + common_size, 0, new_size - common_size);
+  }
 }
 
 #define MAKE_MIGRATION_ASSIGN(type)                                            \

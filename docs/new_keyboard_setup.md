@@ -24,6 +24,7 @@ The `keyboard.json` file is the heart of your keyboard definition. It defines th
 - **`usb`**: Set your Vendor ID (VID), Product ID (PID), and USB speed (`fs` for Full Speed, `hs` for High Speed).
 - **`hardware`**: Specify the MCU driver. Current in-tree drivers are `at32f405xx` and `stm32f446xx`.
 - **`analog`**: Configure the scanning matrix.
+    - `backend`: Select the analog sampling backend. Use `mcu_adc` for current in-tree keyboards. `spi_adc` is reserved for future external ADC support and is not implemented yet.
     - `mux`: Define multiplexer select pins and input pins.
     - `matrix`: A 2D array mapping matrix intersections to physical key numbers.
 - **`digital`**: (Optional) Configure direct GPIO-backed switch inputs.
@@ -35,6 +36,9 @@ Refer to [`keyboards/mochiko39he/keyboard.json`](../keyboards/mochiko39he/keyboa
 
 > [!IMPORTANT]
 > `analog.mux.matrix`, `analog.raw.vector`, and `digital.vector` use 1-based physical key numbers, with `0` meaning "not connected". In contrast, `layout.key` and default keymaps use 0-based key indices.
+
+> [!NOTE]
+> `analog.backend` is optional and defaults to `mcu_adc`. The `spi_adc` value is accepted by the schema as a reserved future option, but the firmware currently rejects it at build time because the SPI ADC backend has not been implemented yet.
 
 Example direct digital switch configuration:
 ```json

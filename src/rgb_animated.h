@@ -11,6 +11,7 @@ typedef struct {
     bool effect_changed;
 } rgb_animated_context_t;
 
+void rgb_animated_reset(void);
 void rgb_animated_render(rgb_effect_t effect,
                          const rgb_animated_context_t *context);
 
