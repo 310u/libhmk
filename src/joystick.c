@@ -6,6 +6,13 @@
 #include "input_routing.h"
 #include "joystick.h"
 #include "keycodes.h"
+#include "eeconfig.h"
+#include "hardware/hardware.h"
+#include "hid.h"
+#include "input_routing.h"
+#include "joystick.h"
+#include "keycodes.h"
+#include "lib/usqrt.h"
 #include "wear_leveling.h"
 
 #if defined(JOYSTICK_ENABLED)
@@ -247,7 +254,7 @@ static int8_t apply_calibration(uint16_t raw_val,
 static uint16_t joystick_vector_length(int8_t x, int8_t y) {
   int16_t x16 = x;
   int16_t y16 = y;
-  return (uint16_t)lroundf(sqrtf((float)(x16 * x16 + y16 * y16)));
+  return usqrt16((uint16_t)(x16 * x16 + y16 * y16));
 }
 
 static int8_t joystick_clamp_i16_to_i8(int16_t value) {

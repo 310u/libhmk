@@ -74,7 +74,7 @@
 #endif
 
 _Static_assert(1 <= NUM_PROFILES && NUM_PROFILES <= 8,
-               "NUM_PROFILES must be between 1 and 16");
+               "NUM_PROFILES must be between 1 and 8");
 
 #if !defined(NUM_LAYERS)
 #error "NUM_LAYERS is not defined"
@@ -313,6 +313,13 @@ typedef enum {
   GP_BUTTON_RT,
 } gamepad_button_t;
 
+// SOCD (Simultaneous Opposite Cardinal Direction) Mode
+typedef enum {
+  SOCD_NEUTRAL = 0,
+  SOCD_LAST_INPUT,
+  SOCD_FIRST_INPUT
+} socd_mode_t;
+
 // Gamepad options configuration
 typedef struct __attribute__((packed)) {
   // 4 points that define the analog curve, representing the relationship
@@ -330,8 +337,10 @@ typedef struct __attribute__((packed)) {
       // Whether to use the maximum value of opposite axes for the joystick
       // output instead of combining them
       bool snappy_joystick : 1;
+      // SOCD cleaning mode
+      uint8_t socd_mode : 2;
       // Reserved bits for future use
-      uint8_t reserved : 4;
+      uint8_t reserved : 2;
     };
     uint8_t options;
   };

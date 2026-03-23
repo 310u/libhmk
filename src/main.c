@@ -82,6 +82,10 @@ int main(void) {
 #endif
     slider_task();
     xinput_task();
+    command_task();
+#if defined(__arm__)
+    __asm__ volatile ("wfi");
+#endif
   }
 
   return 0;

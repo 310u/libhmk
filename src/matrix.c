@@ -257,8 +257,8 @@ void matrix_scan(void) {
     // layout_task to process key events in chronological order instead of
     // preventing key input swapping on simultaneous presses.
     if (state->is_pressed != was_pressed) {
-      state->event_time = timer_read();
-      matrix_last_activity_time = timer_read();
+      state->event_time = scan_time;
+      matrix_last_activity_time = scan_time;
 #if defined(RGB_ENABLED)
       if (state->is_pressed) {
         rgb_matrix_record_keypress(i);

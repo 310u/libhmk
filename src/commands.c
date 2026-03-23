@@ -34,6 +34,8 @@
   }
 
 static uint8_t out_buf[RAW_HID_EP_SIZE];
+static uint8_t pending_response[RAW_HID_EP_SIZE];
+static bool has_pending_response = false;
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
 static bool command_validate_gamepad_options(
@@ -457,8 +459,13 @@ void command_process(const uint8_t *buf) {
   // Echo the command ID back to the host if successful
   out->command_id = success ? in->command_id : COMMAND_UNKNOWN;
 
-  while (!tud_hid_n_ready(USB_ITF_RAW_HID))
-    // Wait for the raw HID interface to be ready
-    tud_task();
-  tud_hid_n_report(USB_ITF_RAW_HID, 0, out_buf, RAW_HID_EP_SIZE);
+  memcpy(pending_response, out_buf, RAW_HID_EP_SIZE);
+  has_pending_response = true;
+}
+
+void command_task(void) {
+  if (has_pending_response && tud_hid_n_ready(USB_ITF_RAW_HID)) {
+    tud_hid_n_report(USB_ITF_RAW_HID, 0, pending_response, RAW_HID_EP_SIZE);
+    has_pending_response = false;
+  }
 }

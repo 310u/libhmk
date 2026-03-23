@@ -148,6 +148,7 @@ static uint8_t endpoint_out;
 // layout processing is disabled for some keys.
 static bitmap_t key_press_states[BITMAP_SIZE(NUM_KEYS)] = {0};
 static uint16_t button_report;
+static uint32_t button_press_times[16];
 // Track maximum analog values for analog buttons
 // (2 joysticks * 4 directions + 2 triggers)
 static uint16_t analog_states[10];
@@ -307,12 +308,14 @@ void xinput_process(uint8_t key) {
   case GP_BUTTON_A ... GP_BUTTON_RB: {
     const bool last_key_press = bitmap_get(key_press_states, key);
 
-    if (k->is_pressed && !last_key_press)
+    if (k->is_pressed && !last_key_press) {
       // Key press event
       button_report |= keycode_to_bm[keycode];
-    else if (!k->is_pressed && last_key_press)
+      button_press_times[keycode] = k->event_time;
+    } else if (!k->is_pressed && last_key_press) {
       // Key release event
       button_report &= (uint16_t)~keycode_to_bm[keycode];
+    }
 
     // Finally, update the key state
     bitmap_set(key_press_states, key, k->is_pressed);
@@ -388,6 +391,45 @@ void xinput_task(void) {
   xinput_report_t report = xinput_empty_report();
   report.buttons = button_report;
 
+  // Apply SOCD cleaning for D-Pad
+  const socd_mode_t socd = CURRENT_PROFILE.gamepad_options.socd_mode;
+  if (socd != SOCD_NEUTRAL) {
+    // Up / Down
+    if ((report.buttons & XINPUT_BUTTON_UP) && (report.buttons & XINPUT_BUTTON_DOWN)) {
+      if (socd == SOCD_LAST_INPUT) {
+        if (button_press_times[GP_BUTTON_UP] > button_press_times[GP_BUTTON_DOWN])
+          report.buttons &= ~XINPUT_BUTTON_DOWN;
+        else
+          report.buttons &= ~XINPUT_BUTTON_UP;
+      } else if (socd == SOCD_FIRST_INPUT) {
+        if (button_press_times[GP_BUTTON_UP] < button_press_times[GP_BUTTON_DOWN])
+          report.buttons &= ~XINPUT_BUTTON_DOWN;
+        else
+          report.buttons &= ~XINPUT_BUTTON_UP;
+      }
+    }
+    // Left / Right
+    if ((report.buttons & XINPUT_BUTTON_LEFT) && (report.buttons & XINPUT_BUTTON_RIGHT)) {
+      if (socd == SOCD_LAST_INPUT) {
+        if (button_press_times[GP_BUTTON_LEFT] > button_press_times[GP_BUTTON_RIGHT])
+          report.buttons &= ~XINPUT_BUTTON_RIGHT;
+        else
+          report.buttons &= ~XINPUT_BUTTON_LEFT;
+      } else if (socd == SOCD_FIRST_INPUT) {
+        if (button_press_times[GP_BUTTON_LEFT] < button_press_times[GP_BUTTON_RIGHT])
+          report.buttons &= ~XINPUT_BUTTON_RIGHT;
+        else
+          report.buttons &= ~XINPUT_BUTTON_LEFT;
+      }
+    }
+  } else {
+    // SOCD_NEUTRAL (default)
+    if ((report.buttons & XINPUT_BUTTON_UP) && (report.buttons & XINPUT_BUTTON_DOWN))
+      report.buttons &= ~(XINPUT_BUTTON_UP | XINPUT_BUTTON_DOWN);
+    if ((report.buttons & XINPUT_BUTTON_LEFT) && (report.buttons & XINPUT_BUTTON_RIGHT))
+      report.buttons &= ~(XINPUT_BUTTON_LEFT | XINPUT_BUTTON_RIGHT);
+  }
+
   // Update trigger states in the report
   report.lz =
       apply_analog_curve(ANALOG_STATE(GP_BUTTON_LT), &is_key_end_deadzone);
@@ -417,6 +459,16 @@ void xinput_task(void) {
     uint16_t *state = &joystick_states[i * 2];
 
     uint32_t x = state[0], y = state[1];
+
+    if (!CURRENT_PROFILE.gamepad_options.square_joystick) {
+      // Convert square joystick coordinates to circular coordinates FIRST
+      // This prevents the analog curve from being directionally skewed
+      uint32_t cx = square_to_circular(x, y);
+      uint32_t cy = square_to_circular(y, x);
+      x = cx;
+      y = cy;
+    }
+
     const uint32_t magnitude = usqrt32(x * x + y * y);
     if (magnitude == 0)
       // If magnitude is zero, skip analog curve processing
@@ -444,16 +496,9 @@ void xinput_task(void) {
       x = max_x * new_magnitude / 255;
       y = max_y * new_magnitude / 255;
     }
-
-    if (!CURRENT_PROFILE.gamepad_options.square_joystick) {
-      // Convert square joystick coordinates to circular coordinates
-      state[0] = square_to_circular(x, y);
-      state[1] = square_to_circular(y, x);
-    } else {
-      // Otherwise, use the original values
-      state[0] = x;
-      state[1] = y;
-    }
+    
+    state[0] = x;
+    state[1] = y;
 
     if (is_sniper_active) {
       state[0] =

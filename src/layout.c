@@ -399,16 +399,16 @@ static bool layout_key_is_tap_hold(uint8_t key) {
 static bool layout_should_skip_key_processing(uint8_t key,
                                               const key_state_t *state,
                                               uint8_t current_layer) {
-  if (current_layer == 0) {
-    if (CURRENT_PROFILE.gamepad_buttons[key] != GP_BUTTON_NONE) {
-      xinput_process(key);
+  if (CURRENT_PROFILE.gamepad_buttons[key] != GP_BUTTON_NONE) {
+    xinput_process(key);
 
-      if (CURRENT_PROFILE.gamepad_options.gamepad_override) {
-        bitmap_set(key_press_states, key, state->is_pressed);
-        return true;
-      }
+    if (CURRENT_PROFILE.gamepad_options.gamepad_override) {
+      bitmap_set(key_press_states, key, state->is_pressed);
+      return true;
     }
+  }
 
+  if (current_layer == 0) {
     if (!CURRENT_PROFILE.gamepad_options.keyboard_enabled) {
       bitmap_set(key_press_states, key, state->is_pressed);
       return true;
@@ -434,14 +434,14 @@ static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
     if (layout_should_skip_key_processing((uint8_t)i, state, current_layer))
       continue;
 
-    if (state->is_pressed & !last_key_press) {
+    if (state->is_pressed && !last_key_press) {
       events[(*event_count)++] = (layout_event_t){
           .key = (uint8_t)i,
           .pressed = true,
           .event_time = state->event_time,
           .distance = state->distance,
       };
-    } else if (!state->is_pressed & last_key_press) {
+    } else if (!state->is_pressed && last_key_press) {
       events[(*event_count)++] = (layout_event_t){
           .key = (uint8_t)i,
           .pressed = false,
@@ -546,7 +546,7 @@ void layout_task(void) {
   const uint8_t current_layer = layout_get_current_layer();
   bool has_non_tap_hold_press = false;
   bool has_non_tap_hold_release = false;
-  layout_event_t events[NUM_KEYS];
+  static layout_event_t events[NUM_KEYS];
   uint8_t event_count = 0;
 
   layout_collect_events(events, &event_count, current_layer);

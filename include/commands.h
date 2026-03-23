@@ -266,3 +266,8 @@ void command_init(void);
  * @return None
  */
 void command_process(const uint8_t *buf);
+
+/**
+ * @brief Background task for processing deferred command responses
+ */
+void command_task(void);
