@@ -57,9 +57,12 @@
 
 #if defined(JOYSTICK_ENABLED)
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY JOYSTICK_CONFIG_LEGACY_SIZE
+#define MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F \
+  offsetof(joystick_config_t, active_mouse_preset)
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT sizeof(joystick_config_t)
 #else
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY 0
+#define MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F 0
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT 0
 #endif
 
@@ -74,7 +77,10 @@
    MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY)
 #define MIGRATION_PROFILE_SIZE_V1_F_PLUS                                      \
   (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D + \
-   MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
+   MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F)
+#define MIGRATION_PROFILE_SIZE_V1_10_PLUS                                     \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D + \
+   sizeof(joystick_config_t))
 
 static bool v1_1_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
@@ -125,6 +131,9 @@ static bool v1_E_profile_config_func(uint8_t profile, uint8_t *dst,
 static bool v1_F_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_F_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
+static bool v1_10_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
 static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
                                      uint32_t old_size, uint32_t new_size);
 
@@ -247,6 +256,13 @@ static const migration_t migrations[] = {
         .profile_config_size = MIGRATION_PROFILE_SIZE_V1_F_PLUS,
         .global_config_func = v1_F_global_config_func,
         .profile_config_func = v1_F_profile_config_func,
+    },
+    {
+        .version = 0x0110,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_10_PLUS,
+        .global_config_func = v1_10_global_config_func,
+        .profile_config_func = v1_10_profile_config_func,
     },
 };
 
@@ -776,6 +792,44 @@ bool v1_F_profile_config_func(uint8_t profile, uint8_t *dst,
   memcpy(dst, &joystick_config, sizeof(joystick_config));
   dst += sizeof(joystick_config);
   src += MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY;
+#endif
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.F -> v1.10 Migration
+//--------------------------------------------------------------------+
+
+bool v1_10_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x010F)
+    return false;
+
+  migration_memcpy(&dst, &src, MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32);
+  return true;
+}
+
+bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_WITH_MACROS(13));
+
+#if defined(RGB_ENABLED)
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_RGB_SIZE_V1_D);
+#endif
+
+#if defined(JOYSTICK_ENABLED)
+  joystick_config_t joystick_config;
+  joystick_init_default_config(&joystick_config);
+  memcpy(&joystick_config, src, MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F);
+  joystick_fill_default_mouse_presets(joystick_config.mouse_presets,
+                                      joystick_config.mouse_speed,
+                                      joystick_config.mouse_acceleration);
+  joystick_config.active_mouse_preset = 0u;
+  memcpy(dst, &joystick_config, sizeof(joystick_config));
+  dst += sizeof(joystick_config);
+  src += MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F;
 #endif
 
   return true;

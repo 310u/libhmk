@@ -32,7 +32,7 @@ def parse_macros(content: str) -> Dict[str, str]:
         val = match.group(2).strip()
         # Remove parentheses for the check, or just loosely accept if it contains digits
         clean_val = re.sub(r'[\(\)\s]', '', val)
-        if re.match(r'^[0-9A-Fa-fx\+\-\*\/]+$', clean_val) or 'x' in clean_val:
+        if re.match(r'^[0-9A-Fa-fxXuUlL\+\-\*\/]+$', clean_val) or 'x' in clean_val:
             macros[match.group(1)] = val
     
     # Inject default macros for arrays that are normally defined via compiler flags
@@ -113,6 +113,9 @@ def camel_case(s: str) -> str:
 def pascal_case(s: str) -> str:
     return s.replace("_t", "").title().replace("_", "")
 
+def to_ts_macro_value(value: str) -> str:
+    return re.sub(r'(?<=\d)[uUlL]+', '', value)
+
 def generate_ts(structs: Dict[str, dict], macros: Dict[str, str]) -> str:
     out = [
         "// AUTO-GENERATED FILE. DO NOT EDIT.", 
@@ -122,8 +125,13 @@ def generate_ts(structs: Dict[str, dict], macros: Dict[str, str]) -> str:
     ]
     
     for k, v in macros.items():
-        if k.startswith("NUM_") or k.startswith("MAX_") or k.startswith("EECONFIG_"):
-            out.append(f"export const {k} = {v}")
+        if (
+            k.startswith("NUM_")
+            or k.startswith("MAX_")
+            or k.startswith("EECONFIG_")
+            or k.startswith("JOYSTICK_")
+        ):
+            out.append(f"export const {k} = {to_ts_macro_value(v)}")
     
     out.append("")
     
@@ -258,7 +266,7 @@ def generate_ts(structs: Dict[str, dict], macros: Dict[str, str]) -> str:
             else:
                 def gen_array(arrays: List[str], current_dim: int) -> str:
                     dim_str = arrays[current_dim]
-                    dim = macros.get(dim_str, dim_str)
+                    dim = to_ts_macro_value(macros.get(dim_str, dim_str))
                     
                     inner: str
                     if current_dim == len(arrays) - 1:

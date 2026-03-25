@@ -73,7 +73,6 @@
 
 #define JOYSTICK_MOUSE_FP_SHIFT 8
 #define JOYSTICK_MOUSE_FP_ONE (1L << JOYSTICK_MOUSE_FP_SHIFT)
-#define JOYSTICK_MOUSE_ACCELERATION_DEFAULT 255u
 #define JOYSTICK_MOUSE_DIVISOR 50L
 #define JOYSTICK_SCROLL_DIVISOR 250L
 #define JOYSTICK_VECTOR_MAX 181u
@@ -188,6 +187,35 @@ static joystick_config_t joystick_default_config(void) {
   joystick_init_default_config(&def);
   def.mouse_acceleration = JOYSTICK_MOUSE_ACCELERATION_DEFAULT;
   return def;
+}
+
+static uint8_t joystick_sanitize_mouse_speed(uint8_t raw) {
+  return raw == 0u ? JOYSTICK_MOUSE_SPEED_DEFAULT : raw;
+}
+
+static uint8_t joystick_effective_mouse_acceleration(uint8_t raw) {
+  return raw == 0u ? JOYSTICK_MOUSE_ACCELERATION_DEFAULT : raw;
+}
+
+static joystick_mouse_preset_t joystick_make_mouse_preset(uint8_t mouse_speed,
+                                                          uint8_t mouse_acceleration) {
+  return (joystick_mouse_preset_t){
+      .mouse_speed = joystick_sanitize_mouse_speed(mouse_speed),
+      .mouse_acceleration =
+          joystick_effective_mouse_acceleration(mouse_acceleration),
+  };
+}
+
+static bool joystick_config_has_explicit_mouse_presets(
+    const joystick_config_t *config) {
+  for (uint8_t i = 0; i < JOYSTICK_MOUSE_PRESET_COUNT; i++) {
+    if (config->mouse_presets[i].mouse_speed != 0u ||
+        config->mouse_presets[i].mouse_acceleration != 0u) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 static uint16_t joystick_abs_diff_u16(uint16_t a, uint16_t b) {
@@ -465,8 +493,59 @@ static int8_t joystick_consume_mouse_accum(int32_t *accum) {
   return (int8_t)whole;
 }
 
-static uint8_t joystick_effective_mouse_acceleration(uint8_t raw) {
-  return raw == 0u ? JOYSTICK_MOUSE_ACCELERATION_DEFAULT : raw;
+joystick_config_t joystick_normalize_config(joystick_config_t config) {
+  config.mouse_speed = joystick_sanitize_mouse_speed(config.mouse_speed);
+  config.mouse_acceleration =
+      joystick_effective_mouse_acceleration(config.mouse_acceleration);
+
+  if (config.active_mouse_preset >= JOYSTICK_MOUSE_PRESET_COUNT) {
+    config.active_mouse_preset = 0u;
+  }
+
+  const joystick_mouse_preset_t fallback =
+      joystick_make_mouse_preset(config.mouse_speed, config.mouse_acceleration);
+  const bool has_explicit_presets =
+      joystick_config_has_explicit_mouse_presets(&config);
+
+  if (!has_explicit_presets) {
+    joystick_fill_default_mouse_presets(config.mouse_presets,
+                                        fallback.mouse_speed,
+                                        fallback.mouse_acceleration);
+  } else {
+    for (uint8_t i = 0; i < JOYSTICK_MOUSE_PRESET_COUNT; i++) {
+      if (config.mouse_presets[i].mouse_speed == 0u) {
+        config.mouse_presets[i].mouse_speed = fallback.mouse_speed;
+      }
+      if (config.mouse_presets[i].mouse_acceleration == 0u) {
+        config.mouse_presets[i].mouse_acceleration = fallback.mouse_acceleration;
+      }
+    }
+  }
+
+  joystick_mouse_preset_t *active_preset =
+      &config.mouse_presets[config.active_mouse_preset];
+  if (config.mouse_speed != active_preset->mouse_speed ||
+      config.mouse_acceleration != active_preset->mouse_acceleration) {
+    *active_preset = fallback;
+  }
+
+  config.mouse_speed = active_preset->mouse_speed;
+  config.mouse_acceleration = active_preset->mouse_acceleration;
+
+  return config;
+}
+
+void joystick_select_mouse_preset(joystick_config_t *config,
+                                  uint8_t preset_index) {
+  if (config == NULL) {
+    return;
+  }
+
+  *config = joystick_normalize_config(*config);
+  config->active_mouse_preset = preset_index % JOYSTICK_MOUSE_PRESET_COUNT;
+  config->mouse_speed = config->mouse_presets[config->active_mouse_preset].mouse_speed;
+  config->mouse_acceleration =
+      config->mouse_presets[config->active_mouse_preset].mouse_acceleration;
 }
 
 static bool joystick_switch_pressed(void);
@@ -678,8 +757,9 @@ void joystick_init(void) {
   joystick_init_switch_pin();
 
   // Initial load of config cache
-  config_cache = eeconfig != NULL ? CURRENT_PROFILE.joystick_config
-                                  : joystick_default_config();
+  config_cache = joystick_normalize_config(eeconfig != NULL
+                                               ? CURRENT_PROFILE.joystick_config
+                                               : joystick_default_config());
   joystick_reset_signal_state();
   joystick_reset_output_state();
 }
@@ -689,20 +769,21 @@ joystick_config_t joystick_get_config(void) { return config_cache; }
 
 void joystick_apply_config(joystick_config_t config) {
   const uint8_t prev_mode = config_cache.mode;
-  config_cache = config;
+  config_cache = joystick_normalize_config(config);
 
   if ((prev_mode == JOYSTICK_MODE_MOUSE || prev_mode == JOYSTICK_MODE_SCROLL) &&
-      prev_mode != config.mode && mouse_switch_reported) {
+      prev_mode != config_cache.mode && mouse_switch_reported) {
     joystick_release_mouse_buttons();
   }
 
-  if (joystick_mode_is_cursor(prev_mode) && prev_mode != config.mode &&
+  if (joystick_mode_is_cursor(prev_mode) && prev_mode != config_cache.mode &&
       cursor_key_mask_reported != 0u) {
     joystick_release_cursor_keys();
   }
 }
 
 void joystick_set_config(joystick_config_t config) {
+  config = joystick_normalize_config(config);
   if (eeconfig != NULL) {
     uint32_t addr = offsetof(eeconfig_t, profiles) +
                     eeconfig->current_profile * sizeof(eeconfig_profile_t) +

@@ -314,6 +314,16 @@ static void assert_default_radial_boundaries(const joystick_config_t *config) {
   }
 }
 
+static void assert_mouse_presets_match_active(const joystick_config_t *config) {
+  TEST_ASSERT_EQUAL_UINT8(0, config->active_mouse_preset);
+  for (uint32_t i = 0; i < JOYSTICK_MOUSE_PRESET_COUNT; i++) {
+    TEST_ASSERT_EQUAL_UINT8(config->mouse_speed,
+                            config->mouse_presets[i].mouse_speed);
+    TEST_ASSERT_EQUAL_UINT8(config->mouse_acceleration,
+                            config->mouse_presets[i].mouse_acceleration);
+  }
+}
+
 bool wear_leveling_write(uint32_t addr, const void *buf, uint32_t len) {
   write_count++;
   write_addr = addr;
@@ -400,6 +410,7 @@ void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) 
   TEST_ASSERT_EQUAL_UINT8(9, profile->joystick_config.sw_debounce_ms);
   TEST_ASSERT_EQUAL_UINT8(0xB0, profile->joystick_config.reserved[0]);
   assert_default_radial_boundaries(&profile->joystick_config);
+  assert_mouse_presets_match_active(&profile->joystick_config);
 }
 
 void test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors(void) {
@@ -446,6 +457,7 @@ void test_migration_v1_B_promotes_options_and_preserves_layer_colors(void) {
   TEST_ASSERT_EQUAL_UINT8(202, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(7, profile->joystick_config.sw_debounce_ms);
   assert_default_radial_boundaries(&profile->joystick_config);
+  assert_mouse_presets_match_active(&profile->joystick_config);
 }
 
 void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_fields(
@@ -464,6 +476,7 @@ void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_
   TEST_ASSERT_EQUAL_UINT8(5, profile->joystick_config.sw_debounce_ms);
   TEST_ASSERT_EQUAL_UINT8(0xA0, profile->joystick_config.reserved[0]);
   assert_default_radial_boundaries(&profile->joystick_config);
+  assert_mouse_presets_match_active(&profile->joystick_config);
 }
 
 int main(void) {

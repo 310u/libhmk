@@ -438,11 +438,13 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_SET_JOYSTICK_CONFIG: {
     const command_in_joystick_config_t *p = &in->joystick_config;
+    const joystick_config_t joystick_config =
+        joystick_normalize_config(p->joystick_config);
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
-    
+
     success = command_write_profile_bytes(
         p->profile, offsetof(eeconfig_profile_t, joystick_config),
-        &p->joystick_config, sizeof(joystick_config_t));
+        &joystick_config, sizeof(joystick_config_t));
 
     if (success)
       command_reset_if_current_profile(p->profile);

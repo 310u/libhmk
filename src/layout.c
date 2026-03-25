@@ -697,6 +697,16 @@ void layout_register(uint8_t key, uint8_t keycode) {
     break;
   }
 
+  case SP_JOY_PRESET_NEXT: {
+#if defined(JOYSTICK_ENABLED)
+    joystick_config_t jc = joystick_get_config();
+    joystick_select_mouse_preset(
+        &jc, (uint8_t)((jc.active_mouse_preset + 1u) % JOYSTICK_MOUSE_PRESET_COUNT));
+    joystick_set_config(jc);
+#endif
+    break;
+  }
+
   case SP_JOY_SCROLL_MO:
 #if defined(JOYSTICK_ENABLED)
     joystick_scroll_mo_register();

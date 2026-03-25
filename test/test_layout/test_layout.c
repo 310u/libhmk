@@ -95,6 +95,18 @@ joystick_config_t mock_joystick_config = {
 };
 
 joystick_config_t joystick_get_config(void) { return mock_joystick_config; }
+void joystick_select_mouse_preset(joystick_config_t *config,
+                                  uint8_t preset_index) {
+    if (config == NULL) {
+        return;
+    }
+
+    config->active_mouse_preset = preset_index % JOYSTICK_MOUSE_PRESET_COUNT;
+    config->mouse_speed =
+        config->mouse_presets[config->active_mouse_preset].mouse_speed;
+    config->mouse_acceleration =
+        config->mouse_presets[config->active_mouse_preset].mouse_acceleration;
+}
 void joystick_apply_config(joystick_config_t config) { mock_joystick_config = config; }
 void joystick_set_config(joystick_config_t config) { mock_joystick_config = config; }
 #endif
@@ -126,7 +138,7 @@ void setUp(void) {
     mock_eeconfig.profiles[0].rgb_config.current_effect = RGB_EFFECT_SOLID_COLOR;
 #endif
 #if defined(JOYSTICK_ENABLED)
-    mock_joystick_config.mode = JOYSTICK_MODE_MOUSE;
+    joystick_init_default_config(&mock_joystick_config);
 #endif
     layout_init();
 }
@@ -258,6 +270,22 @@ void test_joystick_scroll_mo_restores_previous_mode(void) {
     layout_unregister(INPUT_ROUTING_VIRTUAL_KEY, SP_JOY_SCROLL_MO);
     TEST_ASSERT_EQUAL_UINT8(JOYSTICK_MODE_XINPUT_RS, mock_joystick_config.mode);
 }
+
+void test_joystick_preset_next_cycles_active_mouse_preset(void) {
+    mock_joystick_config.mouse_presets[0] =
+        (joystick_mouse_preset_t){.mouse_speed = 16, .mouse_acceleration = 64};
+    mock_joystick_config.mouse_presets[1] =
+        (joystick_mouse_preset_t){.mouse_speed = 42, .mouse_acceleration = 180};
+    mock_joystick_config.active_mouse_preset = 0;
+    mock_joystick_config.mouse_speed = 16;
+    mock_joystick_config.mouse_acceleration = 64;
+
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_JOY_PRESET_NEXT);
+
+    TEST_ASSERT_EQUAL_UINT8(1, mock_joystick_config.active_mouse_preset);
+    TEST_ASSERT_EQUAL_UINT8(42, mock_joystick_config.mouse_speed);
+    TEST_ASSERT_EQUAL_UINT8(180, mock_joystick_config.mouse_acceleration);
+}
 #endif
 
 int main(int argc, char **argv) {
@@ -274,6 +302,7 @@ int main(int argc, char **argv) {
 #endif
 #if defined(JOYSTICK_ENABLED)
     RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
+    RUN_TEST(test_joystick_preset_next_cycles_active_mouse_preset);
 #endif
     UNITY_END();
     return 0;

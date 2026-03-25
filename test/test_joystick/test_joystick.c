@@ -87,6 +87,8 @@ static joystick_config_t joystick_test_config(uint8_t mode) {
   config.mode = mode;
   config.mouse_speed = 64;
   config.mouse_acceleration = 255;
+  joystick_fill_default_mouse_presets(config.mouse_presets, config.mouse_speed,
+                                      config.mouse_acceleration);
   return config;
 }
 
@@ -245,6 +247,22 @@ void test_joystick_preserves_fractional_axis_precision_until_output(void) {
   TEST_ASSERT_EQUAL_INT8(0, state.out_y);
 }
 
+void test_joystick_select_mouse_preset_updates_effective_pointer_settings(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_MOUSE);
+  config.mouse_presets[0] =
+      (joystick_mouse_preset_t){.mouse_speed = 24, .mouse_acceleration = 96};
+  config.mouse_presets[1] =
+      (joystick_mouse_preset_t){.mouse_speed = 80, .mouse_acceleration = 220};
+
+  joystick_select_mouse_preset(&config, 1);
+  joystick_apply_config(config);
+
+  joystick_config_t applied = joystick_get_config();
+  TEST_ASSERT_EQUAL_UINT8(1, applied.active_mouse_preset);
+  TEST_ASSERT_EQUAL_UINT8(80, applied.mouse_speed);
+  TEST_ASSERT_EQUAL_UINT8(220, applied.mouse_acceleration);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_joystick_mouse_mode_reports_motion_and_button);
@@ -254,5 +272,6 @@ int main(void) {
   RUN_TEST(test_joystick_circular_correction_uses_monotone_sector_interpolation);
   RUN_TEST(test_joystick_gamepad_mode_bypasses_adc_smoothing);
   RUN_TEST(test_joystick_preserves_fractional_axis_precision_until_output);
+  RUN_TEST(test_joystick_select_mouse_preset_updates_effective_pointer_settings);
   return UNITY_END();
 }
