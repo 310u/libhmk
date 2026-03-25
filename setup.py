@@ -98,6 +98,13 @@ if __name__ == "__main__":
         "+<layout.c> +<profile_runtime.c>",
         ["-DRGB_ENABLED=1"],
     )
+    pio_config["env:native_test_event_pipeline"] = native_test_env(
+        "test_event_pipeline",
+        "+<advanced_keys.c> +<advanced_key_combo.c> "
+        "+<advanced_key_dynamic_keystroke.c> +<advanced_key_macro.c> "
+        "+<advanced_key_null_bind.c> +<advanced_key_tap_hold.c> "
+        "+<advanced_key_toggle.c> +<deferred_actions.c> +<layout.c>",
+    )
     pio_config["env:native_test_hid"] = native_test_env(
         "test_hid",
         "+<hid.c>",

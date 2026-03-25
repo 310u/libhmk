@@ -11,6 +11,7 @@ NATIVE_TEST_ENVS = [
     "native_test_analog_scan",
     "native_test_deferred_actions",
     "native_test_encoder",
+    "native_test_event_pipeline",
     "native_test_hid",
     "native_test_joystick",
     "native_test_layout",

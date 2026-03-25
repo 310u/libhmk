@@ -17,6 +17,7 @@
 
 #include "distance.h"
 #include "eeconfig.h"
+#include "event_trace.h"
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
 #include "rgb.h"
@@ -259,6 +260,11 @@ void matrix_scan(void) {
     if (state->is_pressed != was_pressed) {
       state->event_time = scan_time;
       matrix_last_activity_time = scan_time;
+      EVENT_TRACE(
+          "[event] matrix key=%u action=%s time=%lu distance=%u raw=%u "
+          "filtered=%u\n",
+          (unsigned int)i, state->is_pressed ? "press" : "release",
+          (unsigned long)scan_time, state->distance, raw_adc, new_adc_filtered);
 #if defined(RGB_ENABLED)
       if (state->is_pressed) {
         rgb_matrix_record_keypress(i);

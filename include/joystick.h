@@ -30,9 +30,40 @@ typedef struct __attribute__((packed)) {
     uint8_t mouse_acceleration; // 1-255, 255 = strongest acceleration
     uint8_t sw_debounce_ms; // Push switch debounce time in ms (0 = disabled)
     uint8_t reserved[3];
+    uint8_t radial_boundaries[32];
 } joystick_config_t;
 
-_Static_assert(sizeof(joystick_config_t) == 20, "joystick_config_t size mismatch");
+#define JOYSTICK_RADIAL_BOUNDARY_SECTORS 32u
+#define JOYSTICK_RADIAL_BOUNDARY_DEFAULT 127u
+
+_Static_assert(sizeof(((joystick_config_t *)0)->radial_boundaries) ==
+                   JOYSTICK_RADIAL_BOUNDARY_SECTORS,
+               "Invalid joystick radial boundary table size");
+#define JOYSTICK_CONFIG_LEGACY_SIZE \
+  offsetof(joystick_config_t, radial_boundaries)
+_Static_assert(JOYSTICK_CONFIG_LEGACY_SIZE == 20u,
+               "joystick_config_t legacy prefix mismatch");
+_Static_assert(sizeof(joystick_config_t) == 52u,
+               "joystick_config_t size mismatch");
+
+static inline void
+joystick_fill_default_radial_boundaries(uint8_t boundaries[JOYSTICK_RADIAL_BOUNDARY_SECTORS]) {
+  for (uint8_t i = 0; i < JOYSTICK_RADIAL_BOUNDARY_SECTORS; i++) {
+    boundaries[i] = JOYSTICK_RADIAL_BOUNDARY_DEFAULT;
+  }
+}
+
+static inline void joystick_init_default_config(joystick_config_t *config) {
+  memset(config, 0, sizeof(*config));
+  config->x = (joystick_axis_calibration_t){0, 2048, 4095};
+  config->y = (joystick_axis_calibration_t){0, 2048, 4095};
+  config->deadzone = 150;
+  config->mode = JOYSTICK_MODE_MOUSE;
+  config->mouse_speed = 10;
+  config->mouse_acceleration = 255;
+  config->sw_debounce_ms = 5;
+  joystick_fill_default_radial_boundaries(config->radial_boundaries);
+}
 
 typedef struct {
     uint16_t raw_x;

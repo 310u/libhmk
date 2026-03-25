@@ -18,6 +18,7 @@
 #include "advanced_keys.h"
 #include "deferred_actions.h"
 #include "eeconfig.h"
+#include "event_trace.h"
 #include "hardware/hardware.h"
 #include "hid.h"
 #include "joystick.h"
@@ -120,6 +121,25 @@ typedef struct {
   uint32_t event_time;
   uint8_t distance;
 } layout_event_t;
+
+#if defined(DEBUG_EVENT_TRACE)
+static void layout_trace_events(const char *stage, const layout_event_t *events,
+                                uint8_t event_count) {
+  if (event_count == 0)
+    return;
+
+  EVENT_TRACE("[event] %s count=%u\n", stage, event_count);
+  for (uint8_t i = 0; i < event_count; i++) {
+    EVENT_TRACE(
+        "[event] %s[%u] key=%u action=%s time=%lu distance=%u\n", stage,
+        (unsigned int)i, events[i].key,
+        events[i].pressed ? "press" : "release",
+        (unsigned long)events[i].event_time, events[i].distance);
+  }
+}
+#else
+#define layout_trace_events(stage, events, event_count) ((void)0)
+#endif
 
 // Pending events buffer for hold-tap input buffering.
 // When a hold-tap key is undecided, non-hold-tap key events are buffered
@@ -320,6 +340,9 @@ bool layout_process_key(uint8_t key, bool pressed) {
     const uint8_t ak_index = advanced_key_indices[current_layer][key];
 
     if (ak_index) {
+      EVENT_TRACE(
+          "[event] process key=%u action=press layer=%u keycode=%u advanced=%u\n",
+          key, current_layer, keycode, ak_index - 1);
       active_advanced_keys[key] = ak_index;
       advanced_key_event_t ak_event = (advanced_key_event_t){
           .type = AK_EVENT_TYPE_PRESS,
@@ -332,6 +355,9 @@ bool layout_process_key(uint8_t key, bool pressed) {
           (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
            AK_TYPE_TAP_HOLD);
     } else {
+      EVENT_TRACE(
+          "[event] process key=%u action=press layer=%u keycode=%u advanced=none\n",
+          key, current_layer, keycode);
       active_keycodes[key] = keycode;
       layout_register(key, keycode);
       has_non_tap_hold_event |= (keycode != KC_NO);
@@ -344,6 +370,9 @@ bool layout_process_key(uint8_t key, bool pressed) {
     const uint8_t ak_index = active_advanced_keys[key];
 
     if (ak_index) {
+      EVENT_TRACE(
+          "[event] process key=%u action=release layer=%u keycode=%u advanced=%u\n",
+          key, current_layer, keycode, ak_index - 1);
       active_advanced_keys[key] = 0;
       advanced_key_event_t ak_event = (advanced_key_event_t){
           .type = AK_EVENT_TYPE_RELEASE,
@@ -356,6 +385,10 @@ bool layout_process_key(uint8_t key, bool pressed) {
           (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
            AK_TYPE_TAP_HOLD);
     } else {
+      EVENT_TRACE(
+          "[event] process key=%u action=release layer=%u keycode=%u "
+          "advanced=none\n",
+          key, current_layer, keycode);
       active_keycodes[key] = KC_NO;
       layout_unregister(key, keycode);
       has_non_tap_hold_event |= (keycode != KC_NO);
@@ -366,6 +399,11 @@ bool layout_process_key(uint8_t key, bool pressed) {
 }
 
 static void layout_flush_pending_events(void) {
+  EVENT_TRACE("[event] pending flush count=%u\n", pending_count);
+  for (uint8_t i = 0; i < pending_count; i++)
+    EVENT_TRACE("[event] pending flush[%u] key=%u action=%s\n",
+                (unsigned int)i, pending_events[i].key,
+                pending_events[i].pressed ? "press" : "release");
   for (uint8_t i = 0; i < pending_count; i++)
     layout_process_key(pending_events[i].key, pending_events[i].pressed);
   pending_count = 0;
@@ -377,6 +415,8 @@ static void layout_buffer_pending_event(uint8_t key, bool pressed) {
 
   pending_events[pending_count++] =
       (typeof(pending_events[0])){.key = key, .pressed = pressed};
+  EVENT_TRACE("[event] pending enqueue key=%u action=%s size=%u\n", key,
+              pressed ? "press" : "release", pending_count);
 }
 
 static bool layout_pending_has_press(uint8_t key) {
@@ -441,6 +481,7 @@ static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
           .event_time = state->event_time,
           .distance = state->distance,
       };
+      layout_trace_events("collected", &events[*event_count - 1], 1);
     } else if (!state->is_pressed && last_key_press) {
       events[(*event_count)++] = (layout_event_t){
           .key = (uint8_t)i,
@@ -448,6 +489,7 @@ static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
           .event_time = state->event_time,
           .distance = state->distance,
       };
+      layout_trace_events("collected", &events[*event_count - 1], 1);
     } else if (state->is_pressed) {
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
@@ -495,6 +537,8 @@ static void layout_sort_events(layout_event_t *events, uint8_t event_count) {
     }
     events[j] = tmp;
   }
+
+  layout_trace_events("sorted", events, event_count);
 }
 
 static bool layout_handle_press_event(const layout_event_t *event) {

@@ -16,6 +16,7 @@
 #include "hid.h"
 
 #include "commands.h"
+#include "event_trace.h"
 #include "hardware/hardware.h"
 #include "keycodes.h"
 #include "matrix.h"
@@ -106,6 +107,12 @@ static void hid_send_keyboard_report(void) {
   hid_nkro_kb_report_t *report = &kb_report_queue[kb_report_queue_head];
 
   if (tud_hid_n_report(USB_ITF_KEYBOARD, 0, report, sizeof(*report))) {
+    EVENT_TRACE(
+        "[event] hid send keyboard modifiers=0x%02x keys=[%u,%u,%u,%u,%u,%u] "
+        "queued=%u\n",
+        report->modifiers, report->keycodes[0], report->keycodes[1],
+        report->keycodes[2], report->keycodes[3], report->keycodes[4],
+        report->keycodes[5], kb_report_queue_size);
     kb_report_last_sent = *report;
     kb_report_queue_head =
         (kb_report_queue_head + 1u) & (MAX_PENDING_KB_REPORTS - 1u);
@@ -130,8 +137,10 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
         // Don't send the report if it hasn't changed
         break;
       if (tud_hid_n_report(USB_ITF_HID, report_id, &system_report,
-                           sizeof(system_report)))
+                           sizeof(system_report))) {
+        EVENT_TRACE("[event] hid send system value=0x%04x\n", system_report);
         system_report_last_sent = system_report;
+      }
       return;
 
     case REPORT_ID_CONSUMER_CONTROL:
@@ -139,8 +148,11 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
         // Don't send the report if it hasn't changed
         break;
       if (tud_hid_n_report(USB_ITF_HID, report_id, &consumer_report,
-                           sizeof(consumer_report)))
+                           sizeof(consumer_report))) {
+        EVENT_TRACE("[event] hid send consumer value=0x%04x\n",
+                    consumer_report);
         consumer_report_last_sent = consumer_report;
+      }
       return;
 
     case REPORT_ID_MOUSE:
@@ -160,6 +172,10 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
 
       if (tud_hid_n_report(USB_ITF_HID, report_id, &next_mouse_report,
                            sizeof(next_mouse_report))) {
+        EVENT_TRACE(
+            "[event] hid send mouse buttons=0x%02x x=%d y=%d wheel=%d pan=%d\n",
+            next_mouse_report.buttons, next_mouse_report.x, next_mouse_report.y,
+            next_mouse_report.wheel, next_mouse_report.pan);
         mouse_buttons_last_sent = next_mouse_report.buttons;
         mouse_pending_x -= next_mouse_report.x;
         mouse_pending_y -= next_mouse_report.y;

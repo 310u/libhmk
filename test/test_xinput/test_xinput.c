@@ -123,10 +123,8 @@ void test_xinput_hid_gamepad_does_not_double_circularize_physical_stick(void) {
   xinput_task();
 
   TEST_ASSERT_EQUAL_UINT8(1, hid_report_count);
-  TEST_ASSERT_INT16_WITHIN(2, (int16_t)((int32_t)90 * 32767 / 127),
-                           hid_reports[0].rx);
-  TEST_ASSERT_INT16_WITHIN(2, (int16_t)((int32_t)90 * 32767 / 127),
-                           hid_reports[0].ry);
+  TEST_ASSERT_INT8_WITHIN(1, 90, hid_reports[0].rx);
+  TEST_ASSERT_INT8_WITHIN(1, 90, hid_reports[0].ry);
 }
 
 int main(void) {

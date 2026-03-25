@@ -28,31 +28,22 @@ static const uint8_t
 #if defined(RGB_ENABLED)
 static const rgb_config_t default_rgb_config = (rgb_config_t)DEFAULT_RGB_CONFIG;
 #endif
-static eeconfig_profile_t default_profile = {
-  .gamepad_options = (gamepad_options_t)DEFAULT_GAMEPAD_OPTIONS,
-  .tick_rate = DEFAULT_TICK_RATE,
-#if defined(RGB_ENABLED)
-  .rgb_config = (rgb_config_t)DEFAULT_RGB_CONFIG,
-#endif
-#if defined(JOYSTICK_ENABLED)
-  .joystick_config = {
-      .x = {0, 2048, 4095},
-      .y = {0, 2048, 4095},
-      .deadzone = 150,
-      .mode = JOYSTICK_MODE_MOUSE,
-      .mouse_speed = 10,
-      .mouse_acceleration = 255,
-      .sw_debounce_ms = 5,
-  },
-#endif
-};
+static eeconfig_profile_t default_profile = {0};
 
 static bool eeconfig_write_default_profile(uint8_t profile) {
   if (profile >= NUM_PROFILES)
     return false;
 
+  default_profile.gamepad_options = (gamepad_options_t)DEFAULT_GAMEPAD_OPTIONS;
+  default_profile.tick_rate = DEFAULT_TICK_RATE;
   memcpy(default_profile.keymap, default_keymaps[profile],
          sizeof(default_profile.keymap));
+#if defined(RGB_ENABLED)
+  default_profile.rgb_config = default_rgb_config;
+#endif
+#if defined(JOYSTICK_ENABLED)
+  joystick_init_default_config(&default_profile.joystick_config);
+#endif
   return EECONFIG_WRITE(profiles[profile], &default_profile);
 }
 

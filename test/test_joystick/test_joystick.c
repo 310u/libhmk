@@ -81,15 +81,12 @@ bool wear_leveling_write(uint32_t addr, const void *buf, uint32_t len) {
 }
 
 static joystick_config_t joystick_test_config(uint8_t mode) {
-  joystick_config_t config = {
-      .x = {0, 2048, 4095},
-      .y = {0, 2048, 4095},
-      .deadzone = 0,
-      .mode = mode,
-      .mouse_speed = 64,
-      .mouse_acceleration = 255,
-      .sw_debounce_ms = 5,
-  };
+  joystick_config_t config;
+  joystick_init_default_config(&config);
+  config.deadzone = 0;
+  config.mode = mode;
+  config.mouse_speed = 64;
+  config.mouse_acceleration = 255;
   return config;
 }
 
@@ -187,10 +184,75 @@ void test_joystick_apply_config_releases_mouse_button_on_mode_change(void) {
   TEST_ASSERT_EQUAL_UINT8(0, last_mouse_buttons);
 }
 
+void test_joystick_circular_correction_scales_diagonal_throw(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_DISABLED);
+  joystick_fill_default_radial_boundaries(config.radial_boundaries);
+  config.radial_boundaries[4] = 181;
+  joystick_apply_config(config);
+
+  analog_raw_values[0] = 4095;
+  analog_raw_values[1] = 4095;
+  mock_time = 1;
+  joystick_task();
+
+  joystick_state_t state = joystick_get_state();
+  TEST_ASSERT_INT_WITHIN(2, 90, state.out_x);
+  TEST_ASSERT_INT_WITHIN(2, 90, state.out_y);
+}
+
+void test_joystick_circular_correction_uses_monotone_sector_interpolation(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_DISABLED);
+  joystick_fill_default_radial_boundaries(config.radial_boundaries);
+  config.radial_boundaries[2] = 145;
+  config.radial_boundaries[3] = 181;
+  config.radial_boundaries[4] = 145;
+  config.radial_boundaries[5] = 127;
+  joystick_apply_config(config);
+
+  analog_raw_values[0] = 4095;
+  analog_raw_values[1] = 3725;
+  mock_time = 1;
+  joystick_task();
+
+  joystick_state_t state = joystick_get_state();
+  TEST_ASSERT_EQUAL_INT8(97, state.out_x);
+  TEST_ASSERT_EQUAL_INT8(80, state.out_y);
+}
+
+void test_joystick_gamepad_mode_bypasses_adc_smoothing(void) {
+  joystick_apply_config(joystick_test_config(JOYSTICK_MODE_XINPUT_RS));
+
+  analog_raw_values[0] = 4095;
+  analog_raw_values[1] = 2048;
+  mock_time = 1;
+  joystick_task();
+
+  joystick_state_t state = joystick_get_state();
+  TEST_ASSERT_INT_WITHIN(1, 127, state.out_x);
+  TEST_ASSERT_EQUAL_INT8(0, state.out_y);
+}
+
+void test_joystick_preserves_fractional_axis_precision_until_output(void) {
+  joystick_apply_config(joystick_test_config(JOYSTICK_MODE_DISABLED));
+
+  analog_raw_values[0] = 3072;
+  analog_raw_values[1] = 2048;
+  mock_time = 1;
+  joystick_task();
+
+  joystick_state_t state = joystick_get_state();
+  TEST_ASSERT_EQUAL_INT8(64, state.out_x);
+  TEST_ASSERT_EQUAL_INT8(0, state.out_y);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_joystick_mouse_mode_reports_motion_and_button);
   RUN_TEST(test_joystick_cursor_mode_registers_and_releases_arrow_keys);
   RUN_TEST(test_joystick_apply_config_releases_mouse_button_on_mode_change);
+  RUN_TEST(test_joystick_circular_correction_scales_diagonal_throw);
+  RUN_TEST(test_joystick_circular_correction_uses_monotone_sector_interpolation);
+  RUN_TEST(test_joystick_gamepad_mode_bypasses_adc_smoothing);
+  RUN_TEST(test_joystick_preserves_fractional_axis_precision_until_output);
   return UNITY_END();
 }

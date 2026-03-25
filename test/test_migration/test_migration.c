@@ -145,7 +145,7 @@ static void write_legacy_profile_v1_8(uint8_t **dst, uint8_t seed) {
   write_u8(dst, (uint8_t)(30 + seed));
   write_u8(dst, (uint8_t)(90 + seed));
   write_legacy_rgb_per_key(dst, seed);
-  write_bytes(dst, &joystick_config, sizeof(joystick_config));
+  write_bytes(dst, &joystick_config, JOYSTICK_CONFIG_LEGACY_SIZE);
 }
 
 static void write_legacy_profile_v1_9(uint8_t **dst, uint8_t seed) {
@@ -158,7 +158,7 @@ static void write_legacy_profile_v1_9(uint8_t **dst, uint8_t seed) {
   write_u8(dst, (uint8_t)(30 + seed));
   write_u8(dst, (uint8_t)(90 + seed));
   write_legacy_rgb_per_key(dst, seed);
-  write_fill(dst, 0, sizeof(joystick_config_t));
+  write_fill(dst, 0, JOYSTICK_CONFIG_LEGACY_SIZE);
 }
 
 static void write_legacy_profile_v1_A(uint8_t **dst, uint8_t seed) {
@@ -178,7 +178,7 @@ static void write_legacy_profile_v1_A(uint8_t **dst, uint8_t seed) {
   write_u8(dst, (uint8_t)(2 + seed));
   write_legacy_rgb_layer_colors(dst, (uint8_t)(70 + seed));
   write_legacy_rgb_per_key(dst, (uint8_t)(5 + seed));
-  write_bytes(dst, &joystick_config, sizeof(joystick_config));
+  write_bytes(dst, &joystick_config, JOYSTICK_CONFIG_LEGACY_SIZE);
 }
 
 static void write_legacy_profile_v1_D(uint8_t **dst, uint8_t seed) {
@@ -201,7 +201,7 @@ static void write_legacy_profile_v1_D(uint8_t **dst, uint8_t seed) {
   write_u8(dst, (uint8_t)(3 + seed));
   write_legacy_rgb_layer_colors(dst, (uint8_t)(90 + seed));
   write_legacy_rgb_per_key(dst, (uint8_t)(10 + seed));
-  write_bytes(dst, &joystick_config, sizeof(joystick_config));
+  write_bytes(dst, &joystick_config, JOYSTICK_CONFIG_LEGACY_SIZE);
 }
 
 static void build_legacy_config_v1_0(void) {
@@ -307,6 +307,13 @@ static void assert_rgb_per_key_color(const rgb_config_t *config, uint8_t seed,
                           config->per_key_colors[index].b);
 }
 
+static void assert_default_radial_boundaries(const joystick_config_t *config) {
+  for (uint32_t i = 0; i < JOYSTICK_RADIAL_BOUNDARY_SECTORS; i++) {
+    TEST_ASSERT_EQUAL_UINT8(JOYSTICK_RADIAL_BOUNDARY_DEFAULT,
+                            config->radial_boundaries[i]);
+  }
+}
+
 bool wear_leveling_write(uint32_t addr, const void *buf, uint32_t len) {
   write_count++;
   write_addr = addr;
@@ -392,6 +399,7 @@ void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) 
   TEST_ASSERT_EQUAL_UINT8(196, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(9, profile->joystick_config.sw_debounce_ms);
   TEST_ASSERT_EQUAL_UINT8(0xB0, profile->joystick_config.reserved[0]);
+  assert_default_radial_boundaries(&profile->joystick_config);
 }
 
 void test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors(void) {
@@ -437,6 +445,7 @@ void test_migration_v1_B_promotes_options_and_preserves_layer_colors(void) {
   assert_rgb_per_key_color(&profile->rgb_config, 37, 0);
   TEST_ASSERT_EQUAL_UINT8(202, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(7, profile->joystick_config.sw_debounce_ms);
+  assert_default_radial_boundaries(&profile->joystick_config);
 }
 
 void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_fields(
@@ -454,6 +463,7 @@ void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_
   TEST_ASSERT_EQUAL_UINT8(200, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(5, profile->joystick_config.sw_debounce_ms);
   TEST_ASSERT_EQUAL_UINT8(0xA0, profile->joystick_config.reserved[0]);
+  assert_default_radial_boundaries(&profile->joystick_config);
 }
 
 int main(void) {

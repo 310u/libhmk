@@ -102,10 +102,10 @@ _Static_assert(sizeof(hid_nkro_kb_report_t) < CFG_TUD_HID_EP_BUFSIZE,
 //--------------------------------------------------------------------+
 
 typedef struct __attribute__((packed)) {
-  int16_t lx;       // Left stick X  (-32768..32767)
-  int16_t ly;       // Left stick Y  (-32768..32767)
-  int16_t rx;       // Right stick X (-32768..32767)
-  int16_t ry;       // Right stick Y (-32768..32767)
+  int8_t lx;        // Left stick X  (-128..127)
+  int8_t ly;        // Left stick Y  (-128..127)
+  int8_t rx;        // Right stick X (-128..127)
+  int8_t ry;        // Right stick Y (-128..127)
   uint8_t lt;       // Left trigger  (0..255)
   uint8_t rt;       // Right trigger (0..255)
   uint8_t hat;      // Hat switch (0=neutral, 1-8=directions)

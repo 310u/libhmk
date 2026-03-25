@@ -100,22 +100,24 @@ static const uint8_t desc_hid_report_with_gamepad[] = {
 
     HID_REPORT_ID(REPORT_ID_GAMEPAD)
 
-    // Left Stick: X, Y (int16, -32768 to 32767)
+    // Left Stick: X, Y (int8, -128 to 127)
     HID_USAGE_PAGE(HID_USAGE_PAGE_DESKTOP),
     HID_USAGE(HID_USAGE_DESKTOP_X),
     HID_USAGE(HID_USAGE_DESKTOP_Y),
-    HID_LOGICAL_MIN_N(0x8000, 2),
-    HID_LOGICAL_MAX_N(0x7FFF, 2),
+    HID_LOGICAL_MIN_N(0x80, 1),
+    HID_LOGICAL_MAX_N(0x7F, 1),
     HID_REPORT_COUNT(2),
-    HID_REPORT_SIZE(16),
+    HID_REPORT_SIZE(8),
     HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
 
-    // Right Stick: Rx, Ry (int16, -32768 to 32767)
-    // This matches the Linux gamepad convention for the secondary stick.
+    // Right Stick: Rx, Ry (int8, -128 to 127)
+    // Linux derives large default flat/fuzz values from wide logical ranges.
+    // Keeping the generic HID transport at int8 avoids an automatic ~12.5%
+    // kernel deadzone while preserving enough browser Gamepad resolution.
     HID_USAGE(HID_USAGE_DESKTOP_RX),
     HID_USAGE(HID_USAGE_DESKTOP_RY),
     HID_REPORT_COUNT(2),
-    HID_REPORT_SIZE(16),
+    HID_REPORT_SIZE(8),
     HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
 
     // Triggers: Z (left), Rz (right) (uint8, 0 to 255)
