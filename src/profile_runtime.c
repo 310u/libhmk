@@ -29,7 +29,10 @@ void profile_runtime_apply_current(void) {
   rgb_apply_config();
 #endif
 #if defined(JOYSTICK_ENABLED)
-  joystick_apply_config(CURRENT_PROFILE.joystick_config);
+  joystick_config_t joystick_config;
+  memcpy(&joystick_config, &CURRENT_PROFILE.joystick_config,
+         sizeof(joystick_config));
+  joystick_apply_config(joystick_config);
 #endif
 }
 

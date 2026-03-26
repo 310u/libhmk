@@ -432,15 +432,18 @@ void command_process(const uint8_t *buf) {
   case COMMAND_GET_JOYSTICK_CONFIG: {
     const command_in_joystick_config_t *p = &in->joystick_config;
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
-    joystick_config_t config = eeconfig->profiles[p->profile].joystick_config;
+    joystick_config_t config;
+    memcpy(&config, &eeconfig->profiles[p->profile].joystick_config,
+           sizeof(config));
     memcpy(out->joystick_config.data, &config, sizeof(joystick_config_t));
     break;
   }
   case COMMAND_SET_JOYSTICK_CONFIG: {
     const command_in_joystick_config_t *p = &in->joystick_config;
-    const joystick_config_t joystick_config =
-        joystick_normalize_config(p->joystick_config);
+    joystick_config_t joystick_config;
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    memcpy(&joystick_config, &p->joystick_config, sizeof(joystick_config));
+    joystick_config = joystick_normalize_config(joystick_config);
 
     success = command_write_profile_bytes(
         p->profile, offsetof(eeconfig_profile_t, joystick_config),

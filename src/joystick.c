@@ -754,12 +754,17 @@ static bool joystick_switch_pressed(void) {
 }
 
 void joystick_init(void) {
+  joystick_config_t persisted_config;
   joystick_init_switch_pin();
 
   // Initial load of config cache
-  config_cache = joystick_normalize_config(eeconfig != NULL
-                                               ? CURRENT_PROFILE.joystick_config
-                                               : joystick_default_config());
+  if (eeconfig != NULL) {
+    memcpy(&persisted_config, &CURRENT_PROFILE.joystick_config,
+           sizeof(persisted_config));
+    config_cache = joystick_normalize_config(persisted_config);
+  } else {
+    config_cache = joystick_default_config();
+  }
   joystick_reset_signal_state();
   joystick_reset_output_state();
 }

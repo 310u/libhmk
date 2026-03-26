@@ -290,7 +290,10 @@ void layout_reset_runtime_state(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_scroll_mo_depth = 0;
   joystick_scroll_mo_restore_mode = 0;
-  joystick_apply_config(CURRENT_PROFILE.joystick_config);
+  joystick_config_t joystick_config;
+  memcpy(&joystick_config, &CURRENT_PROFILE.joystick_config,
+         sizeof(joystick_config));
+  joystick_apply_config(joystick_config);
 #endif
 
   for (uint32_t i = 0; i < NUM_KEYS; i++)
