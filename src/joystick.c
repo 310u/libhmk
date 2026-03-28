@@ -5,12 +5,7 @@
 #include "hid.h"
 #include "input_routing.h"
 #include "joystick.h"
-#include "keycodes.h"
-#include "eeconfig.h"
-#include "hardware/hardware.h"
-#include "hid.h"
-#include "input_routing.h"
-#include "joystick.h"
+#include "joystick_math.h"
 #include "keycodes.h"
 #include "lib/usqrt.h"
 #include "wear_leveling.h"
@@ -76,8 +71,6 @@
 #define JOYSTICK_MOUSE_DIVISOR 50L
 #define JOYSTICK_SCROLL_DIVISOR 250L
 #define JOYSTICK_VECTOR_MAX 181u
-#define JOYSTICK_CIRCULAR_TARGET_MAGNITUDE 127u
-#define JOYSTICK_FULL_CIRCLE_RADIANS 6.28318530718f
 #define JOYSTICK_OUTPUT_FP_SHIFT 8
 #define JOYSTICK_OUTPUT_FP_ONE (1L << JOYSTICK_OUTPUT_FP_SHIFT)
 
@@ -308,157 +301,6 @@ static int8_t joystick_fp_to_i8(int32_t value_fp) {
       (int16_t)lroundf((float)value_fp / (float)JOYSTICK_OUTPUT_FP_ONE));
 }
 
-static float joystick_boundary_sector_from_vector_fp(int32_t x_fp,
-                                                     int32_t y_fp) {
-  float angle = atan2f((float)y_fp, (float)x_fp);
-
-  if (angle < 0.0f) {
-    angle += JOYSTICK_FULL_CIRCLE_RADIANS;
-  }
-
-  return angle * ((float)JOYSTICK_RADIAL_BOUNDARY_SECTORS /
-                  JOYSTICK_FULL_CIRCLE_RADIANS);
-}
-
-static uint8_t joystick_wrap_boundary_index(int16_t index) {
-  int16_t wrapped = index % (int16_t)JOYSTICK_RADIAL_BOUNDARY_SECTORS;
-  if (wrapped < 0) {
-    wrapped += (int16_t)JOYSTICK_RADIAL_BOUNDARY_SECTORS;
-  }
-
-  return (uint8_t)wrapped;
-}
-
-static float joystick_boundary_value(const uint8_t *boundaries, int16_t index) {
-  float value = (float)boundaries[joystick_wrap_boundary_index(index)];
-
-  if (value <= 0.0f) {
-    return JOYSTICK_RADIAL_BOUNDARY_DEFAULT;
-  }
-
-  return value;
-}
-
-static float joystick_monotone_boundary_tangent(float previous, float current,
-                                                float next) {
-  float left_delta = current - previous;
-  float right_delta = next - current;
-
-  if (left_delta == 0.0f || right_delta == 0.0f ||
-      ((left_delta < 0.0f) != (right_delta < 0.0f))) {
-    return 0.0f;
-  }
-
-  float denominator = left_delta + right_delta;
-  if (denominator == 0.0f) {
-    return 0.0f;
-  }
-
-  return (2.0f * left_delta * right_delta) / denominator;
-}
-
-static float joystick_monotone_boundary_interpolate(float previous,
-                                                    float current, float next,
-                                                    float following,
-                                                    float fraction) {
-  if (fraction <= 0.0f) {
-    return current;
-  }
-  if (fraction >= 1.0f) {
-    return next;
-  }
-
-  float tangent_current =
-      joystick_monotone_boundary_tangent(previous, current, next);
-  float tangent_next =
-      joystick_monotone_boundary_tangent(current, next, following);
-  float fraction_sq = fraction * fraction;
-  float fraction_cu = fraction_sq * fraction;
-  float interpolated =
-      ((2.0f * fraction_cu) - (3.0f * fraction_sq) + 1.0f) * current +
-      (fraction_cu - (2.0f * fraction_sq) + fraction) * tangent_current +
-      ((-2.0f * fraction_cu) + (3.0f * fraction_sq)) * next +
-      (fraction_cu - fraction_sq) * tangent_next;
-  float min_boundary = current < next ? current : next;
-  float max_boundary = current > next ? current : next;
-
-  if (interpolated < min_boundary) {
-    return min_boundary;
-  }
-  if (interpolated > max_boundary) {
-    return max_boundary;
-  }
-
-  return interpolated;
-}
-
-static float joystick_boundary_lookup(const uint8_t *boundaries,
-                                      float sector) {
-  int16_t lower_index = (int16_t)floorf(sector);
-  float fraction = sector - floorf(sector);
-  float previous = joystick_boundary_value(boundaries, (int16_t)(lower_index - 1));
-  float lower = joystick_boundary_value(boundaries, lower_index);
-  float upper = joystick_boundary_value(boundaries, (int16_t)(lower_index + 1));
-  float following =
-      joystick_boundary_value(boundaries, (int16_t)(lower_index + 2));
-
-  return joystick_monotone_boundary_interpolate(previous, lower, upper,
-                                                following, fraction);
-}
-
-static void joystick_apply_circular_correction_fp(int32_t *x_fp,
-                                                  int32_t *y_fp) {
-  if (*x_fp == 0 && *y_fp == 0) {
-    return;
-  }
-
-  float sector = joystick_boundary_sector_from_vector_fp(*x_fp, *y_fp);
-  float observed_boundary =
-      joystick_boundary_lookup(config_cache.radial_boundaries, sector);
-  if (observed_boundary < 1.0f) {
-    return;
-  }
-
-  float scale = (float)JOYSTICK_CIRCULAR_TARGET_MAGNITUDE / observed_boundary;
-  *x_fp = (int32_t)lroundf((float)(*x_fp) * scale);
-  *y_fp = (int32_t)lroundf((float)(*y_fp) * scale);
-}
-
-static void joystick_apply_radial_deadzone_fp(int32_t *x_fp, int32_t *y_fp,
-                                              uint8_t deadzone) {
-  float x = (float)(*x_fp) / (float)JOYSTICK_OUTPUT_FP_ONE;
-  float y = (float)(*y_fp) / (float)JOYSTICK_OUTPUT_FP_ONE;
-  float magnitude = hypotf(x, y);
-  if (magnitude <= 0.0f) {
-    return;
-  }
-
-  if (deadzone >= 255u) {
-    *x_fp = 0;
-    *y_fp = 0;
-    return;
-  }
-
-  // The boundary table circularizes the physical joystick into a constant
-  // radial range, so the deadzone can be applied against a fixed radius.
-  float magnitude_norm =
-      magnitude * 255.0f / (float)JOYSTICK_CIRCULAR_TARGET_MAGNITUDE;
-  if (magnitude_norm > 255.0f) {
-    magnitude_norm = 255.0f;
-  }
-  if (magnitude_norm <= (float)deadzone) {
-    *x_fp = 0;
-    *y_fp = 0;
-    return;
-  }
-
-  float scaled_norm =
-      ((magnitude_norm - (float)deadzone) * 255.0f) / (255.0f - (float)deadzone);
-  float scale = scaled_norm / magnitude_norm;
-  *x_fp = (int32_t)lroundf((float)(*x_fp) * scale);
-  *y_fp = (int32_t)lroundf((float)(*y_fp) * scale);
-}
-
 static int32_t joystick_vector_delta_fp(uint16_t magnitude, uint8_t speed,
                                         uint8_t acceleration, int32_t divisor) {
   const int64_t max_sq =
@@ -631,7 +473,8 @@ static void joystick_update_signal_state(void) {
 
   corrected_x_fp = calibrated_x_fp;
   corrected_y_fp = calibrated_y_fp;
-  joystick_apply_circular_correction_fp(&corrected_x_fp, &corrected_y_fp);
+  joystick_apply_circular_correction_fp(config_cache.radial_boundaries,
+                                        &corrected_x_fp, &corrected_y_fp);
   current_state.corrected_x = joystick_fp_to_i8(corrected_x_fp);
   current_state.corrected_y = joystick_fp_to_i8(corrected_y_fp);
 

@@ -18,6 +18,7 @@
 #include "rgb_internal.h"
 #include "rgb_math.h"
 #include "rgb_reactive.h"
+#include "rgb_static.h"
 
 /*
  * Attribution:
@@ -31,21 +32,6 @@
  *   - RGB_EFFECT_TRIGGER_STATE
  */
 
-// Simple PRNG for effects
-static uint32_t random_state = 0x12345678;
-static uint8_t random8(void) {
-    random_state = random_state * 1103515245 + 12345;
-    return (uint8_t)(random_state >> 16);
-}
-static uint8_t random8_max(uint8_t max) {
-    if (max == 0) return 0;
-    return random8() % max;
-}
-static uint8_t random8_min_max(uint8_t min, uint8_t max) {
-    if (min >= max) return min;
-    return min + (random8() % (max - min));
-}
-
 // We need an array to hold the current LED colors
 static rgb_color_t current_colors[NUM_LEDS];
 static rgb_config_t rgb_config;
@@ -58,6 +44,7 @@ void rgb_matrix_record_keypress(uint8_t index) {
 void rgb_init(void) {
     rgb_driver_init();
     memcpy(&rgb_config, &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
+    rgb_static_reset();
     rgb_update();
 }
 
@@ -151,6 +138,8 @@ uint8_t rgb_coord_x_at(uint8_t led) { return rgb_led_coords[led].x; }
 
 uint8_t rgb_coord_y_at(uint8_t led) { return rgb_led_coords[led].y; }
 
+bool rgb_led_is_mod_at(uint8_t led) { return rgb_led_is_mod[led] != 0u; }
+
 uint8_t rgb_key_to_led_at(uint8_t key) { return rgb_key_to_led[key]; }
 
 uint8_t rgb_reactive_clip_at(uint8_t source_led, uint8_t target_led) {
@@ -228,6 +217,7 @@ void rgb_task(void) {
     uint16_t prev_tick = prev_scaled >> 8;
     
     uint8_t base_hue = rgb_to_hue(rgb_config.solid_color);
+    uint8_t secondary_hue = rgb_to_hue(rgb_config.secondary_color);
     static uint8_t prev_effect = 0xff;
     bool effect_changed = (prev_effect != rgb_config.current_effect);
     prev_effect = rgb_config.current_effect;
@@ -237,86 +227,18 @@ void rgb_task(void) {
         .effect_speed = rgb_config.effect_speed,
         .effect_changed = effect_changed,
     };
+    rgb_static_context_t static_context = {
+        .config = &rgb_config,
+        .base_hue = base_hue,
+        .secondary_hue = secondary_hue,
+        .effective_brightness = effective_brightness,
+        .anim_timer = anim_timer,
+        .scaled_timer = scaled_timer,
+        .tick = tick,
+        .prev_tick = prev_tick,
+    };
 
     switch (rgb_config.current_effect) {
-        case RGB_EFFECT_OFF:
-            rgb_set_all_color(0, 0, 0);
-            break;
-        case RGB_EFFECT_SOLID_COLOR: {
-            uint32_t r = ((uint32_t)rgb_config.solid_color.r * effective_brightness) / 255u;
-            uint32_t g = ((uint32_t)rgb_config.solid_color.g * effective_brightness) / 255u;
-            uint32_t b = ((uint32_t)rgb_config.solid_color.b * effective_brightness) / 255u;
-            rgb_set_all_color(r, g, b);
-            break;
-        }
-        case RGB_EFFECT_ALPHAS_MODS: {
-            uint8_t base_r = ((uint32_t)rgb_config.solid_color.r * effective_brightness) / 255;
-            uint8_t base_g = ((uint32_t)rgb_config.solid_color.g * effective_brightness) / 255;
-            uint8_t base_b = ((uint32_t)rgb_config.solid_color.b * effective_brightness) / 255;
-            uint8_t mod_r = ((uint32_t)rgb_config.secondary_color.r * effective_brightness) / 255;
-            uint8_t mod_g = ((uint32_t)rgb_config.secondary_color.g * effective_brightness) / 255;
-            uint8_t mod_b = ((uint32_t)rgb_config.secondary_color.b * effective_brightness) / 255;
-
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                bool is_mod = rgb_led_is_mod[i] != 0;
-                rgb_set_color(i, is_mod ? mod_r : base_r, is_mod ? mod_g : base_g,
-                              is_mod ? mod_b : base_b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_BAND_SAT:
-        case RGB_EFFECT_BAND_VAL: {
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                // QMK: s = hsv.s - abs(scale8(g_led_config.point[i].x, 228) + 28 - time) * 8;
-                // We'll use a simplified version that matches the visual band behavior
-                int16_t dist = (int16_t)x + 28 - (scaled_timer >> 8);
-                if (dist < 0) dist = -dist;
-                int16_t val = 255 - dist * 8;
-                if (val < 0) val = 0;
-                
-                if (rgb_config.current_effect == RGB_EFFECT_BAND_SAT) {
-                    hsv_t hsv = { .h = base_hue, .s = (uint8_t)val, .v = effective_brightness };
-                    rgb_set_color(i, hsv_to_rgb(hsv).r, hsv_to_rgb(hsv).g, hsv_to_rgb(hsv).b);
-                } else {
-                    hsv_t hsv = { .h = base_hue, .s = 255, .v = (uint8_t)((uint32_t)val * effective_brightness / 255) };
-                    rgb_set_color(i, hsv_to_rgb(hsv).r, hsv_to_rgb(hsv).g, hsv_to_rgb(hsv).b);
-                }
-            }
-            break;
-        }
-
-        case RGB_EFFECT_BAND_PINWHEEL_SAT:
-        case RGB_EFFECT_BAND_PINWHEEL_VAL:
-        case RGB_EFFECT_BAND_SPIRAL_SAT:
-        case RGB_EFFECT_BAND_SPIRAL_VAL: {
-            uint8_t time = scaled_timer >> 8;
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                int16_t dx = (int16_t)rgb_led_coords[i].x - 127;
-                int16_t dy = (int16_t)rgb_led_coords[i].y - 127;
-                uint8_t dist = (uint8_t)sqrt(dx*dx + dy*dy);
-                uint8_t angle = (uint8_t)((atan2(dy, dx) + M_PI) * 255 / (2 * M_PI));
-                
-                uint8_t offset = angle;
-                if (rgb_config.current_effect == RGB_EFFECT_BAND_SPIRAL_SAT || rgb_config.current_effect == RGB_EFFECT_BAND_SPIRAL_VAL) {
-                    offset += dist;
-                }
-                
-                int16_t val = 255 - abs((int16_t)offset - time) * 8;
-                if (val < 0) val = 0;
-
-                if (rgb_config.current_effect == RGB_EFFECT_BAND_PINWHEEL_SAT || rgb_config.current_effect == RGB_EFFECT_BAND_SPIRAL_SAT) {
-                    hsv_t hsv = { .h = base_hue, .s = (uint8_t)val, .v = effective_brightness };
-                    rgb_set_color(i, hsv_to_rgb(hsv).r, hsv_to_rgb(hsv).g, hsv_to_rgb(hsv).b);
-                } else {
-                    hsv_t hsv = { .h = base_hue, .s = 255, .v = (uint8_t)((uint32_t)val * effective_brightness / 255) };
-                    rgb_set_color(i, hsv_to_rgb(hsv).r, hsv_to_rgb(hsv).g, hsv_to_rgb(hsv).b);
-                }
-            }
-            break;
-        }
-
         case RGB_EFFECT_PIXEL_FLOW: {
             rgb_animated_render(RGB_EFFECT_PIXEL_FLOW, &animated_context);
             break;
@@ -329,265 +251,6 @@ void rgb_task(void) {
 
         case RGB_EFFECT_PIXEL_RAIN: {
             rgb_animated_render(RGB_EFFECT_PIXEL_RAIN, &animated_context);
-            break;
-        }
-
-        case RGB_EFFECT_GRADIENT_UP_DOWN: {
-            uint8_t scale = scale8(64, rgb_config.effect_speed);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t y = rgb_led_coords[i].y;
-                uint8_t h = (uint8_t)(base_hue + scale * (y >> 4));
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_GRADIENT_LEFT_RIGHT: {
-            uint8_t scale = scale8(64, rgb_config.effect_speed);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t h = (uint8_t)(base_hue + ((scale * x) >> 5));
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-
-        case RGB_EFFECT_BREATHING: {
-            // QMK-style breathing: scale8(abs8(sin8(time / 2) - 128) * 2, val)
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            uint8_t s = sin8(time >> 1);
-            uint8_t pulse = (uint8_t)(abs8((int16_t)s - 128) << 1);
-            uint8_t v = scale8(pulse, effective_brightness);
-            
-            rgb_color_t c = hsv_to_rgb((hsv_t){.h = base_hue, .s = 255, .v = v});
-            rgb_set_all_color(c.r, c.g, c.b);
-            break;
-        }
-
-        case RGB_EFFECT_CYCLE_ALL: {
-            uint8_t h = (uint8_t)(scaled_timer >> 8);
-            rgb_color_t c = hsv_to_rgb((hsv_t){.h = h, .s = 255, .v = effective_brightness});
-            rgb_set_all_color(c.r, c.g, c.b);
-            break;
-        }
-
-        case RGB_EFFECT_CYCLE_LEFT_RIGHT: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t h = (uint8_t)(x - time);
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_CYCLE_UP_DOWN: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t y = rgb_led_coords[i].y;
-                uint8_t h = (uint8_t)(y - time);
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_CYCLE_OUT_IN: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t y = rgb_led_coords[i].y;
-                int16_t dx = (int16_t)x - 127;
-                int16_t dy = (int16_t)y - 127;
-                uint8_t dist = (uint8_t)sqrt(dx*dx + dy*dy);
-                // QMK: h = 3 * dist / 2 + time
-                uint8_t h = (uint8_t)((3 * dist / 2) + time);
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-        case RGB_EFFECT_CYCLE_OUT_IN_DUAL: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            uint8_t secondary_hue = rgb_to_hue(rgb_config.secondary_color);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t y = rgb_led_coords[i].y;
-                int16_t dx = (int16_t)x - 127;
-                int16_t dy = (int16_t)y - 127;
-                int16_t centered = (127 / 2) - abs8(dx);
-                uint8_t dist = (uint8_t)sqrt(centered * centered + dy * dy);
-                uint8_t h = (uint8_t)(3 * dist + time);
-                // Alternate between primary/secondary hue rings.
-                uint8_t final_h = (h & 0x80) ? secondary_hue : h;
-                hsv_t hsv = { .h = final_h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_RAINBOW_MOVING_CHEVRON: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t y = rgb_led_coords[i].y;
-                uint8_t h = (uint8_t)(base_hue + abs8((int16_t)y - 127) + (x - time));
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-        case RGB_EFFECT_DUAL_BEACON: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            uint8_t sn = sin8(time);
-            uint8_t cs = cos8(time);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                int16_t dx = (int16_t)rgb_led_coords[i].x - 127;
-                int16_t dy = (int16_t)rgb_led_coords[i].y - 127;
-                int16_t proj = (dy * ((int16_t)cs - 128) + dx * ((int16_t)sn - 128)) / 128;
-                uint8_t h = (uint8_t)(base_hue + proj);
-                rgb_color_t c = hsv_to_rgb((hsv_t){.h = h, .s = 255, .v = effective_brightness});
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_CYCLE_PINWHEEL:
-        case RGB_EFFECT_CYCLE_SPIRAL: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t y = rgb_led_coords[i].y;
-                int16_t dx = (int16_t)x - 127;
-                int16_t dy = (int16_t)y - 127;
-                uint8_t angle = (uint8_t)((atan2(dy, dx) + M_PI) * 255 / (2 * M_PI));
-                uint8_t dist = (uint8_t)sqrt(dx * dx + dy * dy);
-                uint8_t h = (rgb_config.current_effect == RGB_EFFECT_CYCLE_SPIRAL)
-                                ? (uint8_t)(dist - time - angle)
-                                : (uint8_t)(angle + time);
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_RAINBOW_BEACON: {
-            // QMK: hsv.h += ((y - center_y) * 2 * cos + (x - center_x) * 2 * sin) / 128
-            uint8_t time = scaled_timer >> 8;
-            int16_t sn = (int16_t)sin8(time) - 128;
-            int16_t cs = (int16_t)cos8(time) - 128;
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                int16_t dx = (int16_t)rgb_led_coords[i].x - 127;
-                int16_t dy = (int16_t)rgb_led_coords[i].y - 127;
-                // Hue shifts based on time + spatial beacon rotation
-                int16_t delta = (dy * 2 * cs + dx * 2 * sn) / 128;
-                uint8_t h = (uint8_t)(time + delta);
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_RAINBOW_PINWHEELS: {
-            // QMK: hsv.h += ((y - center_y) * 3 * cos + (56 - abs(x - center_x)) * 3 * sin) / 128
-            uint8_t time = scaled_timer >> 8;
-            int16_t sn = (int16_t)sin8(time) - 128;
-            int16_t cs = (int16_t)cos8(time) - 128;
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                int16_t dx = (int16_t)rgb_led_coords[i].x - 127;
-                int16_t dy = (int16_t)rgb_led_coords[i].y - 127;
-                int16_t adx = (dx < 0) ? -dx : dx;
-                // Add time to hue for full color cycling
-                int16_t delta = (dy * 3 * cs + (56 - adx) * 3 * sn) / 128;
-                uint8_t h = (uint8_t)(time + delta);
-                hsv_t hsv = { .h = h, .s = 255, .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_FLOWER_BLOOMING: {
-            uint8_t phase = (anim_timer / 4) % 255;
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t y = rgb_led_coords[i].y;
-                int16_t dx = (int16_t)x - 127;
-                int16_t dy = (int16_t)y - 127;
-                uint8_t dist = (uint8_t)sqrt(dx*dx + dy*dy);
-                uint8_t v = (uint8_t)(127 + 127 * sin((phase - dist) * M_PI / 64));
-                hsv_t hsv = { .h = (uint8_t)(base_hue + dist), .s = 255, .v = (uint8_t)((uint32_t)v * effective_brightness / 255) };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_STARLIGHT: {
-            uint8_t st_time = scale8((uint8_t)(scaled_timer >> 8), (uint8_t)(rgb_config.effect_speed >> 3));
-            uint8_t st_v = scale8((uint8_t)(abs8((int16_t)sin8(st_time) - 128) << 1), effective_brightness);
-            if ((tick % 5 == 0) && (tick != prev_tick)) {
-                uint8_t rand_idx = random8_max(NUM_LEDS);
-                hsv_t hsv = { .h = base_hue, .s = 255, .v = st_v };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(rand_idx, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_RAINDROPS: {
-            // Periodic trigger
-            if ((tick % 10 == 0) && (tick != prev_tick)) {
-                uint8_t rand_idx = random8_max(NUM_LEDS);
-                hsv_t hsv = { .h = base_hue, .s = 255, .v = effective_brightness };
-                
-                int8_t delta_h = (int8_t)((hsv.h + 128) - hsv.h) / 4;
-                hsv.h += (uint8_t)(delta_h * random8_max(3));
-                
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(rand_idx, c.r, c.g, c.b);
-            }
-            break;
-        }
-
-        case RGB_EFFECT_JELLYBEAN_RAINDROPS: {
-            if ((tick % 5 == 0) && (tick != prev_tick)) {
-                uint8_t rand_idx = random8_max(NUM_LEDS);
-                hsv_t hsv = { .h = random8(), .s = random8_min_max(127, 255), .v = effective_brightness };
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(rand_idx, c.r, c.g, c.b);
-            }
-            break;
-        }
-        case RGB_EFFECT_STARLIGHT_SMOOTH:
-        case RGB_EFFECT_STARLIGHT_DUAL_HUE:
-        case RGB_EFFECT_STARLIGHT_DUAL_SAT: {
-            uint8_t st_time = scale8((uint8_t)(scaled_timer >> 8), (uint8_t)(rgb_config.effect_speed >> 3));
-            uint8_t st_v = scale8((uint8_t)(abs8((int16_t)sin8(st_time) - 128) << 1), effective_brightness);
-            if ((tick % 5 == 0) && (tick != prev_tick)) {
-                uint8_t rand_idx = random8_max(NUM_LEDS);
-                hsv_t hsv = { .h = base_hue, .s = 255, .v = st_v };
-                if (rgb_config.current_effect == RGB_EFFECT_STARLIGHT_DUAL_HUE) {
-                    hsv.h = (uint8_t)(hsv.h + random8_max(31));
-                } else if (rgb_config.current_effect == RGB_EFFECT_STARLIGHT_DUAL_SAT) {
-                    hsv.s = (uint8_t)(hsv.s + random8_max(31));
-                }
-                rgb_color_t c = hsv_to_rgb(hsv);
-                rgb_set_color(rand_idx, c.r, c.g, c.b);
-            }
             break;
         }
 
@@ -638,47 +301,6 @@ void rgb_task(void) {
             }
             break;
         }
-        case RGB_EFFECT_HUE_BREATHING: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            uint8_t delta = 12;
-            uint8_t h = (uint8_t)(base_hue + scale8((uint8_t)(abs8((int16_t)sin8(time >> 1) - 128) << 1), delta));
-            rgb_color_t c = hsv_to_rgb((hsv_t){.h = h, .s = 255, .v = effective_brightness});
-            rgb_set_all_color(c.r, c.g, c.b);
-            break;
-        }
-        case RGB_EFFECT_HUE_PENDULUM: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            uint8_t huedelta = 12;
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t delta = scale8((uint8_t)(abs8((int16_t)sin8(time) + x - 128) << 1), huedelta);
-                uint8_t h = (uint8_t)(base_hue + delta);
-                rgb_color_t c = hsv_to_rgb((hsv_t){.h = h, .s = 255, .v = effective_brightness});
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-        case RGB_EFFECT_HUE_WAVE: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            uint8_t huedelta = 24;
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t x = rgb_led_coords[i].x;
-                uint8_t h = (uint8_t)(base_hue + scale8(abs8((int16_t)x - time), huedelta));
-                rgb_color_t c = hsv_to_rgb((hsv_t){.h = h, .s = 255, .v = effective_brightness});
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
-        case RGB_EFFECT_RIVERFLOW: {
-            uint8_t time = (uint8_t)(scaled_timer >> 8);
-            for (uint8_t i = 0; i < NUM_LEDS; i++) {
-                uint8_t t = (uint8_t)(time + (i * 315));
-                uint8_t v = scale8((uint8_t)(abs8((int16_t)sin8(t) - 128) << 1), effective_brightness);
-                rgb_color_t c = hsv_to_rgb((hsv_t){.h = base_hue, .s = 255, .v = v});
-                rgb_set_color(i, c.r, c.g, c.b);
-            }
-            break;
-        }
 
         case RGB_EFFECT_SOLID_REACTIVE:
         case RGB_EFFECT_SOLID_REACTIVE_SIMPLE:
@@ -714,6 +336,10 @@ void rgb_task(void) {
         }
 
         default:
+            if (rgb_static_render(rgb_config.current_effect, &static_context)) {
+                break;
+            }
+
             // Rainbow wave as default for anything else
             for (uint8_t i = 0; i < NUM_LEDS; i++) {
                 uint8_t x = rgb_led_coords[i].x;

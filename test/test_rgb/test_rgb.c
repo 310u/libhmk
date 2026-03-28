@@ -134,8 +134,26 @@ void test_rgb_trigger_state_uses_configured_color_for_each_state(void) {
   TEST_ASSERT_EQUAL_UINT8(12u, held.b);
 }
 
+void test_rgb_solid_color_scales_global_brightness(void) {
+  rgb_config_t *config = rgb_get_config();
+  config->current_effect = RGB_EFFECT_SOLID_COLOR;
+  config->global_brightness = 128u;
+  config->solid_color = (rgb_color_t){.r = 100u, .g = 50u, .b = 25u};
+
+  mock_time = 1000u;
+  rgb_task();
+
+  TEST_ASSERT_EQUAL_UINT16(NUM_LEDS * 3u, last_grb_frame_len);
+
+  const rgb_color_t solid = driver_rgb_at(0u);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)((100u * 128u) / 255u), solid.r);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)((50u * 128u) / 255u), solid.g);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)((25u * 128u) / 255u), solid.b);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_rgb_trigger_state_uses_configured_color_for_each_state);
+  RUN_TEST(test_rgb_solid_color_scales_global_brightness);
   return UNITY_END();
 }
