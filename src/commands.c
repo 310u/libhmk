@@ -427,6 +427,10 @@ void command_process(const uint8_t *buf) {
     out->joystick_state.out_x = state.out_x;
     out->joystick_state.out_y = state.out_y;
     out->joystick_state.sw = state.sw;
+    out->joystick_state.calibrated_x = state.calibrated_x;
+    out->joystick_state.calibrated_y = state.calibrated_y;
+    out->joystick_state.corrected_x = state.corrected_x;
+    out->joystick_state.corrected_y = state.corrected_y;
     break;
   }
   case COMMAND_GET_JOYSTICK_CONFIG: {

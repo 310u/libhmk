@@ -105,6 +105,10 @@ typedef struct {
     int8_t out_x;
     int8_t out_y;
     bool sw;
+    int8_t calibrated_x;
+    int8_t calibrated_y;
+    int8_t corrected_x;
+    int8_t corrected_y;
 } joystick_state_t;
 
 void joystick_init(void);

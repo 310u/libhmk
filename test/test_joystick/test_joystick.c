@@ -92,6 +92,26 @@ static joystick_config_t joystick_test_config(uint8_t mode) {
   return config;
 }
 
+static joystick_config_t joystick_user_regression_config(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_XINPUT_RS);
+
+  config.x.min = 601;
+  config.x.center = 2032;
+  config.x.max = 3305;
+  config.y.min = 413;
+  config.y.center = 1981;
+  config.y.max = 3513;
+  config.deadzone = 10;
+
+  const uint8_t boundaries[JOYSTICK_RADIAL_BOUNDARY_SECTORS] = {
+      126, 129, 131, 130, 131, 131, 130, 128, 127, 127, 127,
+      126, 125, 123, 121, 120, 127, 129, 129, 130, 130, 131,
+      128, 128, 128, 128, 125, 126, 129, 129, 127, 125,
+  };
+  memcpy(config.radial_boundaries, boundaries, sizeof(boundaries));
+  return config;
+}
+
 static void reset_reports(void) {
   last_mouse_x = 0;
   last_mouse_y = 0;
@@ -221,7 +241,7 @@ void test_joystick_circular_correction_uses_monotone_sector_interpolation(void) 
   TEST_ASSERT_EQUAL_INT8(80, state.out_y);
 }
 
-void test_joystick_gamepad_mode_preserves_large_input_steps(void) {
+void test_joystick_gamepad_mode_bypasses_adc_smoothing(void) {
   joystick_apply_config(joystick_test_config(JOYSTICK_MODE_XINPUT_RS));
 
   analog_raw_values[0] = 4095;
@@ -234,7 +254,7 @@ void test_joystick_gamepad_mode_preserves_large_input_steps(void) {
   TEST_ASSERT_EQUAL_INT8(0, state.out_y);
 }
 
-void test_joystick_gamepad_mode_lightly_smooths_small_jitter(void) {
+void test_joystick_gamepad_mode_does_not_shrink_small_input_steps(void) {
   joystick_apply_config(joystick_test_config(JOYSTICK_MODE_XINPUT_RS));
 
   analog_raw_values[0] = 2048;
@@ -248,7 +268,7 @@ void test_joystick_gamepad_mode_lightly_smooths_small_jitter(void) {
   joystick_task();
 
   joystick_state_t state = joystick_get_state();
-  TEST_ASSERT_EQUAL_INT8(0, state.out_x);
+  TEST_ASSERT_GREATER_THAN_INT8(0, state.out_x);
   TEST_ASSERT_EQUAL_INT8(0, state.out_y);
 }
 
@@ -263,6 +283,40 @@ void test_joystick_preserves_fractional_axis_precision_until_output(void) {
   joystick_state_t state = joystick_get_state();
   TEST_ASSERT_EQUAL_INT8(64, state.out_x);
   TEST_ASSERT_EQUAL_INT8(0, state.out_y);
+}
+
+void test_joystick_user_regression_config_preserves_full_vertical_throw(void) {
+  joystick_apply_config(joystick_user_regression_config());
+
+  analog_raw_values[0] = 2032;
+  analog_raw_values[1] = 3513;
+  mock_time = 1;
+  joystick_task();
+
+  joystick_state_t state = joystick_get_state();
+  TEST_ASSERT_INT_WITHIN(1, 0, state.calibrated_x);
+  TEST_ASSERT_INT_WITHIN(1, 127, state.calibrated_y);
+  TEST_ASSERT_INT_WITHIN(1, 0, state.corrected_x);
+  TEST_ASSERT_INT_WITHIN(1, 127, state.corrected_y);
+  TEST_ASSERT_INT_WITHIN(1, 0, state.out_x);
+  TEST_ASSERT_INT_WITHIN(1, 127, state.out_y);
+}
+
+void test_joystick_user_regression_config_preserves_upper_right_arc(void) {
+  joystick_apply_config(joystick_user_regression_config());
+
+  analog_raw_values[0] = 2234;
+  analog_raw_values[1] = 3504;
+  mock_time = 1;
+  joystick_task();
+
+  joystick_state_t state = joystick_get_state();
+  TEST_ASSERT_INT_WITHIN(2, 20, state.calibrated_x);
+  TEST_ASSERT_INT_WITHIN(2, 126, state.calibrated_y);
+  TEST_ASSERT_INT_WITHIN(2, 20, state.corrected_x);
+  TEST_ASSERT_INT_WITHIN(2, 126, state.corrected_y);
+  TEST_ASSERT_INT_WITHIN(2, 20, state.out_x);
+  TEST_ASSERT_INT_WITHIN(2, 126, state.out_y);
 }
 
 void test_joystick_select_mouse_preset_updates_effective_pointer_settings(void) {
@@ -288,9 +342,11 @@ int main(void) {
   RUN_TEST(test_joystick_apply_config_releases_mouse_button_on_mode_change);
   RUN_TEST(test_joystick_circular_correction_scales_diagonal_throw);
   RUN_TEST(test_joystick_circular_correction_uses_monotone_sector_interpolation);
-  RUN_TEST(test_joystick_gamepad_mode_preserves_large_input_steps);
-  RUN_TEST(test_joystick_gamepad_mode_lightly_smooths_small_jitter);
+  RUN_TEST(test_joystick_gamepad_mode_bypasses_adc_smoothing);
+  RUN_TEST(test_joystick_gamepad_mode_does_not_shrink_small_input_steps);
   RUN_TEST(test_joystick_preserves_fractional_axis_precision_until_output);
+  RUN_TEST(test_joystick_user_regression_config_preserves_full_vertical_throw);
+  RUN_TEST(test_joystick_user_regression_config_preserves_upper_right_arc);
   RUN_TEST(test_joystick_select_mouse_preset_updates_effective_pointer_settings);
   return UNITY_END();
 }

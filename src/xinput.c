@@ -67,6 +67,16 @@ static int8_t xinput_axis_to_hid_gamepad(int16_t axis) {
   return (int8_t)((int32_t)axis * 128 / 32768);
 }
 
+static int8_t xinput_y_axis_to_hid_gamepad(int16_t axis) {
+  const int32_t inverted = -(int32_t)axis;
+
+  if (inverted > 0) {
+    return (int8_t)(inverted * 127 / 32767);
+  }
+
+  return (int8_t)(inverted * 128 / 32768);
+}
+
 static xinput_report_t xinput_empty_report(void) {
   return (xinput_report_t){.report_size = sizeof(xinput_report_t)};
 }
@@ -205,9 +215,9 @@ xinput_report_to_hid_gamepad(const xinput_report_t *report) {
   hid_gamepad_xbox_report_t gp_report = {0};
 
   gp_report.lx = xinput_axis_to_hid_gamepad(report->joysticks[0]);
-  gp_report.ly = xinput_axis_to_hid_gamepad(report->joysticks[1]);
+  gp_report.ly = xinput_y_axis_to_hid_gamepad(report->joysticks[1]);
   gp_report.rx = xinput_axis_to_hid_gamepad(report->joysticks[2]);
-  gp_report.ry = xinput_axis_to_hid_gamepad(report->joysticks[3]);
+  gp_report.ry = xinput_y_axis_to_hid_gamepad(report->joysticks[3]);
   gp_report.lt = report->lz;
   gp_report.rt = report->rz;
 

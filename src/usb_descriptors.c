@@ -114,9 +114,10 @@ static const uint8_t desc_hid_report_with_gamepad[] = {
     HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
 
     // Right Stick: Rx, Ry (int8, -128 to 127)
-    // Linux derives large default flat/fuzz values from wide logical ranges.
-    // Keeping the generic HID transport at int8 avoids an automatic ~12.5%
-    // kernel deadzone while preserving enough browser Gamepad resolution.
+    // On Linux, hid-input assigns gamepad flat/fuzz from the logical span.
+    // Keeping the generic HID transport at int8 still leaves joydev with a
+    // non-zero flat value, but avoids the much larger deadzone Linux would
+    // derive from 16-bit stick ranges.
     HID_USAGE(HID_USAGE_DESKTOP_RX),
     HID_USAGE(HID_USAGE_DESKTOP_RY),
     HID_REPORT_COUNT(2),

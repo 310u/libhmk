@@ -59,10 +59,6 @@
 #define JOYSTICK_SMOOTHING_FAST_DELTA 24u
 #endif
 
-#ifndef JOYSTICK_GAMEPAD_SMOOTHING_EXPONENT
-#define JOYSTICK_GAMEPAD_SMOOTHING_EXPONENT 1u
-#endif
-
 #ifndef JOYSTICK_MOUSE_REPORT_INTERVAL_MS
 #define JOYSTICK_MOUSE_REPORT_INTERVAL_MS 1u
 #endif
@@ -237,13 +233,7 @@ static uint16_t joystick_ema(uint16_t old_val, uint16_t new_val,
 
 static uint16_t joystick_filter_adc(uint16_t filtered_val, uint16_t raw_val) {
   if (joystick_mode_is_gamepad(config_cache.mode)) {
-    if (joystick_abs_diff_u16(filtered_val, raw_val) >=
-        JOYSTICK_SMOOTHING_FAST_DELTA) {
-      return raw_val;
-    }
-
-    return joystick_ema(filtered_val, raw_val,
-                        JOYSTICK_GAMEPAD_SMOOTHING_EXPONENT);
+    return raw_val;
   }
 
   uint8_t exponent = JOYSTICK_SMOOTHING_SLOW_EXPONENT;
@@ -579,6 +569,10 @@ static void joystick_reset_signal_state(void) {
   current_state.out_x = 0;
   current_state.out_y = 0;
   current_state.sw = false;
+  current_state.calibrated_x = 0;
+  current_state.calibrated_y = 0;
+  current_state.corrected_x = 0;
+  current_state.corrected_y = 0;
   filtered_x = 0;
   filtered_y = 0;
   sw_raw = false;
@@ -616,6 +610,10 @@ static void joystick_update_switch_state(void) {
 static void joystick_update_signal_state(void) {
   const uint16_t x_raw = analog_read_raw(JOYSTICK_X_ADC_INDEX);
   const uint16_t y_raw = analog_read_raw(JOYSTICK_Y_ADC_INDEX);
+  int32_t calibrated_x_fp = 0;
+  int32_t calibrated_y_fp = 0;
+  int32_t corrected_x_fp = 0;
+  int32_t corrected_y_fp = 0;
   int32_t out_x_fp = 0;
   int32_t out_y_fp = 0;
 
@@ -626,9 +624,19 @@ static void joystick_update_signal_state(void) {
 
   joystick_update_switch_state();
 
-  out_x_fp = joystick_apply_calibration_fp(filtered_x, &config_cache.x);
-  out_y_fp = joystick_apply_calibration_fp(filtered_y, &config_cache.y);
-  joystick_apply_circular_correction_fp(&out_x_fp, &out_y_fp);
+  calibrated_x_fp = joystick_apply_calibration_fp(filtered_x, &config_cache.x);
+  calibrated_y_fp = joystick_apply_calibration_fp(filtered_y, &config_cache.y);
+  current_state.calibrated_x = joystick_fp_to_i8(calibrated_x_fp);
+  current_state.calibrated_y = joystick_fp_to_i8(calibrated_y_fp);
+
+  corrected_x_fp = calibrated_x_fp;
+  corrected_y_fp = calibrated_y_fp;
+  joystick_apply_circular_correction_fp(&corrected_x_fp, &corrected_y_fp);
+  current_state.corrected_x = joystick_fp_to_i8(corrected_x_fp);
+  current_state.corrected_y = joystick_fp_to_i8(corrected_y_fp);
+
+  out_x_fp = corrected_x_fp;
+  out_y_fp = corrected_y_fp;
   joystick_apply_radial_deadzone_fp(&out_x_fp, &out_y_fp, config_cache.deadzone);
   current_state.out_x = joystick_fp_to_i8(out_x_fp);
   current_state.out_y = joystick_fp_to_i8(out_y_fp);
