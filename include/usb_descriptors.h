@@ -35,6 +35,9 @@ enum {
 enum {
   // Separate interface for keyboard to support boot protocol
   USB_ITF_KEYBOARD = 0,
+  // Keep the pointer on its own boot-mouse interface for hosts such as iPadOS
+  // that are picky about composite report-id mice.
+  USB_ITF_MOUSE,
   USB_ITF_HID,
   USB_ITF_RAW_HID,
   // We intentionally put the XInput interface last, so that if it is not
@@ -47,6 +50,7 @@ enum {
 // In endpoint addresses
 enum {
   EP_IN_ADDR_KEYBOARD = 0x81,
+  EP_IN_ADDR_MOUSE,
   EP_IN_ADDR_HID,
   EP_IN_ADDR_RAW_HID,
   EP_IN_ADDR_XINPUT,
@@ -61,7 +65,6 @@ enum {
 enum {
   REPORT_ID_SYSTEM_CONTROL = 1,
   REPORT_ID_CONSUMER_CONTROL,
-  REPORT_ID_MOUSE,
   REPORT_ID_GAMEPAD,
   REPORT_ID_COUNT,
 };

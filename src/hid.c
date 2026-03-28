@@ -119,6 +119,41 @@ static void hid_send_keyboard_report(void) {
     kb_report_queue_size--;
   }
 }
+
+/**
+ * @brief Send the mouse report
+ *
+ * This function will send the mouse report to its exclusive interface.
+ *
+ * @return None
+ */
+static void hid_send_mouse_report(void) {
+  if (mouse_report.buttons == mouse_buttons_last_sent && mouse_pending_x == 0 &&
+      mouse_pending_y == 0 && mouse_pending_wheel == 0 &&
+      mouse_pending_pan == 0)
+    return;
+
+  hid_mouse_report_t next_mouse_report = {
+      .buttons = mouse_report.buttons,
+      .x = hid_mouse_clamp_pending(mouse_pending_x),
+      .y = hid_mouse_clamp_pending(mouse_pending_y),
+      .wheel = hid_mouse_clamp_pending(mouse_pending_wheel),
+      .pan = hid_mouse_clamp_pending(mouse_pending_pan),
+  };
+
+  if (tud_hid_n_report(USB_ITF_MOUSE, 0, &next_mouse_report,
+                       sizeof(next_mouse_report))) {
+    EVENT_TRACE(
+        "[event] hid send mouse buttons=0x%02x x=%d y=%d wheel=%d pan=%d\n",
+        next_mouse_report.buttons, next_mouse_report.x, next_mouse_report.y,
+        next_mouse_report.wheel, next_mouse_report.pan);
+    mouse_buttons_last_sent = next_mouse_report.buttons;
+    mouse_pending_x -= next_mouse_report.x;
+    mouse_pending_y -= next_mouse_report.y;
+    mouse_pending_wheel -= next_mouse_report.wheel;
+    mouse_pending_pan -= next_mouse_report.pan;
+  }
+}
 #endif
 
 /**
@@ -152,35 +187,6 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
         EVENT_TRACE("[event] hid send consumer value=0x%04x\n",
                     consumer_report);
         consumer_report_last_sent = consumer_report;
-      }
-      return;
-
-    case REPORT_ID_MOUSE:
-      if (mouse_report.buttons == mouse_buttons_last_sent && mouse_pending_x == 0 &&
-          mouse_pending_y == 0 && mouse_pending_wheel == 0 &&
-          mouse_pending_pan == 0)
-        // Nothing changed since the last mouse report.
-        break;
-
-      hid_mouse_report_t next_mouse_report = {
-          .buttons = mouse_report.buttons,
-          .x = hid_mouse_clamp_pending(mouse_pending_x),
-          .y = hid_mouse_clamp_pending(mouse_pending_y),
-          .wheel = hid_mouse_clamp_pending(mouse_pending_wheel),
-          .pan = hid_mouse_clamp_pending(mouse_pending_pan),
-      };
-
-      if (tud_hid_n_report(USB_ITF_HID, report_id, &next_mouse_report,
-                           sizeof(next_mouse_report))) {
-        EVENT_TRACE(
-            "[event] hid send mouse buttons=0x%02x x=%d y=%d wheel=%d pan=%d\n",
-            next_mouse_report.buttons, next_mouse_report.x, next_mouse_report.y,
-            next_mouse_report.wheel, next_mouse_report.pan);
-        mouse_buttons_last_sent = next_mouse_report.buttons;
-        mouse_pending_x -= next_mouse_report.x;
-        mouse_pending_y -= next_mouse_report.y;
-        mouse_pending_wheel -= next_mouse_report.wheel;
-        mouse_pending_pan -= next_mouse_report.pan;
       }
       return;
 
@@ -354,6 +360,9 @@ void hid_send_reports(void) {
   if (tud_hid_n_ready(USB_ITF_KEYBOARD))
     hid_send_keyboard_report();
 
+  if (tud_hid_n_ready(USB_ITF_MOUSE))
+    hid_send_mouse_report();
+
   if (tud_hid_n_ready(USB_ITF_HID))
     // Start from the first report ID
     hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);
@@ -381,6 +390,8 @@ void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
                                 uint16_t len) {
   if (instance == USB_ITF_KEYBOARD)
     hid_send_keyboard_report();
+  else if (instance == USB_ITF_MOUSE)
+    hid_send_mouse_report();
   else if (instance == USB_ITF_HID)
     // Start from the next report ID
     hid_send_hid_report(report[0] + 1);

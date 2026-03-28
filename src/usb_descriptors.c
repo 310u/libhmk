@@ -79,11 +79,15 @@ static const uint8_t desc_keyboard_report[] = {
 
 };
 
+// HID report descriptor for mouse interface
+static const uint8_t desc_mouse_report[] = {
+    TUD_HID_REPORT_DESC_MOUSE(),
+};
+
 // HID report descriptor for other HID interfaces (without gamepad)
 static const uint8_t desc_hid_report[] = {
     TUD_HID_REPORT_DESC_SYSTEM_CONTROL(HID_REPORT_ID(REPORT_ID_SYSTEM_CONTROL)),
     TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(REPORT_ID_CONSUMER_CONTROL)),
-    TUD_HID_REPORT_DESC_MOUSE(HID_REPORT_ID(REPORT_ID_MOUSE)),
 };
 
 // HID report descriptor for other HID interfaces (with gamepad)
@@ -91,7 +95,6 @@ static const uint8_t desc_hid_report[] = {
 static const uint8_t desc_hid_report_with_gamepad[] = {
     TUD_HID_REPORT_DESC_SYSTEM_CONTROL(HID_REPORT_ID(REPORT_ID_SYSTEM_CONTROL)),
     TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(REPORT_ID_CONSUMER_CONTROL)),
-    TUD_HID_REPORT_DESC_MOUSE(HID_REPORT_ID(REPORT_ID_MOUSE)),
 
     // Xbox-compatible HID Gamepad
     HID_USAGE_PAGE(HID_USAGE_PAGE_DESKTOP),
@@ -176,7 +179,7 @@ static const uint8_t desc_raw_hid_report[] = {
 // Maximum possible configuration descriptor length (with both gamepad and
 // XInput). The actual length may be smaller depending on the configuration.
 #define CONFIG_TOTAL_LEN                                                       \
-  (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN + TUD_HID_INOUT_DESC_LEN +       \
+  (TUD_CONFIG_DESC_LEN + 3 * TUD_HID_DESC_LEN + TUD_HID_INOUT_DESC_LEN +       \
    XINPUT_DESC_LEN)
 
 // Configuration descriptor
@@ -343,6 +346,10 @@ static void generate_desc_configuration(uint8_t *dst) {
       TUD_HID_DESCRIPTOR(USB_ITF_KEYBOARD, 0, HID_ITF_PROTOCOL_KEYBOARD,
                          sizeof(desc_keyboard_report), EP_IN_ADDR_KEYBOARD,
                          CFG_TUD_HID_EP_BUFSIZE, polling_interval),
+      // Mouse interface descriptor
+      TUD_HID_DESCRIPTOR(USB_ITF_MOUSE, 0, HID_ITF_PROTOCOL_MOUSE,
+                         sizeof(desc_mouse_report), EP_IN_ADDR_MOUSE,
+                         CFG_TUD_HID_EP_BUFSIZE, polling_interval),
       // HID interface descriptor
       TUD_HID_DESCRIPTOR(USB_ITF_HID, 0, HID_ITF_PROTOCOL_NONE,
                          hid_report_desc_len, EP_IN_ADDR_HID,
@@ -373,6 +380,9 @@ const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance) {
   switch (instance) {
   case USB_ITF_KEYBOARD:
     return desc_keyboard_report;
+
+  case USB_ITF_MOUSE:
+    return desc_mouse_report;
 
   case USB_ITF_HID:
     // Return the appropriate HID report descriptor based on XInput state:

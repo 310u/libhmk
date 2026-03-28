@@ -7,12 +7,14 @@
 #include "usb_descriptors.h"
 
 static bool keyboard_ready;
+static bool mouse_ready;
 static bool hid_ready;
 static bool usb_suspended;
 static uint32_t mock_timer;
 
 static uint32_t report_count;
 static uint32_t keyboard_ready_checks;
+static uint32_t mouse_ready_checks;
 static uint32_t hid_ready_checks;
 static uint32_t wakeup_count;
 static uint8_t last_instance;
@@ -52,7 +54,7 @@ bool tud_hid_n_report(uint8_t instance, uint8_t report_id, const void *report,
     memcpy(&keyboard_reports[keyboard_report_count], report, len);
     keyboard_report_count++;
   }
-  if (instance == USB_ITF_HID && report_id == REPORT_ID_MOUSE &&
+  if (instance == USB_ITF_MOUSE && report_id == 0 &&
       mouse_report_count < 8 && len == sizeof(hid_mouse_report_t)) {
     memcpy(&mouse_reports[mouse_report_count], report, len);
     mouse_report_count++;
@@ -65,6 +67,10 @@ bool tud_hid_n_ready(uint8_t instance) {
   case USB_ITF_KEYBOARD:
     keyboard_ready_checks++;
     return keyboard_ready;
+
+  case USB_ITF_MOUSE:
+    mouse_ready_checks++;
+    return mouse_ready;
 
   case USB_ITF_HID:
     hid_ready_checks++;
@@ -85,6 +91,7 @@ void tud_remote_wakeup(void) {
 static void reset_observations(void) {
   report_count = 0;
   keyboard_ready_checks = 0;
+  mouse_ready_checks = 0;
   hid_ready_checks = 0;
   wakeup_count = 0;
   last_instance = UINT8_MAX;
@@ -100,6 +107,7 @@ static void reset_observations(void) {
 void setUp(void) {
   hid_init();
   keyboard_ready = true;
+  mouse_ready = true;
   hid_ready = true;
   usb_suspended = false;
   mock_timer = 0;
@@ -144,12 +152,14 @@ void test_hid_send_reports_is_non_blocking_per_interface(void) {
 
   reset_observations();
   keyboard_ready = false;
+  mouse_ready = false;
   hid_ready = false;
 
   hid_send_reports();
 
   TEST_ASSERT_EQUAL_UINT32(0, report_count);
   TEST_ASSERT_EQUAL_UINT32(1, keyboard_ready_checks);
+  TEST_ASSERT_EQUAL_UINT32(1, mouse_ready_checks);
   TEST_ASSERT_EQUAL_UINT32(1, hid_ready_checks);
   TEST_ASSERT_EQUAL_UINT32(0, wakeup_count);
 }
@@ -228,7 +238,7 @@ void test_hid_sends_repeated_mouse_motion_reports(void) {
 }
 
 void test_hid_accumulates_mouse_motion_while_interface_busy(void) {
-  hid_ready = false;
+  mouse_ready = false;
 
   hid_mouse_move(4, -1, 0);
   hid_send_reports();
@@ -237,7 +247,7 @@ void test_hid_accumulates_mouse_motion_while_interface_busy(void) {
 
   TEST_ASSERT_EQUAL_UINT32(0, report_count);
 
-  hid_ready = true;
+  mouse_ready = true;
   hid_send_reports();
 
   TEST_ASSERT_EQUAL_UINT32(1, report_count);
@@ -247,7 +257,7 @@ void test_hid_accumulates_mouse_motion_while_interface_busy(void) {
 }
 
 void test_hid_accumulates_mouse_scroll_while_interface_busy(void) {
-  hid_ready = false;
+  mouse_ready = false;
 
   hid_mouse_scroll(1, 2, 0);
   hid_send_reports();
@@ -256,7 +266,7 @@ void test_hid_accumulates_mouse_scroll_while_interface_busy(void) {
 
   TEST_ASSERT_EQUAL_UINT32(0, report_count);
 
-  hid_ready = true;
+  mouse_ready = true;
   hid_send_reports();
 
   TEST_ASSERT_EQUAL_UINT32(1, report_count);
