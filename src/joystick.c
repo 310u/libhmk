@@ -59,6 +59,10 @@
 #define JOYSTICK_SMOOTHING_FAST_DELTA 24u
 #endif
 
+#ifndef JOYSTICK_GAMEPAD_SMOOTHING_EXPONENT
+#define JOYSTICK_GAMEPAD_SMOOTHING_EXPONENT 1u
+#endif
+
 #ifndef JOYSTICK_MOUSE_REPORT_INTERVAL_MS
 #define JOYSTICK_MOUSE_REPORT_INTERVAL_MS 1u
 #endif
@@ -233,7 +237,13 @@ static uint16_t joystick_ema(uint16_t old_val, uint16_t new_val,
 
 static uint16_t joystick_filter_adc(uint16_t filtered_val, uint16_t raw_val) {
   if (joystick_mode_is_gamepad(config_cache.mode)) {
-    return raw_val;
+    if (joystick_abs_diff_u16(filtered_val, raw_val) >=
+        JOYSTICK_SMOOTHING_FAST_DELTA) {
+      return raw_val;
+    }
+
+    return joystick_ema(filtered_val, raw_val,
+                        JOYSTICK_GAMEPAD_SMOOTHING_EXPONENT);
   }
 
   uint8_t exponent = JOYSTICK_SMOOTHING_SLOW_EXPONENT;
