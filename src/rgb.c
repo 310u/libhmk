@@ -28,6 +28,7 @@
  * Local libhmk-only effects in this file are:
  *   - RGB_EFFECT_ANALOG
  *   - RGB_EFFECT_PER_KEY
+ *   - RGB_EFFECT_TRIGGER_STATE
  */
 
 // Simple PRNG for effects
@@ -154,6 +155,24 @@ uint8_t rgb_key_to_led_at(uint8_t key) { return rgb_key_to_led[key]; }
 
 uint8_t rgb_reactive_clip_at(uint8_t source_led, uint8_t target_led) {
     return rgb_reactive_clip[source_led][target_led];
+}
+
+static rgb_color_t scale_rgb_color(rgb_color_t color, uint8_t brightness) {
+    return (rgb_color_t){
+        .r = (uint8_t)(((uint32_t)color.r * brightness) / 255u),
+        .g = (uint8_t)(((uint32_t)color.g * brightness) / 255u),
+        .b = (uint8_t)(((uint32_t)color.b * brightness) / 255u),
+    };
+}
+
+static rgb_trigger_state_t rgb_trigger_state_for_key(const key_state_t *state) {
+    if (state->is_pressed) {
+        return state->key_dir == KEY_DIR_INACTIVE ? RGB_TRIGGER_STATE_HOLD
+                                                  : RGB_TRIGGER_STATE_PRESS;
+    }
+
+    return state->key_dir == KEY_DIR_UP ? RGB_TRIGGER_STATE_RELEASE
+                                        : RGB_TRIGGER_STATE_IDLE;
 }
 
 void rgb_task(void) {
@@ -596,6 +615,26 @@ void rgb_task(void) {
                 uint8_t final_g = (uint8_t)(((uint32_t)pressed_g * dist + (uint32_t)base_g * (uint32_t)(255u - dist)) / 255u);
                 uint8_t final_b = (uint8_t)(((uint32_t)pressed_b * dist + (uint32_t)base_b * (uint32_t)(255u - dist)) / 255u);
                 rgb_set_color(i, final_r, final_g, final_b);
+            }
+            break;
+        }
+        case RGB_EFFECT_TRIGGER_STATE: {
+            rgb_color_t state_colors[RGB_TRIGGER_STATE_COLOR_COUNT];
+            for (uint8_t state = 0; state < RGB_TRIGGER_STATE_COLOR_COUNT; state++) {
+                state_colors[state] = scale_rgb_color(
+                    rgb_config.trigger_state_colors[state], effective_brightness);
+            }
+
+            for (uint8_t i = 0; i < NUM_LEDS; i++) {
+                rgb_color_t color = {0, 0, 0};
+                uint8_t key_index = rgb_led_key_index[i];
+
+                if (key_index < NUM_KEYS) {
+                    const key_state_t *state = &key_matrix[key_index];
+                    color = state_colors[rgb_trigger_state_for_key(state)];
+                }
+
+                rgb_set_color(i, color.r, color.g, color.b);
             }
             break;
         }

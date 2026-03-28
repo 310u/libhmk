@@ -18,7 +18,8 @@ typedef struct {
 } hsv_t;
 
 // Most effect names intentionally mirror QMK RGB Matrix / RGB Light effects.
-// In libhmk, ANALOG and PER_KEY are local extensions; OFF maps to QMK's NONE.
+// In libhmk, ANALOG, PER_KEY, and TRIGGER_STATE are local extensions; OFF maps
+// to QMK's NONE.
 typedef enum {
     RGB_EFFECT_OFF = 0,
     RGB_EFFECT_SOLID_COLOR = 1,
@@ -73,8 +74,17 @@ typedef enum {
     RGB_EFFECT_RIVERFLOW,
     RGB_EFFECT_ANALOG,
     RGB_EFFECT_PER_KEY,
+    RGB_EFFECT_TRIGGER_STATE,
     RGB_EFFECT_MAX
 } rgb_effect_t;
+
+typedef enum {
+    RGB_TRIGGER_STATE_IDLE = 0,
+    RGB_TRIGGER_STATE_RELEASE,
+    RGB_TRIGGER_STATE_PRESS,
+    RGB_TRIGGER_STATE_HOLD,
+    RGB_TRIGGER_STATE_COLOR_COUNT
+} rgb_trigger_state_t;
 
 typedef struct {
     uint8_t enabled;
@@ -88,6 +98,7 @@ typedef struct {
     uint8_t layer_indicator_key;  // LED index for mode 2
     rgb_color_t layer_colors[NUM_LAYERS];
     rgb_color_t per_key_colors[NUM_KEYS];
+    rgb_color_t trigger_state_colors[RGB_TRIGGER_STATE_COLOR_COUNT];
 } rgb_config_t;
 
 // API

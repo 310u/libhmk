@@ -92,7 +92,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0110
+#define EECONFIG_VERSION 0x0111
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -193,6 +193,10 @@ extern const eeconfig_t *eeconfig;
       .layer_indicator_key = 0,                                                \
       .layer_colors = {{0}},                                                   \
       .per_key_colors = {{0}},                                                 \
+      .trigger_state_colors = {{63, 63, 63},                                   \
+                               {255, 255, 255},                                \
+                               {255, 0, 0},                                    \
+                               {255, 0, 0}},                                   \
   }
 #endif
 

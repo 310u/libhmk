@@ -45,6 +45,11 @@
   (7 + 1 + 2 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
 #define MIGRATION_PROFILE_RGB_SIZE_V1_D                                      \
   (7 + 3 + 1 + 2 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
+#define MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE                       \
+  (3 * RGB_TRIGGER_STATE_COLOR_COUNT)
+#define MIGRATION_PROFILE_RGB_SIZE_V1_11                                     \
+  (MIGRATION_PROFILE_RGB_SIZE_V1_D +                                          \
+   MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE)
 #define MIGRATION_PROFILE_RGB_V1_A_TAIL_SIZE                                 \
   (4 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
 #else
@@ -52,6 +57,8 @@
 #define MIGRATION_PROFILE_RGB_SIZE_V1_8 0
 #define MIGRATION_PROFILE_RGB_SIZE_V1_A 0
 #define MIGRATION_PROFILE_RGB_SIZE_V1_D 0
+#define MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE 0
+#define MIGRATION_PROFILE_RGB_SIZE_V1_11 0
 #define MIGRATION_PROFILE_RGB_V1_A_TAIL_SIZE 0
 #endif
 
@@ -81,6 +88,9 @@
 #define MIGRATION_PROFILE_SIZE_V1_10_PLUS                                     \
   (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D + \
    sizeof(joystick_config_t))
+#define MIGRATION_PROFILE_SIZE_V1_11_PLUS                                     \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
+   MIGRATION_PROFILE_RGB_SIZE_V1_11 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
 
 static bool v1_1_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
@@ -133,6 +143,9 @@ static bool v1_F_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 static bool v1_10_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+static bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
                                      uint32_t old_size, uint32_t new_size);
@@ -264,6 +277,13 @@ static const migration_t migrations[] = {
         .global_config_func = v1_10_global_config_func,
         .profile_config_func = v1_10_profile_config_func,
     },
+    {
+        .version = 0x0111,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_11_PLUS,
+        .global_config_func = v1_11_global_config_func,
+        .profile_config_func = v1_11_profile_config_func,
+    },
 };
 
 bool migration_try_migrate(void) {
@@ -362,6 +382,25 @@ static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
 
 MAKE_MIGRATION_ASSIGN(uint8_t)
 MAKE_MIGRATION_ASSIGN(uint16_t)
+
+#if defined(RGB_ENABLED)
+static void migration_assign_rgb_color(uint8_t **dst, rgb_color_t color) {
+  memcpy(*dst, &color, sizeof(color));
+  *dst += sizeof(color);
+}
+
+static void migration_append_trigger_state_colors(uint8_t **dst,
+                                                  rgb_color_t solid_color,
+                                                  rgb_color_t secondary_color) {
+  migration_assign_rgb_color(
+      dst, (rgb_color_t){.r = secondary_color.r >> 2,
+                         .g = secondary_color.g >> 2,
+                         .b = secondary_color.b >> 2});
+  migration_assign_rgb_color(dst, secondary_color);
+  migration_assign_rgb_color(dst, solid_color);
+  migration_assign_rgb_color(dst, solid_color);
+}
+#endif
 
 //--------------------------------------------------------------------+
 // v1.0 -> v1.1 Migration
@@ -830,6 +869,40 @@ bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
   memcpy(dst, &joystick_config, sizeof(joystick_config));
   dst += sizeof(joystick_config);
   src += MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F;
+#endif
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.10 -> v1.11 Migration
+//--------------------------------------------------------------------+
+
+bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0110)
+    return false;
+
+  migration_memcpy(&dst, &src, MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32);
+  return true;
+}
+
+bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_WITH_MACROS(13));
+
+#if defined(RGB_ENABLED)
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_RGB_SIZE_V1_D);
+
+  const rgb_config_t *legacy_rgb =
+      (const rgb_config_t *)(dst - MIGRATION_PROFILE_RGB_SIZE_V1_D);
+  migration_append_trigger_state_colors(
+      &dst, legacy_rgb->solid_color, legacy_rgb->secondary_color);
+#endif
+
+#if defined(JOYSTICK_ENABLED)
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT);
 #endif
 
   return true;
