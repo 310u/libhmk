@@ -25,6 +25,7 @@
 
 typedef struct {
   bool suspend_observed;
+  bool recovery_attempted;
   bool reconnect_pending;
   bool disconnected;
   uint32_t suspend_start_ms;
@@ -40,11 +41,27 @@ static void usb_runtime_resync(void) {
 
 void usb_runtime_init(void) {
   usb_runtime_state.suspend_observed = false;
+  usb_runtime_state.recovery_attempted = false;
   usb_runtime_state.reconnect_pending = false;
   usb_runtime_state.disconnected = false;
 }
 
 void usb_runtime_task(void) {
+  if (usb_runtime_state.suspend_observed &&
+      !usb_runtime_state.recovery_attempted &&
+      timer_elapsed(usb_runtime_state.suspend_start_ms) >=
+          USB_RESUME_RECOVERY_THRESHOLD_MS) {
+    usb_runtime_state.reconnect_pending = true;
+    usb_runtime_state.recovery_attempted = true;
+  }
+
+  if (usb_runtime_state.suspend_observed && !tud_suspended()) {
+    // Some hosts/controllers resume the bus without surfacing TinyUSB's
+    // resume callback reliably. Polling the suspended flag lets us recover
+    // long-suspend reconnects even when tud_resume_cb() is skipped.
+    usb_runtime_resume();
+  }
+
   if (usb_runtime_state.reconnect_pending) {
     usb_runtime_state.reconnect_pending = false;
     usb_runtime_state.disconnected = true;
@@ -75,14 +92,17 @@ void usb_runtime_mount(void) {
 
 void usb_runtime_suspend(void) {
   usb_runtime_state.suspend_observed = true;
+  usb_runtime_state.recovery_attempted = false;
   usb_runtime_state.suspend_start_ms = timer_read();
 }
 
 void usb_runtime_resume(void) {
   if (usb_runtime_state.suspend_observed &&
+      !usb_runtime_state.recovery_attempted &&
       timer_elapsed(usb_runtime_state.suspend_start_ms) >=
           USB_RESUME_RECOVERY_THRESHOLD_MS) {
     usb_runtime_state.reconnect_pending = true;
+    usb_runtime_state.recovery_attempted = true;
   }
 
   usb_runtime_state.suspend_observed = false;
