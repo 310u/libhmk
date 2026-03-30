@@ -7,6 +7,7 @@
 #define NUM_LEDS NUM_KEYS
 #endif
 
+#include "lib/usqrt.h"
 #include "rgb_internal.h"
 #include "rgb_math.h"
 
@@ -50,10 +51,16 @@ static int16_t rgb_static_centered_y(uint8_t led) {
   return (int16_t)rgb_coord_y_at(led) - 127;
 }
 
+static uint8_t rgb_static_distance(int16_t dx, int16_t dy) {
+  const uint32_t dx_sq = (uint32_t)((int32_t)dx * (int32_t)dx);
+  const uint32_t dy_sq = (uint32_t)((int32_t)dy * (int32_t)dy);
+  return (uint8_t)usqrt32(dx_sq + dy_sq);
+}
+
 static uint8_t rgb_static_led_distance(uint8_t led) {
   const int16_t dx = rgb_static_centered_x(led);
   const int16_t dy = rgb_static_centered_y(led);
-  return (uint8_t)sqrt((double)(dx * dx + dy * dy));
+  return rgb_static_distance(dx, dy);
 }
 
 static uint8_t rgb_static_led_angle(uint8_t led) {
@@ -168,8 +175,7 @@ static void rgb_static_render_cycle_out_in(const rgb_static_context_t *context,
       const int16_t dx = rgb_static_centered_x(i);
       const int16_t dy = rgb_static_centered_y(i);
       const int16_t centered = 63 - (int16_t)abs8(dx);
-      const uint8_t dist = (uint8_t)sqrt((double)(centered * centered +
-                                                  dy * dy));
+      const uint8_t dist = rgb_static_distance(centered, dy);
       const uint8_t ring_hue = (uint8_t)(3u * dist + time);
       hue = (ring_hue & 0x80u) ? context->secondary_hue : ring_hue;
     } else {
