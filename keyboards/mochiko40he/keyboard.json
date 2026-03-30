@@ -77,6 +77,10 @@
         "hse_value": 12000000,
         "driver": "at32f405xx"
     },
+    "memory_budget": {
+        "min_flash_headroom": 32768,
+        "min_ram_headroom": 16384
+    },
     "analog": {
         "invert_adc": false,
         "mux": {

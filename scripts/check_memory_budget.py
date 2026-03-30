@@ -12,6 +12,8 @@ import utils
 
 FLASH_BASE = 0x08000000
 RAM_BASE = 0x20000000
+DEFAULT_MIN_RAM_HEADROOM = 8192
+DEFAULT_MIN_FLASH_HEADROOM = 16384
 
 
 def parse_size_expression(expr: str) -> int:
@@ -62,13 +64,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Check firmware memory headroom")
     parser.add_argument("--keyboard", required=True)
     parser.add_argument("--elf", required=True)
-    parser.add_argument("--min-ram-headroom", type=int, default=8192)
-    parser.add_argument("--min-flash-headroom", type=int, default=16384)
+    parser.add_argument("--min-ram-headroom", type=int)
+    parser.add_argument("--min-flash-headroom", type=int)
     args = parser.parse_args()
 
     keyboard = args.keyboard
     kb_json = utils.get_kb_json(keyboard)
     driver = utils.get_driver(keyboard)
+    memory_budget = kb_json.get("memory_budget", {})
+    min_ram_headroom = (
+        args.min_ram_headroom
+        if args.min_ram_headroom is not None
+        else memory_budget.get("min_ram_headroom", DEFAULT_MIN_RAM_HEADROOM)
+    )
+    min_flash_headroom = (
+        args.min_flash_headroom
+        if args.min_flash_headroom is not None
+        else memory_budget.get("min_flash_headroom", DEFAULT_MIN_FLASH_HEADROOM)
+    )
 
     wl_cfg = kb_json.get("wear_leveling", {})
     wl_virtual_size = wl_cfg.get("virtual_size", 8192)
@@ -110,15 +123,15 @@ def main() -> int:
     )
 
     failures: list[str] = []
-    if flash_headroom < args.min_flash_headroom:
+    if flash_headroom < min_flash_headroom:
         failures.append(
             f"flash headroom {flash_headroom} is below "
-            f"{args.min_flash_headroom} bytes"
+            f"{min_flash_headroom} bytes"
         )
-    if ram_headroom < args.min_ram_headroom:
+    if ram_headroom < min_ram_headroom:
         failures.append(
             f"RAM headroom {ram_headroom} is below "
-            f"{args.min_ram_headroom} bytes"
+            f"{min_ram_headroom} bytes"
         )
 
     if failures:

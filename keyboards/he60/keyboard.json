@@ -17,6 +17,10 @@
     "hse_value": 16000000,
     "driver": "stm32f446xx"
   },
+  "memory_budget": {
+    "min_flash_headroom": 65536,
+    "min_ram_headroom": 16384
+  },
   "analog": {
     "invert_adc": true,
     "mux": {

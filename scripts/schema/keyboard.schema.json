@@ -229,6 +229,27 @@
         }
       }
     },
+    "memory_budget": {
+      "type": "object",
+      "description": "Firmware memory budget thresholds used by CI checks",
+      "properties": {
+        "min_flash_headroom": {
+          "type": "integer",
+          "description": "Minimum flash headroom in bytes after subtracting the wear-leveling reservation",
+          "minimum": 0
+        },
+        "min_ram_headroom": {
+          "type": "integer",
+          "description": "Minimum RAM headroom in bytes after subtracting the heap/stack reservation",
+          "minimum": 0
+        },
+        "max_stack_frame": {
+          "type": "integer",
+          "description": "Optional per-function stack usage limit in bytes for GCC .su reports",
+          "minimum": 0
+        }
+      }
+    },
     "layout": {
       "type": "object",
       "properties": {

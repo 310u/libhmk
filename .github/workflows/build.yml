@@ -76,6 +76,63 @@ jobs:
           python setup.py -k mochiko40he
           pio test
 
+      - name: Run Native Test Suite With Sanitizers
+        run: |
+          LIBHMK_NATIVE_SANITIZERS=1 python setup.py -k mochiko40he
+          pio test
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout libhmk
+        uses: actions/checkout@v5
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup PlatformIO Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Install Cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Generate compile_commands.json
+        run: |
+          python setup.py -k mochiko40he
+          pio run -e mochiko40he -t compiledb
+
+      - name: Run Cppcheck
+        run: |
+          cppcheck \
+            --project=compile_commands.json \
+            --enable=warning,style,performance,portability \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --error-exitcode=1 \
+            2> cppcheck.txt
+
+      - name: Archive Cppcheck Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-report
+          path: cppcheck.txt
+
   build:
     name: Build Firmware
     needs: [define-matrix, native-tests]
@@ -105,7 +162,7 @@ jobs:
 
       - name: Build ${{ matrix.keyboard }}
         run: |
-          python setup.py -k ${{ matrix.keyboard }}
+          LIBHMK_STACK_USAGE=1 python setup.py -k ${{ matrix.keyboard }}
           pio run
 
       - name: Check Firmware Size Budget
@@ -114,6 +171,13 @@ jobs:
             --keyboard ${{ matrix.keyboard }} \
             --elf .pio/build/${{ matrix.keyboard }}/firmware.elf
 
+      - name: Summarize Stack Usage
+        run: |
+          python scripts/summarize_stack_usage.py \
+            --build-dir .pio/build/${{ matrix.keyboard }} \
+            --keyboard ${{ matrix.keyboard }} \
+            --output .pio/build/${{ matrix.keyboard }}/stack-usage.txt
+
       - name: Archive Firmware Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -121,6 +185,7 @@ jobs:
           path: |
             .pio/build/${{ matrix.keyboard }}/firmware.bin
             .pio/build/${{ matrix.keyboard }}/firmware.elf
+            .pio/build/${{ matrix.keyboard }}/stack-usage.txt
 
   release:
     name: Create Releast Draft

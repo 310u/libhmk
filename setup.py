@@ -8,6 +8,10 @@ import os
 import scripts.utils as utils
 
 
+def env_flag_enabled(name: str) -> bool:
+    return os.getenv(name, "").lower() not in ("", "0", "false", "no")
+
+
 if __name__ == "__main__":
     keyboards = [
         keyboard
@@ -23,6 +27,8 @@ if __name__ == "__main__":
 
     keyboard: str = args.keyboard
     driver = utils.get_driver(keyboard)
+    native_sanitizers_enabled = env_flag_enabled("LIBHMK_NATIVE_SANITIZERS")
+    stack_usage_enabled = env_flag_enabled("LIBHMK_STACK_USAGE")
 
     build_flags = ["${env.build_flags}"]
     build_src_flags = [
@@ -37,6 +43,8 @@ if __name__ == "__main__":
         "-Wstrict-prototypes",
         "-Wno-unused-parameter",
     ]
+    if stack_usage_enabled:
+        build_src_flags.append("-fstack-usage")
     extra_scripts = [
         "pre:scripts/get_deps.py",
         "pre:scripts/validate.py",
@@ -75,13 +83,22 @@ if __name__ == "__main__":
     }
 
     def native_test_env(test_filter, build_src_filter, extra_flags=None):
+        flags = [common_test_flags]
+        if native_sanitizers_enabled:
+            flags.extend(
+                [
+                    "-fsanitize=address,undefined",
+                    "-fno-omit-frame-pointer",
+                    "-fno-sanitize-recover=all",
+                ]
+            )
         return {
             "platform": "native",
             "test_framework": "unity",
             "test_filter": test_filter,
             "test_build_src": "yes",
             "build_src_filter": build_src_filter,
-            "build_flags": "\n".join([common_test_flags, *(extra_flags or [])]),
+            "build_flags": "\n".join([*flags, *(extra_flags or [])]),
         }
 
     # Native unit test environments
@@ -152,6 +169,15 @@ if __name__ == "__main__":
             "-DADC_NUM_RAW_INPUTS=2",
             "-DADC_RAW_INPUT_CHANNELS='{0, 0}'",
             "-DADC_RAW_INPUT_VECTOR='{4, 0}'",
+        ],
+    )
+    pio_config["env:native_test_commands"] = native_test_env(
+        "test_commands",
+        "+<commands.c>",
+        [
+            "-I test/test_commands",
+            "-DCFG_TUSB_MCU=0",
+            "-DBOARD_USB_FS=1",
         ],
     )
     pio_config["env:native_test_migration"] = native_test_env(
