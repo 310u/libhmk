@@ -114,6 +114,16 @@ if __name__ == "__main__":
             "-DBOARD_USB_FS=1",
         ],
     )
+    pio_config["env:native_test_hid_usbmon_diag"] = native_test_env(
+        "test_hid",
+        "+<hid.c>",
+        [
+            "-I test/test_hid",
+            "-DCFG_TUSB_MCU=0",
+            "-DBOARD_USB_FS=1",
+            "-DUSBMON_DIAGNOSTIC_RAW_HID_STREAM=1",
+        ],
+    )
     pio_config["env:native_test_xinput"] = native_test_env(
         "test_xinput",
         "+<xinput.c>",

@@ -18,6 +18,7 @@
 #include "commands.h"
 #include "event_trace.h"
 #include "hardware/hardware.h"
+#include "hardware/timer_api.h"
 #include "keycodes.h"
 #include "matrix.h"
 #include "tusb.h"
@@ -45,6 +46,94 @@ static int32_t mouse_pending_pan;
 static uint16_t system_report_last_sent;
 static uint16_t consumer_report_last_sent;
 static uint8_t mouse_buttons_last_sent;
+
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+enum {
+  RAW_HID_DIAGNOSTIC_CONTROL_DISABLE = 0,
+  RAW_HID_DIAGNOSTIC_CONTROL_ENABLE = 1,
+};
+
+static bool raw_hid_diagnostic_stream_enabled;
+static uint32_t raw_hid_diagnostic_sequence;
+static uint32_t raw_hid_diagnostic_last_send_cycle;
+static uint32_t raw_hid_diagnostic_last_completion_cycle;
+static uint32_t raw_hid_diagnostic_previous_completion_gap_cycles;
+
+static uint32_t hid_diagnostic_cpu_hz(void) {
+#if defined(F_CPU)
+  return (uint32_t)F_CPU;
+#else
+  return 0;
+#endif
+}
+
+static void hid_send_raw_hid_diagnostic_report(void) {
+  if (!raw_hid_diagnostic_stream_enabled)
+    return;
+
+  if (!tud_hid_n_ready(USB_ITF_RAW_HID))
+    return;
+
+  uint8_t report[RAW_HID_EP_SIZE] = {0};
+  const uint32_t sequence = raw_hid_diagnostic_sequence;
+  const uint32_t tick_ms = timer_read();
+  const uint32_t send_cycle = board_cycle_count();
+  const uint32_t rearm_cycles =
+      sequence == 0u ? 0u : send_cycle - raw_hid_diagnostic_last_completion_cycle;
+  const uint32_t send_interval_cycles =
+      sequence == 0u ? 0u : send_cycle - raw_hid_diagnostic_last_send_cycle;
+  const uint32_t cpu_hz = hid_diagnostic_cpu_hz();
+
+  // Prefix the payload with a recognizable marker plus a monotonically
+  // increasing sequence number so usbmon captures can confirm continuity.
+  report[0] = 'U';
+  report[1] = 'M';
+  report[2] = 'O';
+  report[3] = 'N';
+  memcpy(&report[4], &sequence, sizeof(sequence));
+  memcpy(&report[8], &tick_ms, sizeof(tick_ms));
+  memcpy(&report[12], &raw_hid_diagnostic_previous_completion_gap_cycles,
+         sizeof(raw_hid_diagnostic_previous_completion_gap_cycles));
+  memcpy(&report[16], &rearm_cycles, sizeof(rearm_cycles));
+  memcpy(&report[20], &send_interval_cycles, sizeof(send_interval_cycles));
+  memcpy(&report[24], &cpu_hz, sizeof(cpu_hz));
+  memcpy(&report[28], &send_cycle, sizeof(send_cycle));
+  memset(&report[32], (int)(sequence & 0xFFu), sizeof(report) - 32u);
+
+  if (tud_hid_n_report(USB_ITF_RAW_HID, 0, report, sizeof(report))) {
+    EVENT_TRACE(
+        "[event] hid send raw diag seq=%lu tick=%lu completion=%lu rearm=%lu "
+        "send_interval=%lu send_cycle=%lu\n",
+        (unsigned long)sequence, (unsigned long)tick_ms,
+        (unsigned long)raw_hid_diagnostic_previous_completion_gap_cycles,
+        (unsigned long)rearm_cycles, (unsigned long)send_interval_cycles,
+        (unsigned long)send_cycle);
+    raw_hid_diagnostic_last_send_cycle = send_cycle;
+    raw_hid_diagnostic_sequence++;
+  }
+}
+
+static bool hid_handle_raw_hid_diagnostic_control(const uint8_t *buffer,
+                                                  uint16_t bufsize) {
+  if (bufsize < 5u || memcmp(buffer, "UMON", 4u) != 0)
+    return false;
+
+  raw_hid_diagnostic_stream_enabled =
+      buffer[4] == RAW_HID_DIAGNOSTIC_CONTROL_ENABLE;
+  raw_hid_diagnostic_sequence = 0;
+  raw_hid_diagnostic_last_send_cycle = 0;
+  raw_hid_diagnostic_last_completion_cycle = 0;
+  raw_hid_diagnostic_previous_completion_gap_cycles = 0;
+
+  EVENT_TRACE("[event] hid raw diag stream=%s\n",
+              raw_hid_diagnostic_stream_enabled ? "enabled" : "disabled");
+
+  if (raw_hid_diagnostic_stream_enabled)
+    hid_send_raw_hid_diagnostic_report();
+
+  return true;
+}
+#endif
 
 static void hid_mouse_sync_buttons(void) {
   mouse_report.buttons = mouse_keycode_buttons | mouse_pointer_buttons;
@@ -214,6 +303,13 @@ void hid_init(void) {
   system_report_last_sent = 0;
   consumer_report_last_sent = 0;
   mouse_buttons_last_sent = 0;
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+  raw_hid_diagnostic_stream_enabled = false;
+  raw_hid_diagnostic_sequence = 0;
+  raw_hid_diagnostic_last_send_cycle = 0;
+  raw_hid_diagnostic_last_completion_cycle = 0;
+  raw_hid_diagnostic_previous_completion_gap_cycles = 0;
+#endif
 }
 
 void hid_clear_runtime_state(void) {
@@ -366,6 +462,10 @@ void hid_send_reports(void) {
   if (tud_hid_n_ready(USB_ITF_HID))
     // Start from the first report ID
     hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);
+
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+  hid_send_raw_hid_diagnostic_report();
+#endif
 #endif
 }
 
@@ -382,8 +482,15 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type, const uint8_t *buffer,
                            uint16_t bufsize) {
-  if (instance == USB_ITF_RAW_HID)
+  if (instance == USB_ITF_RAW_HID) {
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+    if (hid_handle_raw_hid_diagnostic_control(buffer, bufsize))
+      return;
+
+    raw_hid_diagnostic_stream_enabled = false;
+#endif
     command_process(buffer);
+  }
 }
 
 void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
@@ -395,4 +502,13 @@ void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
   else if (instance == USB_ITF_HID)
     // Start from the next report ID
     hid_send_hid_report(report[0] + 1);
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+  else if (instance == USB_ITF_RAW_HID) {
+    const uint32_t completion_cycle = board_cycle_count();
+    raw_hid_diagnostic_previous_completion_gap_cycles =
+        completion_cycle - raw_hid_diagnostic_last_send_cycle;
+    raw_hid_diagnostic_last_completion_cycle = completion_cycle;
+    hid_send_raw_hid_diagnostic_report();
+  }
+#endif
 }

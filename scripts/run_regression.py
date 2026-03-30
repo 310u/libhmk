@@ -13,6 +13,7 @@ NATIVE_TEST_ENVS = [
     "native_test_encoder",
     "native_test_event_pipeline",
     "native_test_hid",
+    "native_test_hid_usbmon_diag",
     "native_test_joystick",
     "native_test_layout",
     "native_test_matrix",

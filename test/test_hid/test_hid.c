@@ -9,13 +9,16 @@
 static bool keyboard_ready;
 static bool mouse_ready;
 static bool hid_ready;
+static bool raw_hid_ready;
 static bool usb_suspended;
 static uint32_t mock_timer;
+static uint32_t mock_cycle;
 
 static uint32_t report_count;
 static uint32_t keyboard_ready_checks;
 static uint32_t mouse_ready_checks;
 static uint32_t hid_ready_checks;
+static uint32_t raw_hid_ready_checks;
 static uint32_t wakeup_count;
 static uint8_t last_instance;
 static uint8_t last_report_id;
@@ -25,6 +28,8 @@ static hid_nkro_kb_report_t keyboard_reports[8];
 static uint8_t keyboard_report_count;
 static hid_mouse_report_t mouse_reports[8];
 static uint8_t mouse_report_count;
+static uint8_t raw_hid_reports[8][RAW_HID_EP_SIZE];
+static uint8_t raw_hid_report_count;
 
 const uint16_t keycode_to_hid[256] = {
     [KC_A] = 0x0004,
@@ -33,10 +38,18 @@ const uint16_t keycode_to_hid[256] = {
 
 void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
                                 uint16_t len);
+void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
+                           hid_report_type_t report_type,
+                           const uint8_t *buffer, uint16_t bufsize);
 
 void command_process(const uint8_t *buffer) {}
 
 uint32_t timer_read(void) { return mock_timer++; }
+
+uint32_t board_cycle_count(void) {
+  mock_cycle += 100;
+  return mock_cycle;
+}
 
 void tud_task(void) {}
 
@@ -59,6 +72,11 @@ bool tud_hid_n_report(uint8_t instance, uint8_t report_id, const void *report,
     memcpy(&mouse_reports[mouse_report_count], report, len);
     mouse_report_count++;
   }
+  if (instance == USB_ITF_RAW_HID && report_id == 0 &&
+      raw_hid_report_count < 8 && len == RAW_HID_EP_SIZE) {
+    memcpy(raw_hid_reports[raw_hid_report_count], report, len);
+    raw_hid_report_count++;
+  }
   return true;
 }
 
@@ -75,6 +93,10 @@ bool tud_hid_n_ready(uint8_t instance) {
   case USB_ITF_HID:
     hid_ready_checks++;
     return hid_ready;
+
+  case USB_ITF_RAW_HID:
+    raw_hid_ready_checks++;
+    return raw_hid_ready;
 
   default:
     return false;
@@ -93,6 +115,7 @@ static void reset_observations(void) {
   keyboard_ready_checks = 0;
   mouse_ready_checks = 0;
   hid_ready_checks = 0;
+  raw_hid_ready_checks = 0;
   wakeup_count = 0;
   last_instance = UINT8_MAX;
   last_report_id = UINT8_MAX;
@@ -102,6 +125,8 @@ static void reset_observations(void) {
   keyboard_report_count = 0;
   memset(mouse_reports, 0, sizeof(mouse_reports));
   mouse_report_count = 0;
+  memset(raw_hid_reports, 0, sizeof(raw_hid_reports));
+  raw_hid_report_count = 0;
 }
 
 void setUp(void) {
@@ -109,8 +134,10 @@ void setUp(void) {
   keyboard_ready = true;
   mouse_ready = true;
   hid_ready = true;
+  raw_hid_ready = false;
   usb_suspended = false;
   mock_timer = 0;
+  mock_cycle = 0;
   reset_observations();
 }
 
@@ -277,6 +304,73 @@ void test_hid_accumulates_mouse_scroll_while_interface_busy(void) {
   TEST_ASSERT_EQUAL_INT8(3, mouse_reports[0].pan);
 }
 
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+void test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports(void) {
+  uint8_t control_packet[RAW_HID_EP_SIZE] = {0};
+  memcpy(control_packet, "UMON", 4);
+  control_packet[4] = 1;
+
+  raw_hid_ready = true;
+  tud_hid_set_report_cb(USB_ITF_RAW_HID, 0, HID_REPORT_TYPE_OUTPUT,
+                        control_packet, sizeof(control_packet));
+
+  TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT8(USB_ITF_RAW_HID, last_instance);
+  TEST_ASSERT_EQUAL_UINT16(RAW_HID_EP_SIZE, last_report_len);
+  TEST_ASSERT_EQUAL_UINT8(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8('U', raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT8('M', raw_hid_reports[0][1]);
+  TEST_ASSERT_EQUAL_UINT8('O', raw_hid_reports[0][2]);
+  TEST_ASSERT_EQUAL_UINT8('N', raw_hid_reports[0][3]);
+
+  uint32_t sequence = UINT32_MAX;
+  uint32_t completion_cycles = UINT32_MAX;
+  uint32_t rearm_cycles = UINT32_MAX;
+  uint32_t send_interval_cycles = UINT32_MAX;
+  memcpy(&sequence, &raw_hid_reports[0][4], sizeof(sequence));
+  TEST_ASSERT_EQUAL_UINT32(0, sequence);
+  memcpy(&completion_cycles, &raw_hid_reports[0][12], sizeof(completion_cycles));
+  memcpy(&rearm_cycles, &raw_hid_reports[0][16], sizeof(rearm_cycles));
+  memcpy(&send_interval_cycles, &raw_hid_reports[0][20], sizeof(send_interval_cycles));
+  TEST_ASSERT_EQUAL_UINT32(0, completion_cycles);
+  TEST_ASSERT_EQUAL_UINT32(0, rearm_cycles);
+  TEST_ASSERT_EQUAL_UINT32(0, send_interval_cycles);
+
+  tud_hid_report_complete_cb(USB_ITF_RAW_HID, raw_hid_reports[0], RAW_HID_EP_SIZE);
+
+  TEST_ASSERT_EQUAL_UINT32(2, report_count);
+  TEST_ASSERT_EQUAL_UINT8(2, raw_hid_report_count);
+  memcpy(&sequence, &raw_hid_reports[1][4], sizeof(sequence));
+  TEST_ASSERT_EQUAL_UINT32(1, sequence);
+  memcpy(&completion_cycles, &raw_hid_reports[1][12], sizeof(completion_cycles));
+  memcpy(&rearm_cycles, &raw_hid_reports[1][16], sizeof(rearm_cycles));
+  memcpy(&send_interval_cycles, &raw_hid_reports[1][20], sizeof(send_interval_cycles));
+  TEST_ASSERT_EQUAL_UINT32(100, completion_cycles);
+  TEST_ASSERT_EQUAL_UINT32(100, rearm_cycles);
+  TEST_ASSERT_EQUAL_UINT32(200, send_interval_cycles);
+}
+
+void test_hid_usbmon_diagnostic_stream_stops_for_regular_commands(void) {
+  uint8_t control_packet[RAW_HID_EP_SIZE] = {0};
+  uint8_t command_packet[RAW_HID_EP_SIZE] = {0};
+  memcpy(control_packet, "UMON", 4);
+  control_packet[4] = 1;
+  command_packet[0] = 0x42;
+
+  raw_hid_ready = true;
+  tud_hid_set_report_cb(USB_ITF_RAW_HID, 0, HID_REPORT_TYPE_OUTPUT,
+                        control_packet, sizeof(control_packet));
+  TEST_ASSERT_EQUAL_UINT32(1, report_count);
+
+  tud_hid_set_report_cb(USB_ITF_RAW_HID, 0, HID_REPORT_TYPE_OUTPUT,
+                        command_packet, sizeof(command_packet));
+  tud_hid_report_complete_cb(USB_ITF_RAW_HID, raw_hid_reports[0], RAW_HID_EP_SIZE);
+
+  TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT8(1, raw_hid_report_count);
+}
+#endif
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_hid_send_reports_is_non_blocking_per_interface);
@@ -285,5 +379,9 @@ int main(void) {
   RUN_TEST(test_hid_sends_repeated_mouse_motion_reports);
   RUN_TEST(test_hid_accumulates_mouse_motion_while_interface_busy);
   RUN_TEST(test_hid_accumulates_mouse_scroll_while_interface_busy);
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+  RUN_TEST(test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports);
+  RUN_TEST(test_hid_usbmon_diagnostic_stream_stops_for_regular_commands);
+#endif
   return UNITY_END();
 }
