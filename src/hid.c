@@ -354,7 +354,9 @@ void hid_keycode_add(uint8_t keycode) {
       // always tracks all pressed keys regardless of 6KRO capacity.
       kb_report.keycodes[num_6kro_keys++] = hid_code;
     }
-    kb_report.bitmap[hid_code / 8] |= 1 << (hid_code & 7);
+    if ((hid_code / 8u) < sizeof(kb_report.bitmap)) {
+      kb_report.bitmap[hid_code / 8] |= (uint8_t)(1u << (hid_code & 7));
+    }
     hid_keyboard_queue_report();
     break;
 
@@ -413,7 +415,9 @@ void hid_keycode_remove(uint8_t keycode) {
         break;
       }
     }
-    kb_report.bitmap[hid_code / 8] &= ~(1 << (hid_code & 7));
+    if ((hid_code / 8u) < sizeof(kb_report.bitmap)) {
+      kb_report.bitmap[hid_code / 8] &= (uint8_t)~(uint8_t)(1u << (hid_code & 7));
+    }
     hid_keyboard_queue_report();
     break;
 

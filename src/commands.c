@@ -35,6 +35,7 @@
 
 static uint8_t out_buf[RAW_HID_EP_SIZE];
 static uint8_t pending_response[RAW_HID_EP_SIZE];
+static uint16_t command_bottom_out_threshold[NUM_KEYS];
 static bool has_pending_response = false;
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
@@ -74,6 +75,8 @@ void command_init(void) {}
 void command_process(const uint8_t *buf) {
   const command_in_buffer_t *in = (const command_in_buffer_t *)buf;
   command_out_buffer_t *out = (command_out_buffer_t *)out_buf;
+
+  memset(out_buf, 0, sizeof(out_buf));
 
   bool success = true;
   switch (in->command_id) {
@@ -196,16 +199,15 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_SAVE_CALIBRATION_THRESHOLD: {
-    uint16_t bottom_out_threshold[NUM_KEYS];
-
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
       if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
-        bottom_out_threshold[i] = 0;
+        command_bottom_out_threshold[i] = 0;
       else
-        bottom_out_threshold[i] =
+        command_bottom_out_threshold[i] =
             key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
     }
-    success = EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+    success =
+        EECONFIG_WRITE(bottom_out_threshold, command_bottom_out_threshold);
     break;
   }
   case COMMAND_SET_KEYMAP: {

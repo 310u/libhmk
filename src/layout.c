@@ -32,6 +32,7 @@
 // Layer mask. Each bit represents whether a layer is active or not.
 static uint16_t layer_mask;
 static uint8_t default_layer;
+typedef uint16_t layout_event_count_t;
 
 #if defined(RGB_ENABLED)
 #define RGB_BRIGHTNESS_STEP 17
@@ -51,12 +52,16 @@ uint8_t layout_get_current_layer(void) {
 
 __attribute__((always_inline)) static inline void
 layout_layer_on(uint8_t layer) {
-  layer_mask |= (1 << layer);
+  if (layer < sizeof(layer_mask) * 8u) {
+    layer_mask |= (uint16_t)(1u << layer);
+  }
 }
 
 __attribute__((always_inline)) static inline void
 layout_layer_off(uint8_t layer) {
-  layer_mask &= ~(1 << layer);
+  if (layer < sizeof(layer_mask) * 8u) {
+    layer_mask &= (uint16_t)~(uint16_t)(1u << layer);
+  }
 }
 
 /**
@@ -124,12 +129,12 @@ typedef struct {
 
 #if defined(DEBUG_EVENT_TRACE)
 static void layout_trace_events(const char *stage, const layout_event_t *events,
-                                uint8_t event_count) {
+                                layout_event_count_t event_count) {
   if (event_count == 0)
     return;
 
   EVENT_TRACE("[event] %s count=%u\n", stage, event_count);
-  for (uint8_t i = 0; i < event_count; i++) {
+  for (layout_event_count_t i = 0; i < event_count; i++) {
     EVENT_TRACE(
         "[event] %s[%u] key=%u action=%s time=%lu distance=%u\n", stage,
         (unsigned int)i, events[i].key,
@@ -466,7 +471,8 @@ static bool layout_should_skip_key_processing(uint8_t key,
   return false;
 }
 
-static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
+static void layout_collect_events(layout_event_t *events,
+                                  layout_event_count_t *event_count,
                                   uint8_t current_layer) {
   *event_count = 0;
 
@@ -478,6 +484,9 @@ static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
       continue;
 
     if (state->is_pressed && !last_key_press) {
+      if (*event_count >= NUM_KEYS) {
+        continue;
+      }
       events[(*event_count)++] = (layout_event_t){
           .key = (uint8_t)i,
           .pressed = true,
@@ -486,6 +495,9 @@ static void layout_collect_events(layout_event_t *events, uint8_t *event_count,
       };
       layout_trace_events("collected", &events[*event_count - 1], 1);
     } else if (!state->is_pressed && last_key_press) {
+      if (*event_count >= NUM_KEYS) {
+        continue;
+      }
       events[(*event_count)++] = (layout_event_t){
           .key = (uint8_t)i,
           .pressed = false,
@@ -530,10 +542,11 @@ static bool layout_event_should_swap(const layout_event_t *lhs,
   return lhs->distance > rhs->distance;
 }
 
-static void layout_sort_events(layout_event_t *events, uint8_t event_count) {
-  for (uint8_t i = 1; i < event_count; i++) {
+static void layout_sort_events(layout_event_t *events,
+                               layout_event_count_t event_count) {
+  for (layout_event_count_t i = 1; i < event_count; i++) {
     const layout_event_t tmp = events[i];
-    uint8_t j = i;
+    layout_event_count_t j = i;
     while (j > 0 && layout_event_should_swap(&events[j - 1], &tmp)) {
       events[j] = events[j - 1];
       j--;
@@ -569,10 +582,10 @@ static bool layout_handle_release_event(const layout_event_t *event) {
 }
 
 static void layout_process_events(const layout_event_t *events,
-                                  uint8_t event_count,
+                                  layout_event_count_t event_count,
                                   bool *has_non_tap_hold_press,
                                   bool *has_non_tap_hold_release) {
-  for (uint8_t i = 0; i < event_count; i++) {
+  for (layout_event_count_t i = 0; i < event_count; i++) {
     const layout_event_t *event = &events[i];
 
     if (event->pressed) {
@@ -594,7 +607,7 @@ void layout_task(void) {
   bool has_non_tap_hold_press = false;
   bool has_non_tap_hold_release = false;
   static layout_event_t events[NUM_KEYS];
-  uint8_t event_count = 0;
+  layout_event_count_t event_count = 0;
 
   layout_collect_events(events, &event_count, current_layer);
   layout_sort_events(events, event_count);

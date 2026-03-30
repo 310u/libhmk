@@ -92,6 +92,8 @@
   (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
    MIGRATION_PROFILE_RGB_SIZE_V1_11 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
 
+static uint8_t migration_bufs[2][sizeof(eeconfig_t)];
+
 static bool v1_1_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_1_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
@@ -294,10 +296,9 @@ bool migration_try_migrate(void) {
   const uint16_t config_version = eeconfig->version;
   // We alternate between two buffers to save the memory.
   uint8_t current_buf = 0;
-  uint8_t bufs[2][sizeof(eeconfig_t)];
 
-  // Let `bufs[0]` be the current configuration.
-  memcpy(bufs[0], eeconfig, sizeof(eeconfig_t));
+  // Let `migration_bufs[0]` be the current configuration.
+  memcpy(migration_bufs[0], eeconfig, sizeof(eeconfig_t));
   // Skip v1.0 migration since it is the initial version
   for (uint32_t i = 1; i < M_ARRAY_SIZE(migrations); i++) {
     const migration_t *m = &migrations[i];
@@ -307,9 +308,9 @@ bool migration_try_migrate(void) {
       // Skip migrations that are not applicable
       continue;
 
-    const uint8_t *src = bufs[current_buf];
-    uint8_t *dst = bufs[current_buf ^ 1];
-    memset(dst, 0, sizeof(bufs[0]));
+    const uint8_t *src = migration_bufs[current_buf];
+    uint8_t *dst = migration_bufs[current_buf ^ 1];
+    memset(dst, 0, sizeof(migration_bufs[0]));
 
     if (m->global_config_func) {
       if (!m->global_config_func(dst, src))
@@ -345,9 +346,10 @@ bool migration_try_migrate(void) {
   }
 
   // Make sure the configuration is valid after migration
-  ((eeconfig_t *)bufs[current_buf])->magic_end = EECONFIG_MAGIC_END;
+  ((eeconfig_t *)migration_bufs[current_buf])->magic_end = EECONFIG_MAGIC_END;
   // We reflect the update in the flash.
-  return wear_leveling_write(0, &bufs[current_buf], sizeof(eeconfig_t));
+  return wear_leveling_write(0, migration_bufs[current_buf],
+                             sizeof(eeconfig_t));
 }
 
 //--------------------------------------------------------------------+

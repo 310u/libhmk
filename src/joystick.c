@@ -281,9 +281,9 @@ static int32_t joystick_apply_calibration_fp(
 }
 
 static uint16_t joystick_vector_length(int8_t x, int8_t y) {
-  int16_t x16 = x;
-  int16_t y16 = y;
-  return usqrt16((uint16_t)(x16 * x16 + y16 * y16));
+  const int32_t x32 = x;
+  const int32_t y32 = y;
+  return usqrt16((uint16_t)(x32 * x32 + y32 * y32));
 }
 
 static int8_t joystick_clamp_i16_to_i8(int16_t value) {

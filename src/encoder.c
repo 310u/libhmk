@@ -308,6 +308,19 @@ static void encoder_output_release(uint8_t output) {
 #endif
 }
 
+static void encoder_start_next_tap_if_idle(void) {
+  if (encoder_release_pending) {
+    return;
+  }
+
+  uint8_t keycode = KC_NO;
+  if (encoder_queue_pop(&keycode)) {
+    encoder_output_press(keycode);
+    encoder_release_pending = true;
+    encoder_release_keycode = keycode;
+  }
+}
+
 static uint8_t encoder_read_state(uint8_t index) {
   uint8_t state = 0u;
 
@@ -374,14 +387,10 @@ void encoder_task(void) {
     }
   }
 
-  if (!encoder_release_pending) {
-    uint8_t keycode = KC_NO;
-    if (encoder_queue_pop(&keycode)) {
-      encoder_output_press(keycode);
-      encoder_release_pending = true;
-      encoder_release_keycode = keycode;
-    }
-  }
+  // A task may release the previous detent above and start the next queued tap
+  // below, keeping encoder latency bounded without collapsing a tap into an
+  // immediate press+release pair.
+  encoder_start_next_tap_if_idle();
 }
 
 #endif

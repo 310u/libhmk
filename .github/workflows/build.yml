@@ -48,9 +48,37 @@ jobs:
           echo "matrix=$MATRIX_JSON"
           echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
 
+  native-tests:
+    name: Native Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout libhmk
+        uses: actions/checkout@v5
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup PlatformIO Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Run Native Test Suite
+        run: |
+          python setup.py -k mochiko40he
+          pio test
+
   build:
     name: Build Firmware
-    needs: define-matrix
+    needs: [define-matrix, native-tests]
     strategy:
       matrix:
         include: ${{ fromJson(needs.define-matrix.outputs.matrix) }}
@@ -79,6 +107,12 @@ jobs:
         run: |
           python setup.py -k ${{ matrix.keyboard }}
           pio run
+
+      - name: Check Firmware Size Budget
+        run: |
+          python scripts/check_memory_budget.py \
+            --keyboard ${{ matrix.keyboard }} \
+            --elf .pio/build/${{ matrix.keyboard }}/firmware.elf
 
       - name: Archive Firmware Artifact
         uses: actions/upload-artifact@v4

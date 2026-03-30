@@ -69,15 +69,15 @@ void test_usb_runtime_long_suspend_reconnects_after_delay(void) {
 
   usb_runtime_resume();
 
-  TEST_ASSERT_EQUAL_UINT32(1, hid_runtime_clear_count);
-  TEST_ASSERT_EQUAL_UINT32(1, xinput_runtime_clear_count);
+  TEST_ASSERT_EQUAL_UINT32(0, hid_runtime_clear_count);
+  TEST_ASSERT_EQUAL_UINT32(0, xinput_runtime_clear_count);
   TEST_ASSERT_EQUAL_UINT32(0, usb_disconnect_count);
   TEST_ASSERT_EQUAL_UINT32(0, usb_connect_count);
 
   usb_runtime_task();
 
-  TEST_ASSERT_EQUAL_UINT32(2, hid_runtime_clear_count);
-  TEST_ASSERT_EQUAL_UINT32(2, xinput_runtime_clear_count);
+  TEST_ASSERT_EQUAL_UINT32(1, hid_runtime_clear_count);
+  TEST_ASSERT_EQUAL_UINT32(1, xinput_runtime_clear_count);
   TEST_ASSERT_EQUAL_UINT32(1, usb_disconnect_count);
   TEST_ASSERT_EQUAL_UINT32(0, usb_connect_count);
 
@@ -103,8 +103,8 @@ void test_usb_runtime_mount_clears_pending_reconnect(void) {
   mock_timer = 7000;
   usb_runtime_task();
 
-  TEST_ASSERT_EQUAL_UINT32(2, hid_runtime_clear_count);
-  TEST_ASSERT_EQUAL_UINT32(2, xinput_runtime_clear_count);
+  TEST_ASSERT_EQUAL_UINT32(1, hid_runtime_clear_count);
+  TEST_ASSERT_EQUAL_UINT32(1, xinput_runtime_clear_count);
   TEST_ASSERT_EQUAL_UINT32(0, usb_disconnect_count);
   TEST_ASSERT_EQUAL_UINT32(0, usb_connect_count);
 }

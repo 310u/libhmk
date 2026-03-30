@@ -103,6 +103,7 @@ key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
 static bitmap_t rapid_trigger_disabled[BITMAP_SIZE(NUM_KEYS)] = {0};
+static uint16_t matrix_bottom_out_threshold_buf[NUM_KEYS];
 
 // Tracks the last time any key state changed
 static uint32_t matrix_last_activity_time = 0;
@@ -112,8 +113,9 @@ void matrix_init(void) { matrix_recalibrate(false); }
 
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   if (reset_bottom_out_threshold) {
-    uint16_t bottom_out_threshold[NUM_KEYS] = {0};
-    EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+    memset(matrix_bottom_out_threshold_buf, 0,
+           sizeof(matrix_bottom_out_threshold_buf));
+    EECONFIG_WRITE(bottom_out_threshold, matrix_bottom_out_threshold_buf);
     matrix_bottom_out_threshold_dirty = false;
   }
 
@@ -276,17 +278,15 @@ void matrix_scan(void) {
   if (matrix_bottom_out_threshold_dirty &&
       eeconfig->options.save_bottom_out_threshold &&
       matrix_get_idle_time() >= MATRIX_BOTTOM_OUT_SAVE_IDLE_MS) {
-    uint16_t bottom_out_threshold[NUM_KEYS];
-
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
       if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
-        bottom_out_threshold[i] = 0;
+        matrix_bottom_out_threshold_buf[i] = 0;
       else
-        bottom_out_threshold[i] =
+        matrix_bottom_out_threshold_buf[i] =
             key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
     }
 
-    if (EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold))
+    if (EECONFIG_WRITE(bottom_out_threshold, matrix_bottom_out_threshold_buf))
       matrix_bottom_out_threshold_dirty = false;
   }
 }

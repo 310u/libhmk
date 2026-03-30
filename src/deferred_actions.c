@@ -111,10 +111,11 @@ void deferred_action_process(void) {
   queue_head = (queue_head + action_count) & (MAX_DEFERRED_ACTIONS - 1);
   queue_size -= action_count;
 
-  // We still need to decrement ticks for the rest of the queue
-  for (uint32_t i = action_count + 1; i < queue_size + action_count; i++) {
+  // The action at the new head was already decremented before the FIFO break
+  // above, so continue with the remaining queued actions only.
+  for (uint32_t i = 1; i < queue_size; i++) {
     deferred_action_t *action =
-        &queue[(queue_head + i - action_count) & (MAX_DEFERRED_ACTIONS - 1)];
+        &queue[(queue_head + i) & (MAX_DEFERRED_ACTIONS - 1)];
     action->ticks = M_MIN(action->ticks, CURRENT_PROFILE.tick_rate);
     if (action->ticks > 0) {
       action->ticks--;

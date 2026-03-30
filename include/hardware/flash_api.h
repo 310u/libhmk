@@ -51,7 +51,7 @@ bool flash_erase(uint32_t sector);
  *
  * @param addr Address to read from
  * @param buffer Buffer to read into
- * @param len Length of the data in words (4 bytes)
+ * @param len Length of the data in 32-bit words (4 bytes)
  *
  * @return true if successful, false otherwise
  */
@@ -62,7 +62,7 @@ bool flash_read(uint32_t addr, void *buf, uint32_t len);
  *
  * @param addr Address to write to
  * @param buf Buffer to write from
- * @param len Length of the data in words (4 bytes)
+ * @param len Length of the data in 32-bit words (4 bytes)
  *
  * @return true if successful, false otherwise
  */

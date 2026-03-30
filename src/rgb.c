@@ -34,6 +34,7 @@
 
 // We need an array to hold the current LED colors
 static rgb_color_t current_colors[NUM_LEDS];
+static uint8_t rgb_grb_data[NUM_LEDS * 3];
 static rgb_config_t rgb_config;
 
 // Heatmap state
@@ -73,16 +74,15 @@ void rgb_set_all_color(uint8_t r, uint8_t g, uint8_t b) {
 
 // Function to trigger the DMA transfer of the PWM data buffer
 static void rgb_transmit_dma(void) {
-    uint8_t grb_data[NUM_LEDS * 3];
     uint16_t offset = 0;
 
     for (uint8_t i = 0; i < NUM_LEDS; i++) {
-        grb_data[offset++] = current_colors[i].g;
-        grb_data[offset++] = current_colors[i].r;
-        grb_data[offset++] = current_colors[i].b;
+        rgb_grb_data[offset++] = current_colors[i].g;
+        rgb_grb_data[offset++] = current_colors[i].r;
+        rgb_grb_data[offset++] = current_colors[i].b;
     }
 
-    rgb_driver_write(grb_data, offset);
+    rgb_driver_write(rgb_grb_data, offset);
     rgb_driver_task();
 }
 

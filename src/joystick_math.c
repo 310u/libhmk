@@ -2,6 +2,10 @@
 
 #include <math.h>
 
+// These helpers intentionally use libm. If a future backend cannot afford
+// floating-point work in the joystick scan path, add a fixed-point
+// implementation before enabling joystick support there.
+
 #define JOYSTICK_CIRCULAR_TARGET_MAGNITUDE 127u
 #define JOYSTICK_FULL_CIRCLE_RADIANS 6.28318530718f
 #define JOYSTICK_OUTPUT_FP_SHIFT 8

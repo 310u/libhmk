@@ -139,11 +139,27 @@ void test_xinput_hid_gamepad_maps_key_stick_up_to_negative_y(void) {
   TEST_ASSERT_INT8_WITHIN(1, -127, hid_reports[0].ly);
 }
 
+void test_xinput_hid_gamepad_uses_unsigned_opposite_axis_delta(void) {
+  mock_eeconfig.options.xinput_enabled = false;
+  mock_eeconfig.profiles[0].gamepad_buttons[1] = GP_BUTTON_LS_LEFT;
+  mock_eeconfig.profiles[0].gamepad_buttons[2] = GP_BUTTON_LS_RIGHT;
+  key_matrix[1].distance = 200;
+  key_matrix[2].distance = 50;
+
+  xinput_process(1);
+  xinput_process(2);
+  xinput_task();
+
+  TEST_ASSERT_EQUAL_UINT8(1, hid_report_count);
+  TEST_ASSERT_INT8_WITHIN(1, -75, hid_reports[0].lx);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_xinput_hid_gamepad_clears_physical_stick_button_on_release);
   RUN_TEST(test_xinput_hid_gamepad_preserves_transient_button_tap_while_busy);
   RUN_TEST(test_xinput_hid_gamepad_does_not_double_circularize_physical_stick);
   RUN_TEST(test_xinput_hid_gamepad_maps_key_stick_up_to_negative_y);
+  RUN_TEST(test_xinput_hid_gamepad_uses_unsigned_opposite_axis_delta);
   return UNITY_END();
 }

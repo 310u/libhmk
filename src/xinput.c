@@ -460,15 +460,16 @@ void xinput_task(void) {
   for (uint32_t i = 0; i < 4; i++) {
     const uint8_t neg_axis = joystick_axes[i][0];
     const uint8_t pos_axis = joystick_axes[i][1];
+    const uint16_t neg_state = ANALOG_STATE(neg_axis);
+    const uint16_t pos_state = ANALOG_STATE(pos_axis);
 
     if (CURRENT_PROFILE.gamepad_options.snappy_joystick)
       // For snappy joystick, we use the maximum value of opposite axes.
-      joystick_states[i] =
-          M_MAX(ANALOG_STATE(neg_axis), ANALOG_STATE(pos_axis));
+      joystick_states[i] = M_MAX(neg_state, pos_state);
     else
       // Otherwise, we combine the opposite axes.
       joystick_states[i] =
-          abs((int16_t)ANALOG_STATE(pos_axis) - ANALOG_STATE(neg_axis));
+          pos_state >= neg_state ? pos_state - neg_state : neg_state - pos_state;
   }
 
   // Apply the analog curve to joystick states

@@ -39,6 +39,16 @@ static void usb_runtime_resync(void) {
   xinput_reset_runtime_state();
 }
 
+static void usb_runtime_schedule_reconnect_if_needed(void) {
+  if (usb_runtime_state.suspend_observed &&
+      !usb_runtime_state.recovery_attempted &&
+      timer_elapsed(usb_runtime_state.suspend_start_ms) >=
+          USB_RESUME_RECOVERY_THRESHOLD_MS) {
+    usb_runtime_state.reconnect_pending = true;
+    usb_runtime_state.recovery_attempted = true;
+  }
+}
+
 void usb_runtime_init(void) {
   usb_runtime_state.suspend_observed = false;
   usb_runtime_state.recovery_attempted = false;
@@ -47,13 +57,7 @@ void usb_runtime_init(void) {
 }
 
 void usb_runtime_task(void) {
-  if (usb_runtime_state.suspend_observed &&
-      !usb_runtime_state.recovery_attempted &&
-      timer_elapsed(usb_runtime_state.suspend_start_ms) >=
-          USB_RESUME_RECOVERY_THRESHOLD_MS) {
-    usb_runtime_state.reconnect_pending = true;
-    usb_runtime_state.recovery_attempted = true;
-  }
+  usb_runtime_schedule_reconnect_if_needed();
 
   if (usb_runtime_state.suspend_observed && !tud_suspended()) {
     // Some hosts/controllers resume the bus without surfacing TinyUSB's
@@ -97,16 +101,12 @@ void usb_runtime_suspend(void) {
 }
 
 void usb_runtime_resume(void) {
-  if (usb_runtime_state.suspend_observed &&
-      !usb_runtime_state.recovery_attempted &&
-      timer_elapsed(usb_runtime_state.suspend_start_ms) >=
-          USB_RESUME_RECOVERY_THRESHOLD_MS) {
-    usb_runtime_state.reconnect_pending = true;
-    usb_runtime_state.recovery_attempted = true;
-  }
+  usb_runtime_schedule_reconnect_if_needed();
 
   usb_runtime_state.suspend_observed = false;
-  usb_runtime_resync();
+  if (!usb_runtime_state.reconnect_pending) {
+    usb_runtime_resync();
+  }
 }
 
 //--------------------------------------------------------------------+

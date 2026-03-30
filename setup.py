@@ -164,7 +164,7 @@ if __name__ == "__main__":
     )
     pio_config["env:native_test_joystick"] = native_test_env(
         "test_joystick",
-        "+<joystick.c>",
+        "+<joystick.c> +<joystick_math.c>",
         [
             "-I test/test_joystick",
             "-lm",

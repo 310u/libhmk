@@ -34,9 +34,19 @@ void test_analog_scan_reset_clears_key_and_raw_values(void) {
   TEST_ASSERT_EQUAL_UINT16(0, analog_scan_read_raw(1));
 }
 
+void test_analog_scan_out_of_range_reads_return_zero(void) {
+  static const uint16_t samples[] = {10, 20, 30, 40};
+
+  analog_scan_store_samples(samples, 0);
+
+  TEST_ASSERT_EQUAL_UINT16(0, analog_scan_read_key(NUM_KEYS));
+  TEST_ASSERT_EQUAL_UINT16(0, analog_scan_read_raw(ADC_NUM_RAW_INPUTS));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_analog_scan_stores_mux_and_raw_samples);
   RUN_TEST(test_analog_scan_reset_clears_key_and_raw_values);
+  RUN_TEST(test_analog_scan_out_of_range_reads_return_zero);
   return UNITY_END();
 }

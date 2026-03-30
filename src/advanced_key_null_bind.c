@@ -53,9 +53,9 @@ void advanced_key_null_bind_process(const advanced_key_event_t *event,
       state->keycodes[0] != KC_NO,
       state->keycodes[1] != KC_NO,
   };
-  if (is_pressed[0] & is_pressed[1]) {
+  if (is_pressed[0] && is_pressed[1]) {
     if ((null_bind->bottom_out_point > 0) &&
-        ((key_matrix[keys[0]].distance >= null_bind->bottom_out_point) &
+        ((key_matrix[keys[0]].distance >= null_bind->bottom_out_point) &&
          (key_matrix[keys[1]].distance >= null_bind->bottom_out_point)))
       is_pressed[0] = is_pressed[1] = true;
     else if (null_bind->behavior == NB_BEHAVIOR_DISTANCE) {
@@ -64,12 +64,12 @@ void advanced_key_null_bind_process(const advanced_key_event_t *event,
       is_pressed[index ^ 1] = !is_pressed[index];
     } else if (event->type == AK_EVENT_TYPE_PRESS) {
       is_pressed[index] =
-          (null_bind->behavior != NB_BEHAVIOR_NEUTRAL) &
-          ((null_bind->behavior == NB_BEHAVIOR_LAST) |
-           ((null_bind->behavior == NB_BEHAVIOR_PRIMARY) & (index == 0)) |
-           ((null_bind->behavior == NB_BEHAVIOR_SECONDARY) & (index == 1)));
-      is_pressed[index ^ 1] =
-          (null_bind->behavior != NB_BEHAVIOR_NEUTRAL) & !is_pressed[index];
+          (null_bind->behavior != NB_BEHAVIOR_NEUTRAL) &&
+          ((null_bind->behavior == NB_BEHAVIOR_LAST) ||
+           ((null_bind->behavior == NB_BEHAVIOR_PRIMARY) && (index == 0)) ||
+           ((null_bind->behavior == NB_BEHAVIOR_SECONDARY) && (index == 1)));
+      is_pressed[index ^ 1] = (null_bind->behavior != NB_BEHAVIOR_NEUTRAL) &&
+                              !is_pressed[index];
     } else {
       is_pressed[0] = state->is_pressed[0];
       is_pressed[1] = state->is_pressed[1];
@@ -77,10 +77,10 @@ void advanced_key_null_bind_process(const advanced_key_event_t *event,
   }
 
   for (uint32_t i = 0; i < 2; i++) {
-    if (is_pressed[i] & !state->is_pressed[i]) {
+    if (is_pressed[i] && !state->is_pressed[i]) {
       layout_register(keys[i], state->keycodes[i]);
       state->is_pressed[i] = true;
-    } else if (!is_pressed[i] & state->is_pressed[i]) {
+    } else if (!is_pressed[i] && state->is_pressed[i]) {
       layout_unregister(keys[i], state->keycodes[i]);
       state->is_pressed[i] = false;
     }

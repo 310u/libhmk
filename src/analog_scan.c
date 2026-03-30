@@ -61,8 +61,12 @@ void analog_scan_store_samples(const volatile uint16_t *samples,
 #endif
 }
 
-uint16_t analog_scan_read_key(uint8_t key) { return analog_key_values[key]; }
+uint16_t analog_scan_read_key(uint8_t key) {
+  return key < NUM_KEYS ? analog_key_values[key] : 0;
+}
 
 #if ADC_NUM_RAW_INPUTS > 0
-uint16_t analog_scan_read_raw(uint8_t index) { return analog_raw_values[index]; }
+uint16_t analog_scan_read_raw(uint8_t index) {
+  return index < ADC_NUM_RAW_INPUTS ? analog_raw_values[index] : 0;
+}
 #endif
