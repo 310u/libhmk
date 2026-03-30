@@ -57,7 +57,7 @@
 // Common Macros
 //--------------------------------------------------------------------+
 
-#define M_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+#define M_ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define M_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define M_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define M_DIV_CEIL(n, d) (((n) + (d) - 1) / (d))

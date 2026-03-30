@@ -79,7 +79,8 @@
     },
     "memory_budget": {
         "min_flash_headroom": 32768,
-        "min_ram_headroom": 16384
+        "min_ram_headroom": 16384,
+        "max_stack_frame": 320
     },
     "analog": {
         "invert_adc": false,

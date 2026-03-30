@@ -22,9 +22,8 @@
 #define NUM_LEDS NUM_KEYS
 #endif
 
-#include <math.h>
-
 #include "hardware/hardware.h"
+#include "lib/usqrt.h"
 #include "rgb_internal.h"
 #include "rgb_math.h"
 
@@ -94,13 +93,20 @@ static uint8_t reactive_clip_effect(uint8_t target_led, const rgb_hit_t *hit,
   return (uint8_t)(255u - visible);
 }
 
+static uint8_t reactive_distance(int16_t dx, int16_t dy) {
+  const uint32_t dx_sq = (uint32_t)((int32_t)dx * (int32_t)dx);
+  const uint32_t dy_sq = (uint32_t)((int32_t)dy * (int32_t)dy);
+  const uint32_t distance = usqrt32(dx_sq + dy_sq);
+  return distance > UINT8_MAX ? UINT8_MAX : (uint8_t)distance;
+}
+
 static uint8_t reactive_strength_for_hit(uint8_t led, const rgb_hit_t *hit,
                                          reactive_mode_t mode, uint8_t speed) {
   const uint8_t tick = hit_elapsed_tick(hit, speed);
   const int16_t dx = (int16_t)rgb_coord_x_at(led) - (int16_t)hit->x;
   const int16_t dy = (int16_t)rgb_coord_y_at(led) - (int16_t)hit->y;
-  const uint8_t dist = (uint8_t)sqrt(dx * dx + dy * dy);
-  int16_t effect = tick;
+  const uint8_t dist = reactive_distance(dx, dy);
+  int16_t effect;
 
   switch (mode) {
   case REACTIVE_MODE_SIMPLE:
@@ -145,7 +151,7 @@ static uint8_t splash_strength_for_hit(uint8_t led, const rgb_hit_t *hit,
   const uint8_t tick = hit_elapsed_tick(hit, speed);
   const int16_t dx = (int16_t)rgb_coord_x_at(led) - (int16_t)hit->x;
   const int16_t dy = (int16_t)rgb_coord_y_at(led) - (int16_t)hit->y;
-  const uint8_t dist = (uint8_t)sqrt(dx * dx + dy * dy);
+  const uint8_t dist = reactive_distance(dx, dy);
   int16_t effect = (int16_t)tick - dist;
   if (effect < 0) {
     effect = 255;
@@ -249,9 +255,9 @@ void rgb_reactive_record_keypress(uint8_t index) {
       continue;
     }
 
-    const int dx = source_x - rgb_coord_x_at(i);
-    const int dy = source_y - rgb_coord_y_at(i);
-    const uint8_t distance = (uint8_t)sqrt(dx * dx + dy * dy);
+    const int16_t dx = (int16_t)source_x - (int16_t)rgb_coord_x_at(i);
+    const int16_t dy = (int16_t)source_y - (int16_t)rgb_coord_y_at(i);
+    const uint8_t distance = reactive_distance(dx, dy);
     if (distance > 40u) {
       continue;
     }

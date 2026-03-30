@@ -269,6 +269,70 @@ static void layout_cycle_rgb_effect(bool forward) {
 }
 #endif
 
+static void layout_toggle_joystick_mode(void) {
+#if defined(JOYSTICK_ENABLED)
+  joystick_config_t jc = joystick_get_config();
+  if (jc.mode == JOYSTICK_MODE_SCROLL) {
+    jc.mode = JOYSTICK_MODE_MOUSE;
+  } else {
+    jc.mode = JOYSTICK_MODE_SCROLL;
+  }
+  joystick_set_config(jc);
+#endif
+}
+
+static void layout_select_next_joystick_preset(void) {
+#if defined(JOYSTICK_ENABLED)
+  joystick_config_t jc = joystick_get_config();
+  joystick_select_mouse_preset(
+      &jc,
+      (uint8_t)((jc.active_mouse_preset + 1u) % JOYSTICK_MOUSE_PRESET_COUNT));
+  joystick_set_config(jc);
+#endif
+}
+
+static void layout_register_joystick_scroll_mode(void) {
+#if defined(JOYSTICK_ENABLED)
+  joystick_scroll_mo_register();
+#endif
+}
+
+static void layout_unregister_joystick_scroll_mode(void) {
+#if defined(JOYSTICK_ENABLED)
+  joystick_scroll_mo_unregister();
+#endif
+}
+
+static void layout_toggle_rgb(void) {
+#if defined(RGB_ENABLED)
+  layout_set_rgb_enabled(!rgb_get_config()->enabled);
+#endif
+}
+
+static void layout_increase_rgb_brightness(void) {
+#if defined(RGB_ENABLED)
+  layout_adjust_rgb_brightness(true);
+#endif
+}
+
+static void layout_decrease_rgb_brightness(void) {
+#if defined(RGB_ENABLED)
+  layout_adjust_rgb_brightness(false);
+#endif
+}
+
+static void layout_select_next_rgb_effect(void) {
+#if defined(RGB_ENABLED)
+  layout_cycle_rgb_effect(true);
+#endif
+}
+
+static void layout_select_previous_rgb_effect(void) {
+#if defined(RGB_ENABLED)
+  layout_cycle_rgb_effect(false);
+#endif
+}
+
 static void layout_toggle_polling_rate(void) {
   eeconfig_options_t options = eeconfig->options;
   options.high_polling_rate_enabled = !options.high_polling_rate_enabled;
@@ -701,62 +765,37 @@ void layout_register(uint8_t key, uint8_t keycode) {
     break;
 
   case SP_JOY_MODE_NEXT: {
-#if defined(JOYSTICK_ENABLED)
-    joystick_config_t jc = joystick_get_config();
-    if (jc.mode == JOYSTICK_MODE_SCROLL) {
-      jc.mode = JOYSTICK_MODE_MOUSE;
-    } else {
-      jc.mode = JOYSTICK_MODE_SCROLL;
-    }
-    joystick_set_config(jc);
-#endif
+    layout_toggle_joystick_mode();
     break;
   }
 
   case SP_JOY_PRESET_NEXT: {
-#if defined(JOYSTICK_ENABLED)
-    joystick_config_t jc = joystick_get_config();
-    joystick_select_mouse_preset(
-        &jc, (uint8_t)((jc.active_mouse_preset + 1u) % JOYSTICK_MOUSE_PRESET_COUNT));
-    joystick_set_config(jc);
-#endif
+    layout_select_next_joystick_preset();
     break;
   }
 
   case SP_JOY_SCROLL_MO:
-#if defined(JOYSTICK_ENABLED)
-    joystick_scroll_mo_register();
-#endif
+    layout_register_joystick_scroll_mode();
     break;
 
   case SP_RGB_TOGGLE:
-#if defined(RGB_ENABLED)
-    layout_set_rgb_enabled(!rgb_get_config()->enabled);
-#endif
+    layout_toggle_rgb();
     break;
 
   case SP_RGB_BRIGHTNESS_UP:
-#if defined(RGB_ENABLED)
-    layout_adjust_rgb_brightness(true);
-#endif
+    layout_increase_rgb_brightness();
     break;
 
   case SP_RGB_BRIGHTNESS_DOWN:
-#if defined(RGB_ENABLED)
-    layout_adjust_rgb_brightness(false);
-#endif
+    layout_decrease_rgb_brightness();
     break;
 
   case SP_RGB_EFFECT_NEXT:
-#if defined(RGB_ENABLED)
-    layout_cycle_rgb_effect(true);
-#endif
+    layout_select_next_rgb_effect();
     break;
 
   case SP_RGB_EFFECT_PREV:
-#if defined(RGB_ENABLED)
-    layout_cycle_rgb_effect(false);
-#endif
+    layout_select_previous_rgb_effect();
     break;
 
   case SP_POLL_RATE_TOGGLE:
@@ -791,9 +830,7 @@ void layout_unregister(uint8_t key, uint8_t keycode) {
     break;
 
   case SP_JOY_SCROLL_MO:
-#if defined(JOYSTICK_ENABLED)
-    joystick_scroll_mo_unregister();
-#endif
+    layout_unregister_joystick_scroll_mode();
     break;
 
   default:

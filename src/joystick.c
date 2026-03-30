@@ -439,10 +439,9 @@ static void joystick_update_switch_state(void) {
     sw_last_change_tick = timer_read();
   }
 
-  if (config_cache.sw_debounce_ms == 0) {
-    sw_debounced = sw_raw;
-  } else if (timer_elapsed(sw_last_change_tick) >=
-             (uint32_t)config_cache.sw_debounce_ms) {
+  if (config_cache.sw_debounce_ms == 0 ||
+      timer_elapsed(sw_last_change_tick) >=
+          (uint32_t)config_cache.sw_debounce_ms) {
     sw_debounced = sw_raw;
   }
 

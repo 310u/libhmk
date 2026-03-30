@@ -22,62 +22,59 @@
 // Adapted from https://www.azillionmonkeys.com/qed/ulerysqroot.pdf
 //--------------------------------------------------------------------+
 
+static inline void usqrt16_step(uint16_t *x, uint16_t *g, uint8_t n) {
+  const unsigned int shift = (unsigned int)n;
+  const uint16_t t =
+      (uint16_t)(((uint32_t)(*g) << (shift + 1u)) + (UINT32_C(1) << (shift << 1u)));
+  if (*x >= t) {
+    *g = (uint16_t)(*g + (uint16_t)(UINT32_C(1) << shift));
+    *x = (uint16_t)(*x - t);
+  }
+}
+
 static inline uint16_t usqrt16(uint16_t x) {
-  uint16_t t, g = 0;
+  uint16_t g = 0;
 
-#define USQRT16_STEP(n)                                                        \
-  do {                                                                         \
-    t = (g << (n + 1)) + (1 << (n << 1));                                      \
-    if (x >= t) {                                                              \
-      g += 1 << n;                                                             \
-      x -= t;                                                                  \
-    }                                                                          \
-  } while (0)
-
-  USQRT16_STEP(7);
-  USQRT16_STEP(6);
-  USQRT16_STEP(5);
-  USQRT16_STEP(4);
-  USQRT16_STEP(3);
-  USQRT16_STEP(2);
-  USQRT16_STEP(1);
-  USQRT16_STEP(0);
-
-#undef USQRT16_STEP
+  usqrt16_step(&x, &g, 7u);
+  usqrt16_step(&x, &g, 6u);
+  usqrt16_step(&x, &g, 5u);
+  usqrt16_step(&x, &g, 4u);
+  usqrt16_step(&x, &g, 3u);
+  usqrt16_step(&x, &g, 2u);
+  usqrt16_step(&x, &g, 1u);
+  usqrt16_step(&x, &g, 0u);
 
   return g;
 }
 
+static inline void usqrt32_step(uint32_t *x, uint32_t *g, uint8_t n) {
+  const unsigned int shift = (unsigned int)n;
+  const uint32_t t = (*g << (shift + 1u)) + (UINT32_C(1) << (shift << 1u));
+  if (*x >= t) {
+    *g += UINT32_C(1) << shift;
+    *x -= t;
+  }
+}
+
 static inline uint32_t usqrt32(uint32_t x) {
-  uint32_t t, g = 0;
+  uint32_t g = 0;
 
-#define USQRT32_STEP(n)                                                        \
-  do {                                                                         \
-    t = (g << (n + 1)) + (1 << (n << 1));                                      \
-    if (x >= t) {                                                              \
-      g += 1 << n;                                                             \
-      x -= t;                                                                  \
-    }                                                                          \
-  } while (0)
-
-  USQRT32_STEP(15);
-  USQRT32_STEP(14);
-  USQRT32_STEP(13);
-  USQRT32_STEP(12);
-  USQRT32_STEP(11);
-  USQRT32_STEP(10);
-  USQRT32_STEP(9);
-  USQRT32_STEP(8);
-  USQRT32_STEP(7);
-  USQRT32_STEP(6);
-  USQRT32_STEP(5);
-  USQRT32_STEP(4);
-  USQRT32_STEP(3);
-  USQRT32_STEP(2);
-  USQRT32_STEP(1);
-  USQRT32_STEP(0);
-
-#undef USQRT32_STEP
+  usqrt32_step(&x, &g, 15u);
+  usqrt32_step(&x, &g, 14u);
+  usqrt32_step(&x, &g, 13u);
+  usqrt32_step(&x, &g, 12u);
+  usqrt32_step(&x, &g, 11u);
+  usqrt32_step(&x, &g, 10u);
+  usqrt32_step(&x, &g, 9u);
+  usqrt32_step(&x, &g, 8u);
+  usqrt32_step(&x, &g, 7u);
+  usqrt32_step(&x, &g, 6u);
+  usqrt32_step(&x, &g, 5u);
+  usqrt32_step(&x, &g, 4u);
+  usqrt32_step(&x, &g, 3u);
+  usqrt32_step(&x, &g, 2u);
+  usqrt32_step(&x, &g, 1u);
+  usqrt32_step(&x, &g, 0u);
 
   return g;
 }

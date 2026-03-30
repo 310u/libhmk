@@ -12,6 +12,7 @@ on:
       - "linker/**"
       - "scripts/**"
       - "src/**"
+      - ".clang-tidy"
       - ".github/workflows/build.yml"
       - ".github/workflows/ci_define_matrix.py"
   push:
@@ -24,6 +25,7 @@ on:
       - "linker/**"
       - "scripts/**"
       - "src/**"
+      - ".clang-tidy"
       - ".github/workflows/build.yml"
       - ".github/workflows/ci_define_matrix.py"
     tags: ["v*"]
@@ -82,7 +84,62 @@ jobs:
           pio test
 
   static-analysis:
-    name: Static Analysis
+    name: Clang-Tidy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout libhmk
+        uses: actions/checkout@v5
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup PlatformIO Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Install Clang-Tidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy
+
+      - name: Generate compile databases
+        run: |
+          python setup.py -k mochiko40he
+          pio run -e mochiko40he -t compiledb
+          mkdir -p /tmp/libhmk-clang-tidy/mochiko40he
+          cp compile_commands.json /tmp/libhmk-clang-tidy/mochiko40he/compile_commands.json
+
+          python setup.py -k he60
+          pio run -e he60 -t compiledb
+          mkdir -p /tmp/libhmk-clang-tidy/he60
+          cp compile_commands.json /tmp/libhmk-clang-tidy/he60/compile_commands.json
+
+      - name: Run Clang-Tidy
+        run: |
+          set -o pipefail
+          python scripts/run_clang_tidy.py \
+            --database-dir /tmp/libhmk-clang-tidy/mochiko40he \
+            --database-dir /tmp/libhmk-clang-tidy/he60 \
+            2>&1 | tee clang-tidy.txt
+
+      - name: Archive Clang-Tidy Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-tidy-report
+          path: clang-tidy.txt
+
+  cppcheck:
+    name: Cppcheck
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -135,7 +192,7 @@ jobs:
 
   build:
     name: Build Firmware
-    needs: [define-matrix, native-tests]
+    needs: [define-matrix, native-tests, static-analysis]
     strategy:
       matrix:
         include: ${{ fromJson(needs.define-matrix.outputs.matrix) }}
