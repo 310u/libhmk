@@ -15,6 +15,7 @@ static uint32_t mock_timer;
 static uint32_t mock_cycle;
 
 static uint32_t report_count;
+static uint32_t command_enqueue_count;
 static uint32_t keyboard_ready_checks;
 static uint32_t mouse_ready_checks;
 static uint32_t hid_ready_checks;
@@ -30,6 +31,8 @@ static hid_mouse_report_t mouse_reports[8];
 static uint8_t mouse_report_count;
 static uint8_t raw_hid_reports[8][RAW_HID_EP_SIZE];
 static uint8_t raw_hid_report_count;
+static uint8_t last_command_packet[RAW_HID_EP_SIZE];
+static uint16_t last_command_packet_len;
 
 const uint16_t keycode_to_hid[256] = {
     [KC_A] = 0x0004,
@@ -42,7 +45,17 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type,
                            const uint8_t *buffer, uint16_t bufsize);
 
-void command_process(const uint8_t *buffer) {}
+bool command_enqueue(const uint8_t *buffer, uint16_t len) {
+  command_enqueue_count++;
+  last_command_packet_len = len;
+  if (len <= sizeof(last_command_packet))
+    memcpy(last_command_packet, buffer, len);
+  return true;
+}
+
+void command_process(const uint8_t *buffer) {
+  (void)buffer;
+}
 
 uint32_t timer_read(void) { return mock_timer++; }
 
@@ -112,6 +125,7 @@ void tud_remote_wakeup(void) {
 
 static void reset_observations(void) {
   report_count = 0;
+  command_enqueue_count = 0;
   keyboard_ready_checks = 0;
   mouse_ready_checks = 0;
   hid_ready_checks = 0;
@@ -127,6 +141,8 @@ static void reset_observations(void) {
   mouse_report_count = 0;
   memset(raw_hid_reports, 0, sizeof(raw_hid_reports));
   raw_hid_report_count = 0;
+  memset(last_command_packet, 0, sizeof(last_command_packet));
+  last_command_packet_len = 0;
 }
 
 void setUp(void) {
@@ -315,6 +331,7 @@ void test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports(void) {
                         control_packet, sizeof(control_packet));
 
   TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT32(0, command_enqueue_count);
   TEST_ASSERT_EQUAL_UINT8(USB_ITF_RAW_HID, last_instance);
   TEST_ASSERT_EQUAL_UINT16(RAW_HID_EP_SIZE, last_report_len);
   TEST_ASSERT_EQUAL_UINT8(1, raw_hid_report_count);
@@ -361,6 +378,7 @@ void test_hid_usbmon_diagnostic_stream_stops_for_regular_commands(void) {
   tud_hid_set_report_cb(USB_ITF_RAW_HID, 0, HID_REPORT_TYPE_OUTPUT,
                         control_packet, sizeof(control_packet));
   TEST_ASSERT_EQUAL_UINT32(1, report_count);
+  TEST_ASSERT_EQUAL_UINT32(0, command_enqueue_count);
 
   tud_hid_set_report_cb(USB_ITF_RAW_HID, 0, HID_REPORT_TYPE_OUTPUT,
                         command_packet, sizeof(command_packet));
@@ -368,6 +386,9 @@ void test_hid_usbmon_diagnostic_stream_stops_for_regular_commands(void) {
 
   TEST_ASSERT_EQUAL_UINT32(1, report_count);
   TEST_ASSERT_EQUAL_UINT8(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT32(1, command_enqueue_count);
+  TEST_ASSERT_EQUAL_UINT16(RAW_HID_EP_SIZE, last_command_packet_len);
+  TEST_ASSERT_EQUAL_UINT8(0x42, last_command_packet[0]);
 }
 #endif
 

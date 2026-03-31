@@ -34,9 +34,11 @@
   }
 
 static uint8_t out_buf[RAW_HID_EP_SIZE];
+static uint8_t pending_request[RAW_HID_EP_SIZE];
 static uint8_t pending_response[RAW_HID_EP_SIZE];
 static uint16_t command_bottom_out_threshold[NUM_KEYS];
-static bool has_pending_response = false;
+static volatile bool command_request_pending = false;
+static volatile bool has_pending_response = false;
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
 static bool command_validate_gamepad_options(
@@ -70,7 +72,19 @@ static void command_reload_if_current_profile(uint8_t profile) {
     profile_runtime_reload_current();
 }
 
-void command_init(void) {}
+void command_init(void) {
+  command_request_pending = false;
+  has_pending_response = false;
+}
+
+bool command_enqueue(const uint8_t *buf, uint16_t len) {
+  if (len != RAW_HID_EP_SIZE || command_request_pending || has_pending_response)
+    return false;
+
+  memcpy(pending_request, buf, RAW_HID_EP_SIZE);
+  command_request_pending = true;
+  return true;
+}
 
 void command_process(const uint8_t *buf) {
   const command_in_buffer_t *in = (const command_in_buffer_t *)buf;
@@ -487,8 +501,13 @@ void command_process(const uint8_t *buf) {
 }
 
 void command_task(void) {
-  if (has_pending_response && tud_hid_n_ready(USB_ITF_RAW_HID)) {
-    tud_hid_n_report(USB_ITF_RAW_HID, 0, pending_response, RAW_HID_EP_SIZE);
+  if (command_request_pending && !has_pending_response) {
+    command_process(pending_request);
+    command_request_pending = false;
+  }
+
+  if (has_pending_response && tud_hid_n_ready(USB_ITF_RAW_HID) &&
+      tud_hid_n_report(USB_ITF_RAW_HID, 0, pending_response, RAW_HID_EP_SIZE)) {
     has_pending_response = false;
   }
 }

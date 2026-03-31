@@ -212,6 +212,36 @@ void test_command_task_waits_until_raw_hid_is_ready(void) {
   TEST_ASSERT_EQUAL_UINT8(1, raw_hid_reports[0][1]);
 }
 
+void test_command_enqueue_defers_processing_until_task(void) {
+  command_in_buffer_t get_profile = {
+      .command_id = COMMAND_GET_PROFILE,
+  };
+
+  mock_eeconfig.current_profile = 3;
+
+  TEST_ASSERT_TRUE(command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
+  TEST_ASSERT_EQUAL_UINT32(0, raw_hid_report_count);
+
+  command_task();
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_PROFILE, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT8(3, raw_hid_reports[0][1]);
+}
+
+void test_command_enqueue_rejects_second_pending_request(void) {
+  command_in_buffer_t get_profile = {
+      .command_id = COMMAND_GET_PROFILE,
+  };
+
+  TEST_ASSERT_TRUE(command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
+  TEST_ASSERT_FALSE(command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
+
+  command_task();
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+}
+
 #if defined(RGB_ENABLED)
 void test_command_set_host_time_updates_runtime_clock_without_flash_write(void) {
   command_in_buffer_t set_host_time = {
@@ -242,6 +272,8 @@ int main(void) {
   RUN_TEST(test_command_invalid_keymap_range_returns_unknown_without_write);
   RUN_TEST(test_command_unknown_command_returns_clean_unknown_response);
   RUN_TEST(test_command_task_waits_until_raw_hid_is_ready);
+  RUN_TEST(test_command_enqueue_defers_processing_until_task);
+  RUN_TEST(test_command_enqueue_rejects_second_pending_request);
 #if defined(RGB_ENABLED)
   RUN_TEST(test_command_set_host_time_updates_runtime_clock_without_flash_write);
 #endif

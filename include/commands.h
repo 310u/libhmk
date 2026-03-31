@@ -271,15 +271,31 @@ _Static_assert(sizeof(command_out_buffer_t) <= RAW_HID_EP_SIZE,
 void command_init(void);
 
 /**
- * @brief Process a command buffer received from the raw HID interface
+ * @brief Queue a raw HID command for later processing
  *
- * @param in_buf Command buffer
+ * Only one raw HID command can be queued at a time. Additional commands are
+ * dropped while a request or response is already pending.
+ *
+ * @param buf Command buffer
+ * @param len Buffer length in bytes
+ *
+ * @return `true` if the command was queued
+ */
+bool command_enqueue(const uint8_t *buf, uint16_t len);
+
+/**
+ * @brief Process a command buffer immediately
+ *
+ * This is primarily used by tests and non-USB call sites. Responses are still
+ * deferred until `command_task()`.
+ *
+ * @param buf Command buffer
  *
  * @return None
  */
 void command_process(const uint8_t *buf);
 
 /**
- * @brief Background task for processing deferred command responses
+ * @brief Background task for processing queued commands and deferred responses
  */
 void command_task(void);

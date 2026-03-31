@@ -493,7 +493,8 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
 
     raw_hid_diagnostic_stream_enabled = false;
 #endif
-    command_process(buffer);
+    if (report_id == 0 && report_type == HID_REPORT_TYPE_OUTPUT)
+      (void)command_enqueue(buffer, bufsize);
   }
 }
 
