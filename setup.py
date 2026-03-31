@@ -178,6 +178,7 @@ if __name__ == "__main__":
             "-I test/test_commands",
             "-DCFG_TUSB_MCU=0",
             "-DBOARD_USB_FS=1",
+            "-DRGB_ENABLED=1",
         ],
     )
     pio_config["env:native_test_migration"] = native_test_env(
@@ -209,6 +210,28 @@ if __name__ == "__main__":
             "-DNUM_LEDS=4",
         ],
     )
+    rgb_test_flags = [
+        "-I include",
+        "-include test/test_rgb/test_rgb_config.h",
+        "-DRGB_ENABLED=1",
+        "-DNUM_LEDS=40",
+    ]
+    if native_sanitizers_enabled:
+        rgb_test_flags.extend(
+            [
+                "-fsanitize=address,undefined",
+                "-fno-omit-frame-pointer",
+                "-fno-sanitize-recover=all",
+            ]
+        )
+    pio_config["env:native_test_rgb"] = {
+        "platform": "native",
+        "test_framework": "unity",
+        "test_filter": "test_rgb",
+        "test_build_src": "yes",
+        "build_src_filter": "+<rgb.c>",
+        "build_flags": "\n".join(rgb_test_flags),
+    }
     pio_config["env:native_test_encoder"] = native_test_env(
         "test_encoder",
         "+<encoder.c>",

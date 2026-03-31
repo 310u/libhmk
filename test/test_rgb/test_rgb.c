@@ -6,6 +6,7 @@
 #include "rgb.h"
 #include "rgb_animated.h"
 #include "rgb_internal.h"
+#include "rgb_static.h"
 
 static eeconfig_t mock_eeconfig;
 const eeconfig_t *eeconfig = &mock_eeconfig;
@@ -34,6 +35,20 @@ void rgb_animated_render(rgb_effect_t effect,
                          const rgb_animated_context_t *context) {
   (void)effect;
   (void)context;
+}
+
+void rgb_static_reset(void) {}
+
+bool rgb_static_render(rgb_effect_t effect, const rgb_static_context_t *context) {
+  if (effect == RGB_EFFECT_SOLID_COLOR) {
+    const rgb_color_t color = context->config->solid_color;
+    rgb_set_all_color((uint8_t)(((uint32_t)color.r * context->effective_brightness) / 255u),
+                      (uint8_t)(((uint32_t)color.g * context->effective_brightness) / 255u),
+                      (uint8_t)(((uint32_t)color.b * context->effective_brightness) / 255u));
+    return true;
+  }
+
+  return false;
 }
 
 void rgb_reactive_decay_heatmap(uint32_t current_tick) {
@@ -151,9 +166,65 @@ void test_rgb_solid_color_scales_global_brightness(void) {
   TEST_ASSERT_EQUAL_UINT8((uint8_t)((25u * 128u) / 255u), solid.b);
 }
 
+void test_rgb_binary_clock_renders_time_digits_and_seconds_progress(void) {
+  rgb_config_t *config = rgb_get_config();
+  config->current_effect = RGB_EFFECT_BINARY_CLOCK;
+  config->solid_color = (rgb_color_t){.r = 120u, .g = 40u, .b = 10u};
+  config->secondary_color = (rgb_color_t){.r = 10u, .g = 90u, .b = 30u};
+
+  rgb_set_clock_time(12u, 34u, 45u);
+
+  mock_time = 16u;
+  rgb_task();
+
+  TEST_ASSERT_EQUAL_UINT16(NUM_LEDS * 3u, last_grb_frame_len);
+
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(0u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(1u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(2u).r);
+  TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(3u).r);
+
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(10u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(11u).r);
+  TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(12u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(13u).r);
+
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(6u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(7u).r);
+  TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(8u).r);
+  TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(9u).r);
+
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(16u).r);
+  TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(17u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(18u).r);
+  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(19u).r);
+
+  for (uint8_t key = 20u; key <= 26u; key++) {
+    const rgb_color_t color = driver_rgb_for_key(key);
+    TEST_ASSERT_EQUAL_UINT8(10u, color.r);
+    TEST_ASSERT_EQUAL_UINT8(90u, color.g);
+    TEST_ASSERT_EQUAL_UINT8(30u, color.b);
+  }
+
+  {
+    const rgb_color_t head = driver_rgb_for_key(27u);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)((120u * 170u) / 255u), head.r);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)((40u * 170u) / 255u), head.g);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)((10u * 170u) / 255u), head.b);
+  }
+
+  for (uint8_t key = 28u; key <= 29u; key++) {
+    const rgb_color_t color = driver_rgb_for_key(key);
+    TEST_ASSERT_EQUAL_UINT8(0u, color.r);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)((90u * 25u) / 255u), color.g);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)((30u * 25u) / 255u), color.b);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_rgb_trigger_state_uses_configured_color_for_each_state);
   RUN_TEST(test_rgb_solid_color_scales_global_brightness);
+  RUN_TEST(test_rgb_binary_clock_renders_time_digits_and_seconds_progress);
   return UNITY_END();
 }

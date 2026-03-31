@@ -460,6 +460,18 @@ void command_process(const uint8_t *buf) {
     break;
   }
 #endif
+#if defined(RGB_ENABLED)
+  case COMMAND_SET_HOST_TIME: {
+    const command_in_host_time_t *p = &in->host_time;
+
+    COMMAND_VERIFY(p->hours < 24u);
+    COMMAND_VERIFY(p->minutes < 60u);
+    COMMAND_VERIFY(p->seconds < 60u);
+
+    rgb_set_clock_time(p->hours, p->minutes, p->seconds);
+    break;
+  }
+#endif
   default: {
     // Unknown command
     success = false;

@@ -28,6 +28,7 @@
  *
  * Local libhmk-only effects in this file are:
  *   - RGB_EFFECT_ANALOG
+ *   - RGB_EFFECT_BINARY_CLOCK
  *   - RGB_EFFECT_PER_KEY
  *   - RGB_EFFECT_TRIGGER_STATE
  */
@@ -36,15 +37,56 @@
 static rgb_color_t current_colors[NUM_LEDS];
 static uint8_t rgb_grb_data[NUM_LEDS * 3];
 static rgb_config_t rgb_config;
+static uint8_t rgb_clock_unique_y[NUM_LEDS];
+static uint8_t rgb_clock_row_leds[NUM_LEDS];
+
+typedef struct {
+    bool initialized;
+    bool valid;
+    uint8_t digit_leds[4][4];
+    uint8_t separator_leds[4];
+    uint8_t second_leds[10];
+} rgb_clock_layout_t;
+
+typedef struct {
+    bool synced;
+    uint8_t hours;
+    uint8_t minutes;
+    uint8_t seconds;
+    uint32_t sync_tick_ms;
+} rgb_clock_state_t;
+
+static rgb_clock_layout_t rgb_clock_layout;
+static rgb_clock_state_t rgb_clock_state;
 
 // Heatmap state
 void rgb_matrix_record_keypress(uint8_t index) {
     rgb_reactive_record_keypress(index);
 }
 
+static void rgb_clock_reset_layout(void) {
+    rgb_clock_layout.initialized = false;
+    rgb_clock_layout.valid = false;
+    memset(rgb_clock_layout.digit_leds, 0xFF, sizeof(rgb_clock_layout.digit_leds));
+    memset(rgb_clock_layout.separator_leds, 0xFF,
+           sizeof(rgb_clock_layout.separator_leds));
+    memset(rgb_clock_layout.second_leds, 0xFF,
+           sizeof(rgb_clock_layout.second_leds));
+}
+
+void rgb_set_clock_time(uint8_t hours, uint8_t minutes, uint8_t seconds) {
+    rgb_clock_state.synced = true;
+    rgb_clock_state.hours = hours;
+    rgb_clock_state.minutes = minutes;
+    rgb_clock_state.seconds = seconds;
+    rgb_clock_state.sync_tick_ms = timer_read();
+}
+
 void rgb_init(void) {
     rgb_driver_init();
     memcpy(&rgb_config, &CURRENT_PROFILE.rgb_config, sizeof(rgb_config_t));
+    rgb_clock_reset_layout();
+    memset(&rgb_clock_state, 0, sizeof(rgb_clock_state));
     rgb_static_reset();
     rgb_update();
 }
@@ -164,6 +206,201 @@ static rgb_trigger_state_t rgb_trigger_state_for_key(const key_state_t *state) {
                                         : RGB_TRIGGER_STATE_IDLE;
 }
 
+static void rgb_clock_sort_u8(uint8_t *values, uint16_t count) {
+    for (uint16_t i = 1; i < count; i++) {
+        uint8_t value = values[i];
+        uint16_t j = i;
+        while (j > 0 && values[j - 1u] > value) {
+            values[j] = values[j - 1u];
+            j--;
+        }
+        values[j] = value;
+    }
+}
+
+static void rgb_clock_sort_leds_by_x(uint8_t *leds, uint16_t count) {
+    for (uint16_t i = 1; i < count; i++) {
+        uint8_t led = leds[i];
+        uint8_t led_x = rgb_led_coords[led].x;
+        uint16_t j = i;
+        while (j > 0 && rgb_led_coords[leds[j - 1u]].x > led_x) {
+            leds[j] = leds[j - 1u];
+            j--;
+        }
+        leds[j] = led;
+    }
+}
+
+static void rgb_clock_build_layout(void) {
+    rgb_clock_reset_layout();
+    rgb_clock_layout.initialized = true;
+
+    uint16_t unique_y_count = 0;
+    for (uint16_t led = 0; led < NUM_LEDS; led++) {
+        uint8_t y = rgb_led_coords[led].y;
+        bool seen = false;
+
+        for (uint16_t i = 0; i < unique_y_count; i++) {
+            if (rgb_clock_unique_y[i] == y) {
+                seen = true;
+                break;
+            }
+        }
+
+        if (!seen)
+            rgb_clock_unique_y[unique_y_count++] = y;
+    }
+
+    if (unique_y_count < 3u)
+        return;
+
+    rgb_clock_sort_u8(rgb_clock_unique_y, unique_y_count);
+
+    for (uint8_t row = 0; row < 3u; row++) {
+        uint16_t row_led_count = 0;
+
+        for (uint16_t led = 0; led < NUM_LEDS; led++) {
+            if (rgb_led_coords[led].y == rgb_clock_unique_y[row])
+                rgb_clock_row_leds[row_led_count++] = led;
+        }
+
+        if (row_led_count < 10u)
+            return;
+
+        rgb_clock_sort_leds_by_x(rgb_clock_row_leds, row_led_count);
+
+        if (row == 0u) {
+            for (uint8_t bit = 0; bit < 4u; bit++) {
+                rgb_clock_layout.digit_leds[0][bit] = rgb_clock_row_leds[bit];
+                rgb_clock_layout.digit_leds[2][bit] =
+                    rgb_clock_row_leds[row_led_count - 4u + bit];
+            }
+            rgb_clock_layout.separator_leds[0] = rgb_clock_row_leds[4];
+            rgb_clock_layout.separator_leds[1] =
+                rgb_clock_row_leds[row_led_count - 5u];
+        } else if (row == 1u) {
+            for (uint8_t bit = 0; bit < 4u; bit++) {
+                rgb_clock_layout.digit_leds[1][bit] = rgb_clock_row_leds[bit];
+                rgb_clock_layout.digit_leds[3][bit] =
+                    rgb_clock_row_leds[row_led_count - 4u + bit];
+            }
+            rgb_clock_layout.separator_leds[2] = rgb_clock_row_leds[4];
+            rgb_clock_layout.separator_leds[3] =
+                rgb_clock_row_leds[row_led_count - 5u];
+        } else {
+            for (uint8_t i = 0; i < 5u; i++) {
+                rgb_clock_layout.second_leds[i] = rgb_clock_row_leds[i];
+                rgb_clock_layout.second_leds[5u + i] =
+                    rgb_clock_row_leds[row_led_count - 5u + i];
+            }
+        }
+    }
+
+    rgb_clock_layout.valid = true;
+}
+
+static void rgb_clock_render(uint8_t effective_brightness,
+                             uint32_t current_tick) {
+    if (!rgb_clock_layout.initialized)
+        rgb_clock_build_layout();
+
+    rgb_set_all_color(0, 0, 0);
+
+    const rgb_color_t active_color =
+        scale_rgb_color(rgb_config.solid_color, effective_brightness);
+    const rgb_color_t accent_color =
+        scale_rgb_color(rgb_config.secondary_color, effective_brightness);
+    const rgb_color_t background_color = scale_rgb_color(
+        rgb_config.secondary_color,
+        M_MAX((uint8_t)8u, (uint8_t)(effective_brightness / 10u)));
+
+    if (!rgb_clock_layout.valid) {
+        rgb_color_t pulse_color = ((current_tick / 500u) & 1u) == 0u
+                                      ? active_color
+                                      : (rgb_color_t){0, 0, 0};
+        rgb_set_all_color(pulse_color.r, pulse_color.g, pulse_color.b);
+        return;
+    }
+
+    if (!rgb_clock_state.synced) {
+        const rgb_color_t pulse_color = ((current_tick / 500u) & 1u) == 0u
+                                            ? active_color
+                                            : background_color;
+        for (uint8_t i = 0; i < M_ARRAY_SIZE(rgb_clock_layout.separator_leds);
+             i++) {
+            uint8_t led = rgb_clock_layout.separator_leds[i];
+            if (led != 0xFFu)
+                rgb_set_color(led, pulse_color.r, pulse_color.g, pulse_color.b);
+        }
+        for (uint8_t i = 0; i < M_ARRAY_SIZE(rgb_clock_layout.second_leds); i++) {
+            uint8_t led = rgb_clock_layout.second_leds[i];
+            if (led != 0xFFu)
+                rgb_set_color(led, background_color.r, background_color.g,
+                              background_color.b);
+        }
+        return;
+    }
+
+    const uint32_t elapsed_seconds = timer_elapsed(rgb_clock_state.sync_tick_ms) / 1000u;
+    uint32_t total_seconds = (uint32_t)rgb_clock_state.hours * 3600u +
+                             (uint32_t)rgb_clock_state.minutes * 60u +
+                             (uint32_t)rgb_clock_state.seconds + elapsed_seconds;
+    total_seconds %= 86400u;
+
+    const uint8_t hours = (uint8_t)(total_seconds / 3600u);
+    const uint8_t minutes = (uint8_t)((total_seconds % 3600u) / 60u);
+    const uint8_t seconds = (uint8_t)(total_seconds % 60u);
+    const uint8_t digits[4] = {
+        (uint8_t)(hours / 10u),
+        (uint8_t)(hours % 10u),
+        (uint8_t)(minutes / 10u),
+        (uint8_t)(minutes % 10u),
+    };
+
+    for (uint8_t digit = 0; digit < M_ARRAY_SIZE(rgb_clock_layout.digit_leds);
+         digit++) {
+        for (uint8_t bit = 0; bit < M_ARRAY_SIZE(rgb_clock_layout.digit_leds[0]);
+             bit++) {
+            const uint8_t led = rgb_clock_layout.digit_leds[digit][bit];
+            if (led == 0xFFu)
+                continue;
+
+            const bool is_on = (digits[digit] & (uint8_t)(1u << (3u - bit))) != 0u;
+            const rgb_color_t color = is_on ? active_color : (rgb_color_t){0, 0, 0};
+            rgb_set_color(led, color.r, color.g, color.b);
+        }
+    }
+
+    const rgb_color_t separator_color =
+        (seconds & 1u) == 0u ? accent_color : background_color;
+    for (uint8_t i = 0; i < M_ARRAY_SIZE(rgb_clock_layout.separator_leds); i++) {
+        uint8_t led = rgb_clock_layout.separator_leds[i];
+        if (led != 0xFFu)
+            rgb_set_color(led, separator_color.r, separator_color.g,
+                          separator_color.b);
+    }
+
+    const uint8_t second_step = seconds / 6u;
+    const uint8_t second_phase =
+        (uint8_t)((((uint32_t)(seconds % 6u)) + 1u) * effective_brightness / 6u);
+    const rgb_color_t head_color =
+        scale_rgb_color(rgb_config.solid_color, second_phase);
+
+    for (uint8_t i = 0; i < M_ARRAY_SIZE(rgb_clock_layout.second_leds); i++) {
+        uint8_t led = rgb_clock_layout.second_leds[i];
+        if (led == 0xFFu)
+            continue;
+
+        rgb_color_t color = background_color;
+        if (i < second_step)
+            color = accent_color;
+        else if (i == second_step)
+            color = head_color;
+
+        rgb_set_color(led, color.r, color.g, color.b);
+    }
+}
+
 void rgb_task(void) {
     rgb_driver_task();
 
@@ -279,6 +516,10 @@ void rgb_task(void) {
                 uint8_t final_b = (uint8_t)(((uint32_t)pressed_b * dist + (uint32_t)base_b * (uint32_t)(255u - dist)) / 255u);
                 rgb_set_color(i, final_r, final_g, final_b);
             }
+            break;
+        }
+        case RGB_EFFECT_BINARY_CLOCK: {
+            rgb_clock_render(effective_brightness, current_tick);
             break;
         }
         case RGB_EFFECT_TRIGGER_STATE: {

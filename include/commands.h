@@ -62,6 +62,7 @@ typedef enum {
   COMMAND_GET_JOYSTICK_STATE,
   COMMAND_GET_JOYSTICK_CONFIG,
   COMMAND_SET_JOYSTICK_CONFIG,
+  COMMAND_SET_HOST_TIME,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -149,6 +150,12 @@ typedef struct __attribute__((packed)) {
   joystick_config_t joystick_config;
 } command_in_joystick_config_t;
 
+typedef struct __attribute__((packed)) {
+  uint8_t hours;
+  uint8_t minutes;
+  uint8_t seconds;
+} command_in_host_time_t;
+
 // Command input buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -169,6 +176,7 @@ typedef struct __attribute__((packed)) {
     command_in_macros_t macros;
     command_in_rgb_config_t rgb_config;
     command_in_joystick_config_t joystick_config;
+    command_in_host_time_t host_time;
   };
 } command_in_buffer_t;
 
