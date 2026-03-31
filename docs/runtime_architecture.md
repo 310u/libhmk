@@ -34,6 +34,18 @@ When a new feature adds profile-backed state, it should hook into `profile_runti
 
 This keeps USB suspend/resume policy out of MCU-specific `board.c` files.
 
+## Raw HID Commands
+
+- `hid.c` should keep the TinyUSB `SET_REPORT` callback lightweight and avoid
+  doing full configuration writes or profile reloads inline.
+- Raw HID command payloads are queued through `command_enqueue()` and then
+  processed from `command_task()` in the main loop.
+- `commands.c` still defers the response write until the raw HID interface is
+  ready, so both the request side and response side stay non-blocking relative
+  to the USB callback.
+- The current transport is intentionally single-flight: hosts should wait for
+  each response before sending the next command instead of pipelining requests.
+
 ## Future Analog Backends
 
 - `keyboard.json.analog.backend` defaults to `mcu_adc`.

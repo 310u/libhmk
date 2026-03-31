@@ -4,6 +4,11 @@ Fork of [peppapighs/libhmk](https://github.com/peppapighs/libhmk) — Libraries 
 
 This fork adds joystick support, rotary encoder support, RGB lighting, combo/macro keys, and various improvements for custom keyboard builds.
 
+The source tree is shared across multiple keyboard definitions under
+`keyboards/`, but each compiled firmware image is still specific to the
+selected keyboard. Always build and flash the binary for the exact target
+keyboard you want to run.
+
 ## Table of Contents
 
 - [Features](#features)
@@ -119,6 +124,7 @@ Record and playback key sequences:
 - **HID Gamepad Descriptor**: Custom HID report descriptor for gamepad compatibility on Linux and other OS without XInput support.
 - **XInput/HID Conflict Fix**: The HID gamepad functionality is now intelligently deactivated when XInput mode is active to prevent dual-input conflicts on Windows.
 - **Stuck Key Bug Fix**: Fixed a race condition where key release reports could be permanently lost due to USB send timeout handling.
+- **Queued Raw HID Commands**: Raw HID configuration requests are now queued out of the TinyUSB callback and processed from the main loop. Hosts should wait for each response before sending the next command.
 - **Upstream Sync**: Ported STM32F446 timer adjustments and EEPROM flash wear reduction optimizations (on-demand bottom-out threshold saving).
 
 ## Getting Started
@@ -129,6 +135,9 @@ Record and playback key sequences:
 - [Python 3](https://www.python.org/)
 
 ### Building the Firmware
+
+Current in-tree keyboard definitions include `he16`, `he60`, `he60-v2`,
+`m256-whe`, `mochiko39he`, and `mochiko40he`.
 
 1. Clone the repository:
 
@@ -142,10 +151,14 @@ Record and playback key sequences:
 
 4. Wait for PlatformIO to finish initializing the environment.
 
-5. Build the firmware using either `pio run` in the PlatformIO Core CLI or through the PlatformIO IDE's "Build" option. The firmware binaries will be generated in the `.pio/build/<YOUR_KEYBOARD>/` directory with the following files:
+5. Build the firmware using either `pio run` in the PlatformIO Core CLI or through the PlatformIO IDE's "Build" option. The generated `platformio.ini` contains only the selected keyboard and its `<keyboard>_recovery` companion environment, so rerun `setup.py` whenever you switch targets. The firmware binaries will be generated in the `.pio/build/<YOUR_KEYBOARD>/` directory with the following files:
 
    - `firmware.bin`: The binary firmware file
    - `firmware.elf`: The ELF firmware file
+
+   Even though `libhmk` is a shared firmware codebase, these artifacts are
+   keyboard-specific. Do not flash a binary built for one keyboard definition
+   onto a different board.
 
 6. Flash the firmware to your keyboard using your preferred method (e.g., DFU, ISP). If your keyboard has a DFU bootloader, you can set `upload_protocol = dfu` in `platformio.ini` and use the command `pio run --target upload` or the PlatformIO IDE's "Upload" option while the keyboard is in DFU mode. If your browser supports WebUSB, you can also use [WebUSB DFU](https://devanlai.github.io/webdfu/dfu-util/) (Recommended method).
 

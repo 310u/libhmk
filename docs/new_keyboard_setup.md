@@ -142,13 +142,18 @@ Use the provided `setup.py` script to generate the environment for your keyboard
    ```bash
    python setup.py -k <your_keyboard_name>
    ```
-   This regenerates `platformio.ini` for the selected keyboard only.
+   This regenerates `platformio.ini` for the selected keyboard only, plus the
+   matching `<your_keyboard_name>_recovery` environment.
 3. Build using PlatformIO:
    ```bash
    pio run
    ```
 
 If you switch to another keyboard target later, run `python setup.py -k ...` again before building.
+
+`libhmk` is a shared codebase, but the generated binaries are keyboard-specific.
+Always flash the artifact built for the exact keyboard definition you selected
+in `setup.py`.
 
 ## 5. Calibration and Verification
 
