@@ -96,6 +96,7 @@ Per-key RGB backlighting via SK6812MINI-E LEDs with 50+ effects:
 - Animated effects: Breathing, Rainbow, Cycle, Spiral, Pinwheel, and more
 - Reactive effects: Typing Heatmap, Reactive, Splash, Nexus
 - Ambient effects: Digital Rain, Pixel Rain, Raindrops, Starlight, Riverflow
+- Utility effects: Binary Clock, which displays host-synchronized time in a compact binary layout across the LED matrix. Keep `hmkconf` running with the RGB tab open while you want periodic time sync updates, because the host clock is pushed from the configurator
 - Per-key color configuration and adjustable global brightness / speed
 
 Many RGB effect names and animation formulas in this fork are adapted from QMK's
