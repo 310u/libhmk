@@ -171,6 +171,7 @@ void test_rgb_binary_clock_renders_time_digits_and_seconds_progress(void) {
   config->current_effect = RGB_EFFECT_BINARY_CLOCK;
   config->solid_color = (rgb_color_t){.r = 120u, .g = 40u, .b = 10u};
   config->secondary_color = (rgb_color_t){.r = 10u, .g = 90u, .b = 30u};
+  config->background_color = (rgb_color_t){.r = 60u, .g = 20u, .b = 90u};
 
   rgb_set_clock_time(12u, 34u, 45u);
 
@@ -179,25 +180,38 @@ void test_rgb_binary_clock_renders_time_digits_and_seconds_progress(void) {
 
   TEST_ASSERT_EQUAL_UINT16(NUM_LEDS * 3u, last_grb_frame_len);
 
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(0u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(1u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(2u).r);
+  const rgb_color_t background = {
+      .r = 60u,
+      .g = 20u,
+      .b = 90u,
+  };
+
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(0u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(1u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(2u).r);
   TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(3u).r);
 
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(10u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(11u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(10u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(11u).r);
   TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(12u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(13u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(13u).r);
 
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(6u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(7u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(6u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(7u).r);
   TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(8u).r);
   TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(9u).r);
 
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(16u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(16u).r);
   TEST_ASSERT_EQUAL_UINT8(120u, driver_rgb_for_key(17u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(18u).r);
-  TEST_ASSERT_EQUAL_UINT8(0u, driver_rgb_for_key(19u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(18u).r);
+  TEST_ASSERT_EQUAL_UINT8(background.r, driver_rgb_for_key(19u).r);
+
+  for (uint8_t key = 30u; key <= 39u; key++) {
+    const rgb_color_t color = driver_rgb_for_key(key);
+    TEST_ASSERT_EQUAL_UINT8(background.r, color.r);
+    TEST_ASSERT_EQUAL_UINT8(background.g, color.g);
+    TEST_ASSERT_EQUAL_UINT8(background.b, color.b);
+  }
 
   for (uint8_t key = 20u; key <= 26u; key++) {
     const rgb_color_t color = driver_rgb_for_key(key);
@@ -215,9 +229,9 @@ void test_rgb_binary_clock_renders_time_digits_and_seconds_progress(void) {
 
   for (uint8_t key = 28u; key <= 29u; key++) {
     const rgb_color_t color = driver_rgb_for_key(key);
-    TEST_ASSERT_EQUAL_UINT8(0u, color.r);
-    TEST_ASSERT_EQUAL_UINT8((uint8_t)((90u * 25u) / 255u), color.g);
-    TEST_ASSERT_EQUAL_UINT8((uint8_t)((30u * 25u) / 255u), color.b);
+    TEST_ASSERT_EQUAL_UINT8(background.r, color.r);
+    TEST_ASSERT_EQUAL_UINT8(background.g, color.g);
+    TEST_ASSERT_EQUAL_UINT8(background.b, color.b);
   }
 }
 

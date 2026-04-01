@@ -396,6 +396,12 @@ static void assert_trigger_state_defaults_from_legacy(
                           config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].b);
 }
 
+static void assert_background_matches_secondary(const rgb_config_t *config) {
+  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.r, config->background_color.r);
+  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.g, config->background_color.g);
+  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.b, config->background_color.b);
+}
+
 static void assert_default_radial_boundaries(const joystick_config_t *config) {
   for (uint32_t i = 0; i < JOYSTICK_RADIAL_BOUNDARY_SECTORS; i++) {
     TEST_ASSERT_EQUAL_UINT8(JOYSTICK_RADIAL_BOUNDARY_DEFAULT,
@@ -462,6 +468,7 @@ void test_migration_v1_0_reaches_current_and_preserves_profile_data(void) {
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.r);
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.g);
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.b);
+  assert_background_matches_secondary(&written_config.profiles[0].rgb_config);
 }
 
 void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) {
@@ -483,6 +490,7 @@ void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) 
   TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.r);
   TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.g);
   TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.b);
+  assert_background_matches_secondary(&profile->rgb_config);
   TEST_ASSERT_EQUAL_UINT8(0, profile->rgb_config.layer_colors[0].r);
   TEST_ASSERT_EQUAL_UINT8(0, profile->rgb_config.layer_colors[0].g);
   TEST_ASSERT_EQUAL_UINT8(0, profile->rgb_config.layer_colors[0].b);
@@ -518,6 +526,7 @@ void test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors(void) {
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.r);
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.g);
   TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.b);
+  assert_background_matches_secondary(&written_config.profiles[0].rgb_config);
   TEST_ASSERT_EQUAL_UINT8(90, written_config.profiles[0].rgb_config.effect_speed);
   TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.sleep_timeout);
   TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.layer_indicator_mode);
@@ -541,6 +550,7 @@ void test_migration_v1_B_promotes_options_and_preserves_layer_colors(void) {
   TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.r);
   TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.g);
   TEST_ASSERT_EQUAL_UINT8(255, profile->rgb_config.secondary_color.b);
+  assert_background_matches_secondary(&profile->rgb_config);
   TEST_ASSERT_EQUAL_UINT8(34, profile->rgb_config.layer_indicator_key);
   assert_rgb_per_key_color(&profile->rgb_config, 37, 0);
   TEST_ASSERT_EQUAL_UINT8(202, profile->joystick_config.mouse_acceleration);
@@ -561,6 +571,7 @@ void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_
   TEST_ASSERT_EQUAL_UINT8(70, profile->rgb_config.secondary_color.r);
   TEST_ASSERT_EQUAL_UINT8(80, profile->rgb_config.secondary_color.g);
   TEST_ASSERT_EQUAL_UINT8(90, profile->rgb_config.secondary_color.b);
+  assert_background_matches_secondary(&profile->rgb_config);
   TEST_ASSERT_EQUAL_UINT8(200, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(5, profile->joystick_config.sw_debounce_ms);
   TEST_ASSERT_EQUAL_UINT8(0xA0, profile->joystick_config.reserved[0]);
@@ -580,6 +591,7 @@ void test_migration_v1_10_appends_trigger_state_colors_without_clobbering_profil
   TEST_ASSERT_EQUAL_UINT8(91, profile->rgb_config.secondary_color.r);
   TEST_ASSERT_EQUAL_UINT8(101, profile->rgb_config.secondary_color.g);
   TEST_ASSERT_EQUAL_UINT8(111, profile->rgb_config.secondary_color.b);
+  assert_background_matches_secondary(&profile->rgb_config);
   assert_trigger_state_defaults_from_legacy(
       &profile->rgb_config,
       (rgb_color_t){.r = 31, .g = 41, .b = 51},

@@ -50,8 +50,13 @@
 #define MIGRATION_PROFILE_RGB_SIZE_V1_11                                     \
   (MIGRATION_PROFILE_RGB_SIZE_V1_D +                                          \
    MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE)
+#define MIGRATION_PROFILE_RGB_SIZE_V1_12                                     \
+  (MIGRATION_PROFILE_RGB_SIZE_V1_11 + sizeof(rgb_color_t))
 #define MIGRATION_PROFILE_RGB_V1_A_TAIL_SIZE                                 \
   (4 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
+#define MIGRATION_PROFILE_RGB_V1_11_TAIL_SIZE                                \
+  (4 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE +          \
+   MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE)
 #else
 #define MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE 0
 #define MIGRATION_PROFILE_RGB_SIZE_V1_8 0
@@ -59,7 +64,9 @@
 #define MIGRATION_PROFILE_RGB_SIZE_V1_D 0
 #define MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE 0
 #define MIGRATION_PROFILE_RGB_SIZE_V1_11 0
+#define MIGRATION_PROFILE_RGB_SIZE_V1_12 0
 #define MIGRATION_PROFILE_RGB_V1_A_TAIL_SIZE 0
+#define MIGRATION_PROFILE_RGB_V1_11_TAIL_SIZE 0
 #endif
 
 #if defined(JOYSTICK_ENABLED)
@@ -91,6 +98,9 @@
 #define MIGRATION_PROFILE_SIZE_V1_11_PLUS                                     \
   (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
    MIGRATION_PROFILE_RGB_SIZE_V1_11 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
+#define MIGRATION_PROFILE_SIZE_V1_12_PLUS                                     \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
+   MIGRATION_PROFILE_RGB_SIZE_V1_12 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
 
 static uint8_t migration_bufs[2][sizeof(eeconfig_t)];
 
@@ -148,6 +158,9 @@ static bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+static bool v1_12_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
                                      uint32_t old_size, uint32_t new_size);
@@ -285,6 +298,13 @@ static const migration_t migrations[] = {
         .profile_config_size = MIGRATION_PROFILE_SIZE_V1_11_PLUS,
         .global_config_func = v1_11_global_config_func,
         .profile_config_func = v1_11_profile_config_func,
+    },
+    {
+        .version = 0x0112,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
+        .global_config_func = v1_12_global_config_func,
+        .profile_config_func = v1_12_profile_config_func,
     },
 };
 
@@ -901,6 +921,42 @@ bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
       (const rgb_config_t *)(dst - MIGRATION_PROFILE_RGB_SIZE_V1_D);
   migration_append_trigger_state_colors(
       &dst, legacy_rgb->solid_color, legacy_rgb->secondary_color);
+#endif
+
+#if defined(JOYSTICK_ENABLED)
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT);
+#endif
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.11 -> v1.12 Migration
+//--------------------------------------------------------------------+
+
+bool v1_12_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0111)
+    return false;
+
+  migration_memcpy(&dst, &src, MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32);
+  return true;
+}
+
+bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_WITH_MACROS(13));
+
+#if defined(RGB_ENABLED)
+  migration_memcpy(&dst, &src, 9); // enabled..secondary_color
+
+  rgb_color_t legacy_background;
+  memcpy(&legacy_background, dst - sizeof(legacy_background),
+         sizeof(legacy_background));
+  migration_assign_rgb_color(&dst, legacy_background);
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_RGB_V1_11_TAIL_SIZE);
 #endif
 
 #if defined(JOYSTICK_ENABLED)

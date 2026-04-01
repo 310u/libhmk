@@ -93,6 +93,7 @@ typedef struct {
     uint8_t current_effect;
     rgb_color_t solid_color;
     rgb_color_t secondary_color;
+    rgb_color_t background_color;
     uint8_t effect_speed;
     uint8_t sleep_timeout; // in minutes, 0 = disabled
     uint8_t layer_indicator_mode; // 0=Fill, 1=Flash, 2=Specific Key

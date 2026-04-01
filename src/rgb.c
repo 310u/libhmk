@@ -304,15 +304,12 @@ static void rgb_clock_render(uint8_t effective_brightness,
     if (!rgb_clock_layout.initialized)
         rgb_clock_build_layout();
 
-    rgb_set_all_color(0, 0, 0);
-
     const rgb_color_t active_color =
         scale_rgb_color(rgb_config.solid_color, effective_brightness);
     const rgb_color_t accent_color =
         scale_rgb_color(rgb_config.secondary_color, effective_brightness);
     const rgb_color_t background_color = scale_rgb_color(
-        rgb_config.secondary_color,
-        M_MAX((uint8_t)8u, (uint8_t)(effective_brightness / 10u)));
+        rgb_config.background_color, effective_brightness);
 
     if (!rgb_clock_layout.valid) {
         rgb_color_t pulse_color = ((current_tick / 500u) & 1u) == 0u
@@ -321,6 +318,9 @@ static void rgb_clock_render(uint8_t effective_brightness,
         rgb_set_all_color(pulse_color.r, pulse_color.g, pulse_color.b);
         return;
     }
+
+    rgb_set_all_color(background_color.r, background_color.g,
+                      background_color.b);
 
     if (!rgb_clock_state.synced) {
         const rgb_color_t pulse_color = ((current_tick / 500u) & 1u) == 0u
@@ -366,7 +366,7 @@ static void rgb_clock_render(uint8_t effective_brightness,
                 continue;
 
             const bool is_on = (digits[digit] & (uint8_t)(1u << (3u - bit))) != 0u;
-            const rgb_color_t color = is_on ? active_color : (rgb_color_t){0, 0, 0};
+            const rgb_color_t color = is_on ? active_color : background_color;
             rgb_set_color(led, color.r, color.g, color.b);
         }
     }

@@ -41,7 +41,8 @@ def parse_macros(content: str) -> Dict[str, str]:
         "NUM_LAYERS": "4",
         "NUM_PROFILES": "4",
         "NUM_MACROS": "16",
-        "NUM_ADVANCED_KEYS": "32"
+        "NUM_ADVANCED_KEYS": "32",
+        "RGB_TRIGGER_STATE_COLOR_COUNT": "4",
     }
     for k, v in defaults.items():
         if k not in macros:
@@ -130,6 +131,7 @@ def generate_ts(structs: Dict[str, dict], macros: Dict[str, str]) -> str:
             or k.startswith("MAX_")
             or k.startswith("EECONFIG_")
             or k.startswith("JOYSTICK_")
+            or k.startswith("RGB_")
         ):
             out.append(f"export const {k} = {to_ts_macro_value(v)}")
     
