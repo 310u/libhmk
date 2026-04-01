@@ -335,6 +335,39 @@ void test_joystick_select_mouse_preset_updates_effective_pointer_settings(void) 
   TEST_ASSERT_EQUAL_UINT8(220, applied.mouse_acceleration);
 }
 
+void test_joystick_legacy_scroll_profile_waits_for_legacy_interval(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_SCROLL);
+  config.scroll_profile = JOYSTICK_SCROLL_PROFILE_LEGACY;
+  joystick_apply_config(config);
+
+  analog_raw_values[0] = 4095;
+  analog_raw_values[1] = 2048;
+
+  mock_time = 1;
+  joystick_task();
+  TEST_ASSERT_EQUAL_UINT32(0, mouse_scroll_count);
+
+  mock_time = 8;
+  joystick_task();
+  TEST_ASSERT_EQUAL_UINT32(1, mouse_scroll_count);
+  TEST_ASSERT_GREATER_THAN_INT8(0, last_scroll_pan);
+}
+
+void test_joystick_smooth_scroll_profile_reports_at_high_frequency(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_SCROLL);
+  config.scroll_profile = JOYSTICK_SCROLL_PROFILE_SMOOTH;
+  joystick_apply_config(config);
+
+  analog_raw_values[0] = 4095;
+  analog_raw_values[1] = 2048;
+
+  mock_time = 1;
+  joystick_task();
+
+  TEST_ASSERT_EQUAL_UINT32(1, mouse_scroll_count);
+  TEST_ASSERT_GREATER_THAN_INT8(0, last_scroll_pan);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_joystick_mouse_mode_reports_motion_and_button);
@@ -348,5 +381,7 @@ int main(void) {
   RUN_TEST(test_joystick_user_regression_config_preserves_full_vertical_throw);
   RUN_TEST(test_joystick_user_regression_config_preserves_upper_right_arc);
   RUN_TEST(test_joystick_select_mouse_preset_updates_effective_pointer_settings);
+  RUN_TEST(test_joystick_legacy_scroll_profile_waits_for_legacy_interval);
+  RUN_TEST(test_joystick_smooth_scroll_profile_reports_at_high_frequency);
   return UNITY_END();
 }

@@ -93,9 +93,9 @@ static joystick_config_t make_legacy_joystick_config(uint8_t seed,
       .sw_debounce_ms = sw_debounce_ms,
   };
 
-  config.reserved[0] = (uint8_t)(0xA0u + seed);
-  config.reserved[1] = (uint8_t)(0xB0u + seed);
-  config.reserved[2] = (uint8_t)(0xC0u + seed);
+  config.scroll_profile = (uint8_t)(0xA0u + seed);
+  config.reserved[0] = (uint8_t)(0xB0u + seed);
+  config.reserved[1] = (uint8_t)(0xC0u + seed);
   return config;
 }
 
@@ -505,7 +505,7 @@ void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) 
   TEST_ASSERT_EQUAL_UINT8(36, profile->joystick_config.mouse_speed);
   TEST_ASSERT_EQUAL_UINT8(196, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(9, profile->joystick_config.sw_debounce_ms);
-  TEST_ASSERT_EQUAL_UINT8(0xB0, profile->joystick_config.reserved[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xB0, profile->joystick_config.scroll_profile);
   assert_default_radial_boundaries(&profile->joystick_config);
   assert_mouse_presets_match_active(&profile->joystick_config);
 }
@@ -574,7 +574,7 @@ void test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_
   assert_background_matches_secondary(&profile->rgb_config);
   TEST_ASSERT_EQUAL_UINT8(200, profile->joystick_config.mouse_acceleration);
   TEST_ASSERT_EQUAL_UINT8(5, profile->joystick_config.sw_debounce_ms);
-  TEST_ASSERT_EQUAL_UINT8(0xA0, profile->joystick_config.reserved[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xA0, profile->joystick_config.scroll_profile);
   assert_default_radial_boundaries(&profile->joystick_config);
   assert_mouse_presets_match_active(&profile->joystick_config);
 }

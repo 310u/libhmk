@@ -291,6 +291,17 @@ static void layout_select_next_joystick_preset(void) {
 #endif
 }
 
+static void layout_select_next_joystick_scroll_profile(void) {
+#if defined(JOYSTICK_ENABLED)
+  joystick_config_t jc = joystick_get_config();
+  jc.scroll_profile =
+      jc.scroll_profile == JOYSTICK_SCROLL_PROFILE_LEGACY
+          ? JOYSTICK_SCROLL_PROFILE_SMOOTH
+          : JOYSTICK_SCROLL_PROFILE_LEGACY;
+  joystick_set_config(jc);
+#endif
+}
+
 static void layout_register_joystick_scroll_mode(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_scroll_mo_register();
@@ -771,6 +782,11 @@ void layout_register(uint8_t key, uint8_t keycode) {
 
   case SP_JOY_PRESET_NEXT: {
     layout_select_next_joystick_preset();
+    break;
+  }
+
+  case SP_JOY_SCROLL_PROFILE_NEXT: {
+    layout_select_next_joystick_scroll_profile();
     break;
   }
 

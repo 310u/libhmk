@@ -62,6 +62,10 @@
 #define JOYSTICK_SCROLL_REPORT_INTERVAL_MS 8u
 #endif
 
+#ifndef JOYSTICK_SCROLL_SMOOTH_REPORT_INTERVAL_MS
+#define JOYSTICK_SCROLL_SMOOTH_REPORT_INTERVAL_MS 1u
+#endif
+
 #ifndef JOYSTICK_CURSOR_THRESHOLD
 #define JOYSTICK_CURSOR_THRESHOLD 48u
 #endif
@@ -70,6 +74,7 @@
 #define JOYSTICK_MOUSE_FP_ONE (1L << JOYSTICK_MOUSE_FP_SHIFT)
 #define JOYSTICK_MOUSE_DIVISOR 50L
 #define JOYSTICK_SCROLL_DIVISOR 250L
+#define JOYSTICK_SCROLL_SMOOTH_DIVISOR 2000L
 #define JOYSTICK_VECTOR_MAX 181u
 #define JOYSTICK_OUTPUT_FP_SHIFT 8
 #define JOYSTICK_OUTPUT_FP_ONE (1L << JOYSTICK_OUTPUT_FP_SHIFT)
@@ -188,6 +193,34 @@ static uint8_t joystick_sanitize_mouse_speed(uint8_t raw) {
 
 static uint8_t joystick_effective_mouse_acceleration(uint8_t raw) {
   return raw == 0u ? JOYSTICK_MOUSE_ACCELERATION_DEFAULT : raw;
+}
+
+static uint8_t joystick_sanitize_scroll_profile(uint8_t raw) {
+  switch (raw) {
+  case JOYSTICK_SCROLL_PROFILE_LEGACY:
+  case JOYSTICK_SCROLL_PROFILE_SMOOTH:
+    return raw;
+  default:
+    return JOYSTICK_SCROLL_PROFILE_LEGACY;
+  }
+}
+
+static uint32_t joystick_scroll_report_interval_ms(uint8_t scroll_profile) {
+  if (joystick_sanitize_scroll_profile(scroll_profile) ==
+      JOYSTICK_SCROLL_PROFILE_SMOOTH) {
+    return JOYSTICK_SCROLL_SMOOTH_REPORT_INTERVAL_MS;
+  }
+
+  return JOYSTICK_SCROLL_REPORT_INTERVAL_MS;
+}
+
+static int32_t joystick_scroll_divisor(uint8_t scroll_profile) {
+  if (joystick_sanitize_scroll_profile(scroll_profile) ==
+      JOYSTICK_SCROLL_PROFILE_SMOOTH) {
+    return JOYSTICK_SCROLL_SMOOTH_DIVISOR;
+  }
+
+  return JOYSTICK_SCROLL_DIVISOR;
 }
 
 static joystick_mouse_preset_t joystick_make_mouse_preset(uint8_t mouse_speed,
@@ -339,6 +372,8 @@ joystick_config_t joystick_normalize_config(joystick_config_t config) {
   config.mouse_speed = joystick_sanitize_mouse_speed(config.mouse_speed);
   config.mouse_acceleration =
       joystick_effective_mouse_acceleration(config.mouse_acceleration);
+  config.scroll_profile =
+      joystick_sanitize_scroll_profile(config.scroll_profile);
 
   if (config.active_mouse_preset >= JOYSTICK_MOUSE_PRESET_COUNT) {
     config.active_mouse_preset = 0u;
@@ -547,7 +582,9 @@ static void joystick_task_mouse_mode(uint32_t tick) {
 }
 
 static void joystick_task_scroll_mode(uint32_t tick) {
-  if (timer_elapsed(last_mouse_tick) < JOYSTICK_SCROLL_REPORT_INTERVAL_MS) {
+  const uint32_t report_interval_ms =
+      joystick_scroll_report_interval_ms(config_cache.scroll_profile);
+  if (timer_elapsed(last_mouse_tick) < report_interval_ms) {
     return;
   }
 
@@ -555,9 +592,10 @@ static void joystick_task_scroll_mode(uint32_t tick) {
   if (joystick_pointer_output_active(sw_mouse_button)) {
     int32_t dx_fp = 0;
     int32_t dy_fp = 0;
+    const int32_t divisor = joystick_scroll_divisor(config_cache.scroll_profile);
     joystick_compute_pointer_delta(&dx_fp, &dy_fp,
                                    JOYSTICK_MOUSE_ACCELERATION_DEFAULT,
-                                   JOYSTICK_SCROLL_DIVISOR);
+                                   divisor);
 
     scroll_accum_x += dx_fp;
     scroll_accum_y += dy_fp;
@@ -634,6 +672,7 @@ joystick_config_t joystick_get_config(void) { return config_cache; }
 
 void joystick_apply_config(joystick_config_t config) {
   const uint8_t prev_mode = config_cache.mode;
+  const uint8_t prev_scroll_profile = config_cache.scroll_profile;
   config_cache = joystick_normalize_config(config);
 
   if ((prev_mode == JOYSTICK_MODE_MOUSE || prev_mode == JOYSTICK_MODE_SCROLL) &&
@@ -644,6 +683,14 @@ void joystick_apply_config(joystick_config_t config) {
   if (joystick_mode_is_cursor(prev_mode) && prev_mode != config_cache.mode &&
       cursor_key_mask_reported != 0u) {
     joystick_release_cursor_keys();
+  }
+
+  if (prev_scroll_profile != config_cache.scroll_profile &&
+      (prev_mode == JOYSTICK_MODE_SCROLL ||
+       config_cache.mode == JOYSTICK_MODE_SCROLL)) {
+    scroll_accum_x = 0;
+    scroll_accum_y = 0;
+    last_mouse_tick = timer_read();
   }
 }
 

@@ -15,6 +15,11 @@ typedef enum {
     JOYSTICK_MODE_CURSOR_8 = 6,
 } joystick_mode_t;
 
+typedef enum {
+    JOYSTICK_SCROLL_PROFILE_LEGACY = 0,
+    JOYSTICK_SCROLL_PROFILE_SMOOTH = 1,
+} joystick_scroll_profile_t;
+
 typedef struct __attribute__((packed)) {
     uint16_t min;
     uint16_t center;
@@ -25,6 +30,7 @@ typedef struct __attribute__((packed)) {
 #define JOYSTICK_RADIAL_BOUNDARY_DEFAULT 127u
 #define JOYSTICK_MOUSE_SPEED_DEFAULT 10u
 #define JOYSTICK_MOUSE_ACCELERATION_DEFAULT 255u
+#define JOYSTICK_SCROLL_PROFILE_DEFAULT JOYSTICK_SCROLL_PROFILE_SMOOTH
 #define JOYSTICK_MOUSE_PRESET_COUNT 4u
 
 typedef struct __attribute__((packed)) {
@@ -40,7 +46,8 @@ typedef struct __attribute__((packed)) {
     uint8_t mouse_speed; // 1-255
     uint8_t mouse_acceleration; // 1-255, 255 = strongest acceleration
     uint8_t sw_debounce_ms; // Push switch debounce time in ms (0 = disabled)
-    uint8_t reserved[3];
+    uint8_t scroll_profile; // joystick_scroll_profile_t
+    uint8_t reserved[2];
     uint8_t radial_boundaries[32];
     uint8_t active_mouse_preset;
     joystick_mouse_preset_t mouse_presets[JOYSTICK_MOUSE_PRESET_COUNT];
@@ -92,6 +99,7 @@ static inline void joystick_init_default_config(joystick_config_t *config) {
   config->mouse_speed = JOYSTICK_MOUSE_SPEED_DEFAULT;
   config->mouse_acceleration = JOYSTICK_MOUSE_ACCELERATION_DEFAULT;
   config->sw_debounce_ms = 5;
+  config->scroll_profile = JOYSTICK_SCROLL_PROFILE_DEFAULT;
   joystick_fill_default_radial_boundaries(config->radial_boundaries);
   config->active_mouse_preset = 0;
   joystick_fill_default_mouse_presets(config->mouse_presets,

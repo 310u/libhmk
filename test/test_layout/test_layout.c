@@ -286,6 +286,18 @@ void test_joystick_preset_next_cycles_active_mouse_preset(void) {
     TEST_ASSERT_EQUAL_UINT8(42, mock_joystick_config.mouse_speed);
     TEST_ASSERT_EQUAL_UINT8(180, mock_joystick_config.mouse_acceleration);
 }
+
+void test_joystick_scroll_profile_next_toggles_scroll_profile(void) {
+    mock_joystick_config.scroll_profile = JOYSTICK_SCROLL_PROFILE_LEGACY;
+
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_JOY_SCROLL_PROFILE_NEXT);
+    TEST_ASSERT_EQUAL_UINT8(JOYSTICK_SCROLL_PROFILE_SMOOTH,
+                            mock_joystick_config.scroll_profile);
+
+    layout_register(INPUT_ROUTING_VIRTUAL_KEY, SP_JOY_SCROLL_PROFILE_NEXT);
+    TEST_ASSERT_EQUAL_UINT8(JOYSTICK_SCROLL_PROFILE_LEGACY,
+                            mock_joystick_config.scroll_profile);
+}
 #endif
 
 int main(int argc, char **argv) {
@@ -303,6 +315,7 @@ int main(int argc, char **argv) {
 #if defined(JOYSTICK_ENABLED)
     RUN_TEST(test_joystick_scroll_mo_restores_previous_mode);
     RUN_TEST(test_joystick_preset_next_cycles_active_mouse_preset);
+    RUN_TEST(test_joystick_scroll_profile_next_toggles_scroll_profile);
 #endif
     UNITY_END();
     return 0;
