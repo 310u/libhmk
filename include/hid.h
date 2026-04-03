@@ -69,6 +69,16 @@ void hid_mouse_move(int8_t x, int8_t y, uint8_t buttons);
 void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons);
 
 /**
+ * @brief Get the current effective wheel resolution multiplier
+ *
+ * Returns 1 when the host has not enabled high-resolution scrolling on the
+ * mouse interface, otherwise returns the descriptor's advertised multiplier.
+ *
+ * @return Effective wheel resolution multiplier
+ */
+uint8_t hid_mouse_wheel_resolution_multiplier(void);
+
+/**
  * @brief Clear all runtime HID state.
  *
  * This drops queued snapshots, clears currently pressed buttons/keys, and

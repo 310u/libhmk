@@ -214,13 +214,34 @@ static uint32_t joystick_scroll_report_interval_ms(uint8_t scroll_profile) {
   return JOYSTICK_SCROLL_REPORT_INTERVAL_MS;
 }
 
-static int32_t joystick_scroll_divisor(uint8_t scroll_profile) {
+static int32_t joystick_scroll_divisor(uint8_t scroll_profile,
+                                       uint8_t resolution_multiplier) {
   if (joystick_sanitize_scroll_profile(scroll_profile) ==
-      JOYSTICK_SCROLL_PROFILE_SMOOTH) {
+          JOYSTICK_SCROLL_PROFILE_SMOOTH &&
+      resolution_multiplier <= 1u) {
     return JOYSTICK_SCROLL_SMOOTH_DIVISOR;
   }
 
   return JOYSTICK_SCROLL_DIVISOR;
+}
+
+static int8_t joystick_scale_scroll_delta(int8_t delta, uint8_t scroll_profile,
+                                          uint8_t resolution_multiplier) {
+  if (delta == 0 || resolution_multiplier <= 1u ||
+      joystick_sanitize_scroll_profile(scroll_profile) !=
+          JOYSTICK_SCROLL_PROFILE_LEGACY) {
+    return delta;
+  }
+
+  int16_t scaled = (int16_t)delta * (int16_t)resolution_multiplier;
+  if (scaled > INT8_MAX) {
+    return INT8_MAX;
+  }
+  if (scaled < INT8_MIN) {
+    return INT8_MIN;
+  }
+
+  return (int8_t)scaled;
 }
 
 static joystick_mouse_preset_t joystick_make_mouse_preset(uint8_t mouse_speed,
@@ -584,6 +605,8 @@ static void joystick_task_mouse_mode(uint32_t tick) {
 static void joystick_task_scroll_mode(uint32_t tick) {
   const uint32_t report_interval_ms =
       joystick_scroll_report_interval_ms(config_cache.scroll_profile);
+  const uint8_t resolution_multiplier =
+      hid_mouse_wheel_resolution_multiplier();
   if (timer_elapsed(last_mouse_tick) < report_interval_ms) {
     return;
   }
@@ -592,7 +615,8 @@ static void joystick_task_scroll_mode(uint32_t tick) {
   if (joystick_pointer_output_active(sw_mouse_button)) {
     int32_t dx_fp = 0;
     int32_t dy_fp = 0;
-    const int32_t divisor = joystick_scroll_divisor(config_cache.scroll_profile);
+    const int32_t divisor = joystick_scroll_divisor(
+        config_cache.scroll_profile, resolution_multiplier);
     joystick_compute_pointer_delta(&dx_fp, &dy_fp,
                                    JOYSTICK_MOUSE_ACCELERATION_DEFAULT,
                                    divisor);
@@ -600,8 +624,12 @@ static void joystick_task_scroll_mode(uint32_t tick) {
     scroll_accum_x += dx_fp;
     scroll_accum_y += dy_fp;
 
-    const int8_t pan = joystick_consume_mouse_accum(&scroll_accum_x);
-    const int8_t wheel = joystick_consume_mouse_accum(&scroll_accum_y);
+    const int8_t pan = joystick_scale_scroll_delta(
+        joystick_consume_mouse_accum(&scroll_accum_x),
+        config_cache.scroll_profile, resolution_multiplier);
+    const int8_t wheel = joystick_scale_scroll_delta(
+        joystick_consume_mouse_accum(&scroll_accum_y),
+        config_cache.scroll_profile, resolution_multiplier);
 
     uint8_t buttons = 0;
     if (sw_mouse_button)

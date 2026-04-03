@@ -43,6 +43,7 @@ static int32_t mouse_pending_x;
 static int32_t mouse_pending_y;
 static int32_t mouse_pending_wheel;
 static int32_t mouse_pending_pan;
+static bool mouse_hi_res_scroll_enabled;
 static uint16_t system_report_last_sent;
 static uint16_t consumer_report_last_sent;
 static uint8_t mouse_buttons_last_sent;
@@ -145,6 +146,18 @@ static int8_t hid_mouse_clamp_pending(int32_t value) {
   if (value < INT8_MIN)
     return INT8_MIN;
   return (int8_t)value;
+}
+
+static void hid_mouse_set_hi_res_scroll_enabled(bool enabled) {
+  if (mouse_hi_res_scroll_enabled == enabled)
+    return;
+
+  mouse_hi_res_scroll_enabled = enabled;
+
+  // Pending wheel deltas were accumulated using the previous interpretation, so
+  // drop them when the host flips the feature state.
+  mouse_pending_wheel = 0;
+  mouse_pending_pan = 0;
 }
 
 static void hid_keyboard_queue_report(void) {
@@ -300,6 +313,7 @@ void hid_init(void) {
   mouse_pending_y = 0;
   mouse_pending_wheel = 0;
   mouse_pending_pan = 0;
+  mouse_hi_res_scroll_enabled = false;
   system_report_last_sent = 0;
   consumer_report_last_sent = 0;
   mouse_buttons_last_sent = 0;
@@ -397,6 +411,11 @@ void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons) {
   hid_mouse_sync_buttons();
 }
 
+uint8_t hid_mouse_wheel_resolution_multiplier(void) {
+  return mouse_hi_res_scroll_enabled ? HID_MOUSE_WHEEL_RESOLUTION_MULTIPLIER
+                                     : 1u;
+}
+
 void hid_keycode_remove(uint8_t keycode) {
   const uint16_t hid_code = keycode_to_hid[keycode];
 
@@ -480,12 +499,24 @@ void hid_send_reports(void) {
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
                                hid_report_type_t report_type, uint8_t *buffer,
                                uint16_t reqlen) {
+  if (instance == USB_ITF_MOUSE && report_id == 0 &&
+      report_type == HID_REPORT_TYPE_FEATURE && reqlen > 0u) {
+    buffer[0] = mouse_hi_res_scroll_enabled ? 1u : 0u;
+    return 1u;
+  }
+
   return 0;
 }
 
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type, const uint8_t *buffer,
                            uint16_t bufsize) {
+  if (instance == USB_ITF_MOUSE && report_id == 0 &&
+      report_type == HID_REPORT_TYPE_FEATURE && bufsize > 0u) {
+    hid_mouse_set_hi_res_scroll_enabled((buffer[0] & 0x01u) != 0u);
+    return;
+  }
+
   if (instance == USB_ITF_RAW_HID) {
 #if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
     if (hid_handle_raw_hid_diagnostic_control(buffer, bufsize))

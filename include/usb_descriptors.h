@@ -69,6 +69,11 @@ enum {
   REPORT_ID_COUNT,
 };
 
+// Advertise a binary smooth-scrolling feature report where 0 maps to normal
+// wheel detents and 1 maps to 8 sub-detents. 8 keeps the legacy "120 units per
+// detent" model evenly divisible on the host side.
+#define HID_MOUSE_WHEEL_RESOLUTION_MULTIPLIER 8u
+
 //---------------------------------------------------------------------+
 // Microsoft OS 2.0 descriptor
 //---------------------------------------------------------------------+

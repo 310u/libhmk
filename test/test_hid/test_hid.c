@@ -41,6 +41,9 @@ const uint16_t keycode_to_hid[256] = {
 
 void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
                                 uint16_t len);
+uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
+                               hid_report_type_t report_type, uint8_t *buffer,
+                               uint16_t reqlen);
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type,
                            const uint8_t *buffer, uint16_t bufsize);
@@ -320,6 +323,29 @@ void test_hid_accumulates_mouse_scroll_while_interface_busy(void) {
   TEST_ASSERT_EQUAL_INT8(3, mouse_reports[0].pan);
 }
 
+void test_hid_tracks_mouse_hi_res_scroll_feature_state(void) {
+  uint8_t buffer[2] = {0};
+
+  TEST_ASSERT_EQUAL_UINT8(1, hid_mouse_wheel_resolution_multiplier());
+
+  buffer[0] = 1;
+  tud_hid_set_report_cb(USB_ITF_MOUSE, 0, HID_REPORT_TYPE_FEATURE, buffer, 1);
+
+  TEST_ASSERT_EQUAL_UINT8(HID_MOUSE_WHEEL_RESOLUTION_MULTIPLIER,
+                          hid_mouse_wheel_resolution_multiplier());
+
+  memset(buffer, 0, sizeof(buffer));
+  TEST_ASSERT_EQUAL_UINT16(
+      1, tud_hid_get_report_cb(USB_ITF_MOUSE, 0, HID_REPORT_TYPE_FEATURE,
+                               buffer, sizeof(buffer)));
+  TEST_ASSERT_EQUAL_UINT8(1, buffer[0]);
+
+  buffer[0] = 0;
+  tud_hid_set_report_cb(USB_ITF_MOUSE, 0, HID_REPORT_TYPE_FEATURE, buffer, 1);
+
+  TEST_ASSERT_EQUAL_UINT8(1, hid_mouse_wheel_resolution_multiplier());
+}
+
 #if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
 void test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports(void) {
   uint8_t control_packet[RAW_HID_EP_SIZE] = {0};
@@ -400,6 +426,7 @@ int main(void) {
   RUN_TEST(test_hid_sends_repeated_mouse_motion_reports);
   RUN_TEST(test_hid_accumulates_mouse_motion_while_interface_busy);
   RUN_TEST(test_hid_accumulates_mouse_scroll_while_interface_busy);
+  RUN_TEST(test_hid_tracks_mouse_hi_res_scroll_feature_state);
 #if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
   RUN_TEST(test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports);
   RUN_TEST(test_hid_usbmon_diagnostic_stream_stops_for_regular_commands);

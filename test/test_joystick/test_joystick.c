@@ -5,6 +5,8 @@
 #include "keycodes.h"
 #include "stm32f4xx_hal.h"
 
+#define TEST_MOUSE_WHEEL_RESOLUTION_MULTIPLIER 8u
+
 static eeconfig_t mock_eeconfig;
 const eeconfig_t *eeconfig = &mock_eeconfig;
 
@@ -22,6 +24,7 @@ static int8_t last_scroll_wheel = 0;
 static int8_t last_scroll_pan = 0;
 static uint8_t last_scroll_buttons = 0;
 static uint32_t mouse_scroll_count = 0;
+static uint8_t mouse_wheel_resolution_multiplier = 1;
 static uint8_t pressed_keycodes[8] = {0};
 static uint8_t released_keycodes[8] = {0};
 static uint8_t pressed_count = 0;
@@ -68,6 +71,10 @@ void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons) {
   last_scroll_pan = pan;
   last_scroll_buttons = buttons;
   mouse_scroll_count++;
+}
+
+uint8_t hid_mouse_wheel_resolution_multiplier(void) {
+  return mouse_wheel_resolution_multiplier;
 }
 
 void hid_clear_runtime_state(void) {}
@@ -121,6 +128,7 @@ static void reset_reports(void) {
   last_scroll_pan = 0;
   last_scroll_buttons = 0;
   mouse_scroll_count = 0;
+  mouse_wheel_resolution_multiplier = 1;
   memset(pressed_keycodes, 0, sizeof(pressed_keycodes));
   memset(released_keycodes, 0, sizeof(released_keycodes));
   pressed_count = 0;
@@ -368,6 +376,26 @@ void test_joystick_smooth_scroll_profile_reports_at_high_frequency(void) {
   TEST_ASSERT_GREATER_THAN_INT8(0, last_scroll_pan);
 }
 
+void test_joystick_legacy_scroll_profile_scales_for_hi_res_wheel(void) {
+  joystick_config_t config = joystick_test_config(JOYSTICK_MODE_SCROLL);
+  config.scroll_profile = JOYSTICK_SCROLL_PROFILE_LEGACY;
+  config.mouse_speed = 4;
+  joystick_fill_default_mouse_presets(config.mouse_presets, config.mouse_speed,
+                                      config.mouse_acceleration);
+  joystick_apply_config(config);
+  mouse_wheel_resolution_multiplier = TEST_MOUSE_WHEEL_RESOLUTION_MULTIPLIER;
+
+  analog_raw_values[0] = 4095;
+  analog_raw_values[1] = 2048;
+
+  mock_time = 8;
+  joystick_task();
+
+  TEST_ASSERT_EQUAL_UINT32(1, mouse_scroll_count);
+  TEST_ASSERT_GREATER_THAN_INT8(
+      TEST_MOUSE_WHEEL_RESOLUTION_MULTIPLIER - 1, last_scroll_pan);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_joystick_mouse_mode_reports_motion_and_button);
@@ -383,5 +411,6 @@ int main(void) {
   RUN_TEST(test_joystick_select_mouse_preset_updates_effective_pointer_settings);
   RUN_TEST(test_joystick_legacy_scroll_profile_waits_for_legacy_interval);
   RUN_TEST(test_joystick_smooth_scroll_profile_reports_at_high_frequency);
+  RUN_TEST(test_joystick_legacy_scroll_profile_scales_for_hi_res_wheel);
   return UNITY_END();
 }
