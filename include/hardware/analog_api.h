@@ -21,6 +21,14 @@
 // Analog Configuration
 //--------------------------------------------------------------------+
 
+#if !defined(ANALOG_BACKEND_MCU_ADC) && !defined(ANALOG_BACKEND_SPI_ADC)
+#define ANALOG_BACKEND_MCU_ADC 1
+#endif
+
+#if defined(ANALOG_BACKEND_MCU_ADC) && defined(ANALOG_BACKEND_SPI_ADC)
+#error "Analog backend must select exactly one implementation"
+#endif
+
 // Maximum sampled analog value.
 #define ADC_MAX_VALUE ((1 << ADC_RESOLUTION) - 1)
 
@@ -65,7 +73,7 @@ _Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
 #endif
 
 #if ADC_NUM_RAW_INPUTS > 0
-#if !defined(ADC_RAW_INPUT_CHANNELS)
+#if defined(ANALOG_BACKEND_MCU_ADC) && !defined(ADC_RAW_INPUT_CHANNELS)
 #error "ADC_RAW_INPUT_CHANNELS is not defined"
 #endif
 
@@ -73,6 +81,9 @@ _Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
 #error "ADC_RAW_INPUT_VECTOR is not defined"
 #endif
 #endif
+
+// Total number of sampled analog inputs presented to the generic matrix scan.
+#define ANALOG_NUM_SAMPLED_INPUTS (ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS)
 
 //--------------------------------------------------------------------+
 // Digital GPIO Input Configuration
@@ -101,9 +112,18 @@ _Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
 #endif
 #endif
 
-#if !(0 < (ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS) &&                         \
-      (ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS) <= ADC_NUM_CHANNELS)
+#if !(0 < ANALOG_NUM_SAMPLED_INPUTS)
+#error "Invalid number of analog inputs"
+#endif
+
+#if defined(ANALOG_BACKEND_MCU_ADC)
+#if !defined(ADC_NUM_CHANNELS)
+#error "ADC_NUM_CHANNELS is not defined"
+#endif
+
+#if !(ANALOG_NUM_SAMPLED_INPUTS <= ADC_NUM_CHANNELS)
 #error "Invalid number of ADC inputs"
+#endif
 #endif
 
 //--------------------------------------------------------------------+

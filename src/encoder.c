@@ -59,6 +59,9 @@ static const uint8_t encoder_ccw_keys[] = ENCODER_CCW_KEYS;
 static const uint8_t encoder_cw_keycodes[] = ENCODER_CW_KEYCODES;
 static const uint8_t encoder_ccw_keycodes[] = ENCODER_CCW_KEYCODES;
 #endif
+#if defined(ENCODER_INVERT_DIRECTIONS)
+static const bool encoder_invert_directions[] = ENCODER_INVERT_DIRECTIONS;
+#endif
 static uint8_t encoder_states[ENCODER_NUM];
 static int8_t encoder_accum[ENCODER_NUM];
 static uint8_t encoder_queue[ENCODER_QUEUE_SIZE];
@@ -92,6 +95,10 @@ _Static_assert(M_ARRAY_SIZE(encoder_cw_keycodes) == ENCODER_NUM,
                "Invalid number of encoder clockwise keycodes");
 _Static_assert(M_ARRAY_SIZE(encoder_ccw_keycodes) == ENCODER_NUM,
                "Invalid number of encoder counterclockwise keycodes");
+#endif
+#if defined(ENCODER_INVERT_DIRECTIONS)
+_Static_assert(M_ARRAY_SIZE(encoder_invert_directions) == ENCODER_NUM,
+               "Invalid number of encoder direction inversion flags");
 #endif
 
 #if defined(ENCODER_GPIO_BACKEND_AT32)
@@ -334,6 +341,15 @@ static uint8_t encoder_read_state(uint8_t index) {
   return state;
 }
 
+static bool encoder_direction_inverted(uint8_t index) {
+#if defined(ENCODER_INVERT_DIRECTIONS)
+  return encoder_invert_directions[index];
+#else
+  (void)index;
+  return false;
+#endif
+}
+
 void encoder_init(void) {
   memset(encoder_accum, 0, sizeof(encoder_accum));
   memset(encoder_queue, 0, sizeof(encoder_queue));
@@ -359,11 +375,15 @@ void encoder_task(void) {
   for (uint8_t i = 0; i < ENCODER_NUM; i++) {
     const uint8_t current_state = encoder_read_state(i);
     const uint8_t transition = (uint8_t)((encoder_states[i] << 2) | current_state);
-    const int8_t delta = encoder_transition_table[transition];
+    int8_t delta = encoder_transition_table[transition];
 
     encoder_states[i] = current_state;
     if (delta == 0) {
       continue;
+    }
+
+    if (encoder_direction_inverted(i)) {
+      delta = (int8_t)-delta;
     }
 
     encoder_accum[i] = (int8_t)(encoder_accum[i] + delta);

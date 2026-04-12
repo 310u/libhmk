@@ -247,6 +247,22 @@ if __name__ == "__main__":
             "-DENCODER_INPUT_ACTIVE_HIGH",
         ],
     )
+    pio_config["env:native_test_encoder_inverted"] = native_test_env(
+        "test_encoder",
+        "+<encoder.c>",
+        [
+            "-I test/test_encoder",
+            "-DENCODER_NUM=1",
+            "-DENCODER_A_PORTS='{GPIOA}'",
+            "-DENCODER_A_PINS='{GPIO_PIN_0}'",
+            "-DENCODER_B_PORTS='{GPIOA}'",
+            "-DENCODER_B_PINS='{GPIO_PIN_1}'",
+            "-DENCODER_CW_KEYS='{4}'",
+            "-DENCODER_CCW_KEYS='{5}'",
+            "-DENCODER_INPUT_ACTIVE_HIGH",
+            "-DENCODER_INVERT_DIRECTIONS='{1}'",
+        ],
+    )
     pio_config["env:native_test_deferred_actions"] = native_test_env(
         "test_deferred_actions",
         "+<deferred_actions.c>",

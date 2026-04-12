@@ -1,0 +1,516 @@
+{
+    "name": "Mochiko40HE Trackball",
+    "manufacturer": "Lady Tortie",
+    "maintainer": "satoyu",
+    "usb": {
+        "vid": "0x0108",
+        "pid": "0x0112",
+        "port": "hs"
+    },
+    "keyboard": {
+        "num_profiles": 4,
+        "num_layers": 4,
+        "num_keys": 44,
+        "num_advanced_keys": 32
+    },
+    "features": {
+        "rgb": true,
+        "encoder": true
+    },
+    "rgb": {
+        "led_map": [
+            38,
+            36,
+            32,
+            33,
+            34,
+            35,
+            37,
+            39,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            23,
+            22,
+            21,
+            20,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            9,
+            8,
+            7,
+            6,
+            5,
+            31,
+            30,
+            4,
+            3,
+            2,
+            1,
+            0
+        ],
+        "mod_keys": [
+            38,
+            36,
+            32,
+            33,
+            34,
+            35,
+            37,
+            39,
+            30,
+            31
+        ]
+    },
+    "hardware": {
+        "hse_value": 12000000,
+        "driver": "at32f405xx"
+    },
+    "memory_budget": {
+        "min_flash_headroom": 32768,
+        "min_ram_headroom": 16384,
+        "max_stack_frame": 320
+    },
+    "analog": {
+        "invert_adc": false,
+        "mux": {
+            "select": [
+                "C1",
+                "C2",
+                "C3"
+            ],
+            "input": [
+                "A3",
+                "A4",
+                "A5",
+                "A6",
+                "A7"
+            ],
+            "matrix": [
+                [
+                    20,
+                    9,
+                    10,
+                    19,
+                    30,
+                    38,
+                    40,
+                    29
+                ],
+                [
+                    17,
+                    8,
+                    7,
+                    27,
+                    18,
+                    28,
+                    35,
+                    36
+                ],
+                [
+                    5,
+                    15,
+                    25,
+                    31,
+                    32,
+                    26,
+                    6,
+                    16
+                ],
+                [
+                    3,
+                    23,
+                    13,
+                    33,
+                    4,
+                    34,
+                    14,
+                    24
+                ],
+                [
+                    21,
+                    1,
+                    39,
+                    11,
+                    2,
+                    22,
+                    12,
+                    37
+                ]
+            ]
+        }
+    },
+    "digital": {
+        "input": [
+            "A2",
+            "A9"
+        ],
+        "vector": [
+            41,
+            42
+        ]
+    },
+    "encoder": {
+        "map": [
+            {
+                "label": "Scroll",
+                "cw": 42,
+                "ccw": 43
+            }
+        ]
+    },
+    "calibration": {
+        "initial_rest_value": 2400,
+        "initial_bottom_out_threshold": 650
+    },
+    "layout": {
+        "labels": [
+            "default"
+        ],
+        "keymap": [
+            [
+                {
+                    "key": 0
+                },
+                {
+                    "key": 1
+                },
+                {
+                    "key": 2
+                },
+                {
+                    "key": 3
+                },
+                {
+                    "key": 4
+                },
+                {
+                    "key": 30
+                },
+                {
+                    "key": 40
+                },
+                {
+                    "key": 31
+                },
+                {
+                    "key": 5
+                },
+                {
+                    "key": 6
+                },
+                {
+                    "key": 7
+                },
+                {
+                    "key": 8
+                },
+                {
+                    "key": 9
+                }
+            ],
+            [
+                {
+                    "key": 10
+                },
+                {
+                    "key": 11
+                },
+                {
+                    "key": 12
+                },
+                {
+                    "key": 13
+                },
+                {
+                    "key": 14
+                },
+                {
+                    "w": 2,
+                    "h": 2,
+                    "label": "TRACKBALL"
+                },
+                {
+                    "key": 15
+                },
+                {
+                    "key": 16
+                },
+                {
+                    "key": 17
+                },
+                {
+                    "key": 18
+                },
+                {
+                    "key": 19
+                }
+            ],
+            [
+                {
+                    "key": 20
+                },
+                {
+                    "key": 21
+                },
+                {
+                    "key": 22
+                },
+                {
+                    "key": 23
+                },
+                {
+                    "key": 24
+                },
+                {
+                    "key": 25,
+                    "x": 2
+                },
+                {
+                    "key": 26
+                },
+                {
+                    "key": 27
+                },
+                {
+                    "key": 28
+                },
+                {
+                    "key": 29
+                }
+            ],
+            [
+                {
+                    "key": 38,
+                    "w": 1.25
+                },
+                {
+                    "key": 36,
+                    "w": 1.25
+                },
+                {
+                    "key": 32,
+                    "w": 2
+                },
+                {
+                    "key": 33
+                },
+                {
+                    "key": 41
+                },
+                {
+                    "key": 34
+                },
+                {
+                    "key": 35,
+                    "w": 2
+                },
+                {
+                    "key": 37,
+                    "w": 1.25
+                },
+                {
+                    "key": 39,
+                    "w": 1.25
+                }
+            ]
+        ]
+    },
+    "keymap": [
+        [
+            "KC_Q",
+            "KC_W",
+            "KC_E",
+            "KC_R",
+            "KC_T",
+            "KC_Y",
+            "KC_U",
+            "KC_I",
+            "KC_O",
+            "KC_P",
+            "KC_A",
+            "KC_S",
+            "KC_D",
+            "KC_F",
+            "KC_G",
+            "KC_H",
+            "KC_J",
+            "KC_K",
+            "KC_L",
+            "KC_ENT",
+            "KC_Z",
+            "KC_X",
+            "KC_C",
+            "KC_V",
+            "KC_B",
+            "KC_N",
+            "KC_M",
+            "KC_COMM",
+            "KC_DOT",
+            "KC_SLSH",
+            "KC_LGUI",
+            "KC_LALT",
+            "KC_SPC",
+            "MO(1)",
+            "MO(2)",
+            "KC_BSPC",
+            "KC_RALT",
+            "KC_RCTL",
+            "KC_UP",
+            "KC_DOWN",
+            "KC_NO",
+            "MS_BTN3",
+            "MS_WHLD",
+            "MS_WHLU"
+        ],
+        [
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS"
+        ],
+        [
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS"
+        ],
+        [
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS",
+            "KC_TRNS"
+        ]
+    ]
+}

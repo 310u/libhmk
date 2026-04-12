@@ -53,5 +53,6 @@ This keeps USB suspend/resume policy out of MCU-specific `board.c` files.
 - A future SPI ADC backend should only gather samples and then feed them into `analog_scan_store_samples()`.
 - Current candidate parts are TI `ADS7953` and ADI `AD7490`.
 - Keep chip-specific SPI framing, channel sequencing, and pipeline latency handling below the generic analog backend boundary.
+- For the current `ADS7953 x 4 + central trackball sensor` proposal, see `docs/ads7953_pmw3360_design.md`.
 
 That split is intentional: adding a new ADC transport should not require reworking `matrix.c`, `layout.c`, or profile handling.

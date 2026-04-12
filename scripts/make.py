@@ -82,18 +82,66 @@ build_flags.define("USB_PRODUCT_ID", kb_json["usb"]["pid"])
 analog = kb_json["analog"]
 analog_backend = analog.get("backend", "mcu_adc")
 
+# Keep MCU ADC channel metadata available for native tests and shared code,
+# even when the active analog backend is an external SPI ADC.
+build_flags.define("ADC_NUM_CHANNELS", len(driver.metadata.adc.input_pins))
+build_flags.define("ADC_RESOLUTION", utils.get_adc_resolution(kb_json, driver))
+
 match analog_backend:
     case "mcu_adc":
         build_flags.define("ANALOG_BACKEND_MCU_ADC")
     case "spi_adc":
-        raise ValueError(
-            "analog.backend='spi_adc' is reserved for future external SPI ADC support and is not implemented yet"
-        )
+        spi = analog.get("spi")
+        if spi is None:
+            raise ValueError("analog.spi must be defined when analog.backend='spi_adc'")
+
+        if driver_name != "at32f405xx":
+            raise ValueError("analog.backend='spi_adc' is currently supported only on at32f405xx")
+
+        if "mux" in analog or "raw" in analog:
+            raise ValueError("analog.raw and analog.mux cannot be combined with analog.backend='spi_adc'")
+
+        if spi["driver"] != "ads7953":
+            raise ValueError(f"Unsupported analog.spi.driver: {spi['driver']}")
+
+        bus_ids: list[int] = []
+        device_bus: list[int] = []
+        device_cs: list[str] = []
+        flattened_map: list[int] = []
+
+        for bus_entry in spi["buses"]:
+            bus_id = bus_entry["bus"]
+            if bus_id in bus_ids:
+                raise ValueError(f"SPI ADC bus {bus_id} is configured more than once")
+            bus_ids.append(bus_id)
+
+            for device in bus_entry["devices"]:
+                device_bus.append(bus_id)
+                device_cs.append(device["cs"])
+                flattened_map.extend(device["map"])
+
+        if not flattened_map:
+            raise ValueError("analog.spi must declare at least one ADS7953 device")
+
+        build_flags.define("ANALOG_BACKEND_SPI_ADC")
+        build_flags.define("SPI_ADC_DRIVER_ADS7953")
+        build_flags.define("SPI_ADC_NUM_BUSES", len(bus_ids))
+        build_flags.define("SPI_ADC_BUS_IDS", utils.to_c_array(bus_ids))
+        build_flags.define("SPI_ADC_NUM_DEVICES", len(device_bus))
+        build_flags.define("SPI_ADC_DEVICE_BUS", utils.to_c_array(device_bus))
+        build_flags.define("SPI_ADC_FREQUENCY_HZ", spi.get("frequency_hz", 20_000_000))
+
+        if spi.get("range", "vref") == "2xvref":
+            build_flags.define("SPI_ADC_RANGE_2X_VREF")
+
+        ports, pin_nums = driver.metadata.adc.to_gpio_array(device_cs)
+        build_flags.define("SPI_ADC_DEVICE_CS_PORTS", utils.to_c_array(ports))
+        build_flags.define("SPI_ADC_DEVICE_CS_PINS", utils.to_c_array(pin_nums))
+
+        build_flags.define("ADC_NUM_RAW_INPUTS", len(flattened_map))
+        build_flags.define("ADC_RAW_INPUT_VECTOR", utils.to_c_array(flattened_map))
     case _:
         raise ValueError(f"Unsupported analog backend: {analog_backend}")
-
-build_flags.define("ADC_NUM_CHANNELS", len(driver.metadata.adc.input_pins))
-build_flags.define("ADC_RESOLUTION", utils.get_adc_resolution(kb_json, driver))
 
 if analog.get("invert_adc", False):
     build_flags.define("MATRIX_INVERT_ADC_VALUES")
@@ -102,7 +150,7 @@ if "delay" in analog:
     build_flags.define("ADC_SAMPLE_DELAY", analog["delay"])
 
 # Raw ADC Input Configuration
-if "raw" in analog:
+if analog_backend == "mcu_adc" and "raw" in analog:
     raw = analog["raw"]
 
     build_flags.define("ADC_NUM_RAW_INPUTS", len(raw["input"]))
@@ -113,7 +161,7 @@ if "raw" in analog:
     build_flags.define("ADC_RAW_INPUT_VECTOR", utils.to_c_array(raw["vector"]))
 
 # Analog Multiplexer ADC Input Configuration
-if "mux" in analog:
+if analog_backend == "mcu_adc" and "mux" in analog:
     mux = analog["mux"]
 
     build_flags.define("ADC_NUM_MUX_INPUTS", len(mux["input"]))

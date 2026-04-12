@@ -1,0 +1,107 @@
+{
+  "name": "ADS7953Ref",
+  "manufacturer": "libhmk",
+  "maintainer": "openai",
+  "usb": {
+    "vid": "0x0108",
+    "pid": "0x0195",
+    "port": "hs"
+  },
+  "keyboard": {
+    "num_profiles": 1,
+    "num_layers": 1,
+    "num_keys": 8,
+    "num_advanced_keys": 8
+  },
+  "hardware": {
+    "hse_value": 12000000,
+    "driver": "at32f405xx"
+  },
+  "analog": {
+    "backend": "spi_adc",
+    "adc_resolution": 12,
+    "spi": {
+      "driver": "ads7953",
+      "frequency_hz": 18000000,
+      "buses": [
+        {
+          "bus": 0,
+          "devices": [
+            {
+              "cs": "B0",
+              "map": [1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            },
+            {
+              "cs": "B1",
+              "map": [5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            }
+          ]
+        },
+        {
+          "bus": 1,
+          "devices": [
+            {
+              "cs": "C0",
+              "map": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            },
+            {
+              "cs": "C1",
+              "map": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "calibration": {
+    "initial_rest_value": 2400,
+    "initial_bottom_out_threshold": 650
+  },
+  "layout": {
+    "labels": [
+      "default"
+    ],
+    "keymap": [
+      [
+        {
+          "key": 0
+        },
+        {
+          "key": 1
+        },
+        {
+          "key": 2
+        },
+        {
+          "key": 3
+        }
+      ],
+      [
+        {
+          "key": 4
+        },
+        {
+          "key": 5
+        },
+        {
+          "key": 6
+        },
+        {
+          "key": 7
+        }
+      ]
+    ]
+  },
+  "keymap": [
+    [
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______"
+    ]
+  ]
+}

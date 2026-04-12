@@ -15,6 +15,22 @@ static bool processed_pressed[8];
 static uint8_t process_count;
 static uint8_t gpio_init_count;
 
+static uint8_t expected_clockwise_key(void) {
+#if defined(ENCODER_INVERT_DIRECTIONS)
+  return 5u;
+#else
+  return 4u;
+#endif
+}
+
+static uint8_t expected_counterclockwise_key(void) {
+#if defined(ENCODER_INVERT_DIRECTIONS)
+  return 4u;
+#else
+  return 5u;
+#endif
+}
+
 static void set_encoder_pins(uint8_t state) {
   gpio_a0_state = (state & 0x01u) ? GPIO_PIN_SET : GPIO_PIN_RESET;
   gpio_a1_state = (state & 0x02u) ? GPIO_PIN_SET : GPIO_PIN_RESET;
@@ -74,13 +90,13 @@ void test_encoder_emits_clockwise_tap(void) {
   encoder_task();
 
   TEST_ASSERT_EQUAL_UINT8(1, process_count);
-  TEST_ASSERT_EQUAL_UINT8(4, processed_keys[0]);
+  TEST_ASSERT_EQUAL_UINT8(expected_clockwise_key(), processed_keys[0]);
   TEST_ASSERT_TRUE(processed_pressed[0]);
 
   encoder_task();
 
   TEST_ASSERT_EQUAL_UINT8(2, process_count);
-  TEST_ASSERT_EQUAL_UINT8(4, processed_keys[1]);
+  TEST_ASSERT_EQUAL_UINT8(expected_clockwise_key(), processed_keys[1]);
   TEST_ASSERT_FALSE(processed_pressed[1]);
 }
 
@@ -96,17 +112,17 @@ void test_encoder_queues_repeated_steps_until_previous_release(void) {
   }
 
   TEST_ASSERT_EQUAL_UINT8(3, process_count);
-  TEST_ASSERT_EQUAL_UINT8(4, processed_keys[0]);
+  TEST_ASSERT_EQUAL_UINT8(expected_clockwise_key(), processed_keys[0]);
   TEST_ASSERT_TRUE(processed_pressed[0]);
-  TEST_ASSERT_EQUAL_UINT8(4, processed_keys[1]);
+  TEST_ASSERT_EQUAL_UINT8(expected_clockwise_key(), processed_keys[1]);
   TEST_ASSERT_FALSE(processed_pressed[1]);
-  TEST_ASSERT_EQUAL_UINT8(4, processed_keys[2]);
+  TEST_ASSERT_EQUAL_UINT8(expected_clockwise_key(), processed_keys[2]);
   TEST_ASSERT_TRUE(processed_pressed[2]);
 
   encoder_task();
 
   TEST_ASSERT_EQUAL_UINT8(4, process_count);
-  TEST_ASSERT_EQUAL_UINT8(4, processed_keys[3]);
+  TEST_ASSERT_EQUAL_UINT8(expected_clockwise_key(), processed_keys[3]);
   TEST_ASSERT_FALSE(processed_pressed[3]);
 }
 
@@ -123,6 +139,23 @@ void test_encoder_emits_counterclockwise_tap(void) {
   encoder_task();
 
   TEST_ASSERT_EQUAL_UINT8(1, process_count);
+  TEST_ASSERT_EQUAL_UINT8(expected_counterclockwise_key(), processed_keys[0]);
+  TEST_ASSERT_TRUE(processed_pressed[0]);
+}
+
+void test_encoder_invert_direction_swaps_clockwise_and_counterclockwise(void) {
+  encoder_init();
+
+  set_encoder_pins(0x02u);
+  encoder_task();
+  set_encoder_pins(0x03u);
+  encoder_task();
+  set_encoder_pins(0x01u);
+  encoder_task();
+  set_encoder_pins(0x00u);
+  encoder_task();
+
+  TEST_ASSERT_EQUAL_UINT8(1, process_count);
   TEST_ASSERT_EQUAL_UINT8(5, processed_keys[0]);
   TEST_ASSERT_TRUE(processed_pressed[0]);
 }
@@ -133,5 +166,8 @@ int main(void) {
   RUN_TEST(test_encoder_emits_clockwise_tap);
   RUN_TEST(test_encoder_queues_repeated_steps_until_previous_release);
   RUN_TEST(test_encoder_emits_counterclockwise_tap);
+#if defined(ENCODER_INVERT_DIRECTIONS)
+  RUN_TEST(test_encoder_invert_direction_swaps_clockwise_and_counterclockwise);
+#endif
   return UNITY_END();
 }

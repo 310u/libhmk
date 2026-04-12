@@ -794,6 +794,22 @@ void layout_register(uint8_t key, uint8_t keycode) {
     layout_register_joystick_scroll_mode();
     break;
 
+  case SP_MOUSE_WHEEL_UP:
+    hid_mouse_scroll(1, 0, 0);
+    break;
+
+  case SP_MOUSE_WHEEL_DOWN:
+    hid_mouse_scroll(-1, 0, 0);
+    break;
+
+  case SP_MOUSE_PAN_LEFT:
+    hid_mouse_scroll(0, -1, 0);
+    break;
+
+  case SP_MOUSE_PAN_RIGHT:
+    hid_mouse_scroll(0, 1, 0);
+    break;
+
   case SP_RGB_TOGGLE:
     layout_toggle_rgb();
     break;

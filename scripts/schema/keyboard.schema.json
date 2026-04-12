@@ -79,7 +79,7 @@
         "backend": {
           "enum": ["mcu_adc", "spi_adc"],
           "default": "mcu_adc",
-          "description": "Analog sampling backend. `mcu_adc` uses the MCU's built-in ADC. `spi_adc` is reserved for future external SPI ADC support and is not implemented yet."
+          "description": "Analog sampling backend. `mcu_adc` uses the MCU's built-in ADC. `spi_adc` uses an external SPI ADC backend."
         },
         "adc_resolution": {
           "type": "integer",
@@ -135,6 +135,68 @@
             }
           },
           "required": ["select", "input", "matrix"]
+        },
+        "spi": {
+          "type": "object",
+          "description": "External SPI ADC configuration. Currently supports ADS7953 on up to 2 SPI buses with up to 2 devices per bus.",
+          "properties": {
+            "driver": {
+              "enum": ["ads7953"],
+              "description": "External SPI ADC driver"
+            },
+            "frequency_hz": {
+              "type": "integer",
+              "description": "SPI clock frequency in Hz. Defaults to 20 MHz when omitted.",
+              "minimum": 1
+            },
+            "range": {
+              "enum": ["vref", "2xvref"],
+              "description": "ADS7953 input range selection. `vref` uses 0-Vref, `2xvref` uses 0-2xVref."
+            },
+            "buses": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "bus": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3,
+                    "description": "SPI bus index defined by board_def.h"
+                  },
+                  "devices": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "cs": {
+                          "type": "string",
+                          "description": "GPIO pin name used as chip select"
+                        },
+                        "map": {
+                          "type": "array",
+                          "description": "16-entry physical key mapping for ADS7953 channels. Uses the same 1-based key numbering convention as analog.raw.vector, and 0 means unused.",
+                          "minItems": 16,
+                          "maxItems": 16,
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "required": ["cs", "map"]
+                    }
+                  }
+                },
+                "required": ["bus", "devices"]
+              }
+            }
+          },
+          "required": ["driver", "buses"]
         }
       }
     },
@@ -271,14 +333,14 @@
                 "h": { "type": "number", "minimum": 1 },
                 "x": { "type": "number" },
                 "y": { "type": "number" },
+                "label": { "type": "string" },
                 "r": { "type": "number", "description": "Rotation angle in degrees" },
                 "option": {
                   "type": "array",
                   "description": "Option key and value pairs for the corresponding labels",
                   "items": { "type": "number" }
                 }
-              },
-              "required": ["key"]
+              }
             }
           }
         }

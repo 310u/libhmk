@@ -18,6 +18,8 @@
 #include "stm32f4xx_hal.h"
 #include "analog_scan.h"
 
+#if defined(ANALOG_BACKEND_MCU_ADC)
+
 // GPIO ports for each ADC channel
 static GPIO_TypeDef *channel_ports[] = {
     GPIOA, GPIOA, GPIOA, GPIOA, GPIOA, GPIOA, GPIOA, GPIOA,
@@ -415,4 +417,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
                       ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS);
   }
 }
+#endif
+
 #endif

@@ -18,6 +18,8 @@
 #include "at32f402_405.h"
 #include "analog_scan.h"
 
+#if defined(ANALOG_BACKEND_MCU_ADC)
+
 // GPIO ports for each ADC channel
 static gpio_type *channel_ports[] = {
     GPIOA, GPIOA, GPIOA, GPIOA, GPIOA, GPIOA, GPIOA, GPIOA,
@@ -388,4 +390,6 @@ void TMR6_GLOBAL_IRQHandler(void) {
     adc_ordinary_software_trigger_enable(ADC1, TRUE);
   }
 }
+#endif
+
 #endif

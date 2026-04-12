@@ -30,6 +30,7 @@
 #include "wear_leveling.h"
 #include "xinput.h"
 #include "slider.h"
+#include "trackball.h"
 
 int main(void) {
   // Initialize the hardware
@@ -61,6 +62,7 @@ int main(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_init();
 #endif
+  trackball_init();
   slider_init();
   command_init();
 
@@ -80,6 +82,7 @@ int main(void) {
 #if defined(JOYSTICK_ENABLED)
     joystick_task();
 #endif
+    trackball_task();
     slider_task();
     xinput_task();
     command_task();
