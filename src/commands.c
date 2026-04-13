@@ -24,6 +24,7 @@
 #include "metadata.h"
 #include "profile_runtime.h"
 #include "rgb.h"
+#include "trackball.h"
 #include "tusb.h"
 
 // Helper macro to verify command parameters
@@ -486,6 +487,15 @@ void command_process(const uint8_t *buf) {
     break;
   }
 #endif
+  case COMMAND_GET_TRACKBALL_STATE: {
+    trackball_diagnostic_state_t state;
+    trackball_get_state(&state);
+    out->trackball_state.enabled = state.enabled;
+    out->trackball_state.current_cpi = state.current_cpi;
+    out->trackball_state.last_dx = state.last_dx;
+    out->trackball_state.last_dy = state.last_dy;
+    break;
+  }
   default: {
     // Unknown command
     success = false;

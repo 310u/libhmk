@@ -63,6 +63,7 @@ typedef enum {
   COMMAND_GET_JOYSTICK_CONFIG,
   COMMAND_SET_JOYSTICK_CONFIG,
   COMMAND_SET_HOST_TIME,
+  COMMAND_GET_TRACKBALL_STATE,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -214,6 +215,13 @@ typedef struct __attribute__((packed)) {
   uint8_t data[sizeof(joystick_config_t)];
 } command_out_joystick_config_t;
 
+typedef struct __attribute__((packed)) {
+  bool enabled;
+  uint16_t current_cpi;
+  int16_t last_dx;
+  int16_t last_dy;
+} command_out_trackball_state_t;
+
 // Command output buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -253,6 +261,8 @@ typedef struct __attribute__((packed)) {
     command_out_joystick_state_t joystick_state;
     // For `COMMAND_GET_JOYSTICK_CONFIG`
     command_out_joystick_config_t joystick_config;
+    // For `COMMAND_GET_TRACKBALL_STATE`
+    command_out_trackball_state_t trackball_state;
   };
 } command_out_buffer_t;
 

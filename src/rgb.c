@@ -39,6 +39,8 @@ static uint8_t rgb_grb_data[NUM_LEDS * 3];
 static rgb_config_t rgb_config;
 static uint8_t rgb_clock_unique_y[NUM_LEDS];
 static uint8_t rgb_clock_row_leds[NUM_LEDS];
+static uint32_t cpi_flash_time = 0;
+static uint16_t cpi_flash_cpi = 0;
 
 typedef struct {
     bool initialized;
@@ -629,7 +631,34 @@ void rgb_task(void) {
         }
     }
 
+    // CPI Indicator Override
+    if (cpi_flash_time != 0 && current_tick - cpi_flash_time < 500) {
+        // 色をCPIの値に応じてパレットから決定する（簡易実装）
+        uint8_t r = 0, g = 0, b = 0;
+        if (cpi_flash_cpi <= 800) { r = 255; g = 0; b = 0; }
+        else if (cpi_flash_cpi <= 1600) { r = 0; g = 255; b = 0; }
+        else if (cpi_flash_cpi <= 3200) { r = 0; g = 0; b = 255; }
+        else if (cpi_flash_cpi <= 6400) { r = 255; g = 255; b = 0; }
+        else if (cpi_flash_cpi <= 12800) { r = 0; g = 255; b = 255; }
+        else { r = 255; g = 0; b = 255; }
+        
+        r = ((uint32_t)r * effective_brightness) / 255;
+        g = ((uint32_t)g * effective_brightness) / 255;
+        b = ((uint32_t)b * effective_brightness) / 255;
+
+        rgb_set_all_color(r, g, b);
+    } else {
+        cpi_flash_time = 0;
+    }
+
     rgb_update();
 }
 
+void rgb_flash_cpi(uint16_t cpi) {
+    if (rgb_get_config()->enabled) {
+        cpi_flash_time = timer_read();
+        if (cpi_flash_time == 0) cpi_flash_time = 1; // Timer avoids 0
+        cpi_flash_cpi = cpi;
+    }
+}
 #endif // RGB_ENABLED

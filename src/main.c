@@ -75,16 +75,16 @@ int main(void) {
     analog_task();
     matrix_scan();
     encoder_task();
-    layout_task();
-#if defined(RGB_ENABLED)
-    rgb_task();
-#endif
 #if defined(JOYSTICK_ENABLED)
     joystick_task();
 #endif
     trackball_task();
     slider_task();
     xinput_task();
+    layout_task();
+#if defined(RGB_ENABLED)
+    rgb_task();
+#endif
     command_task();
 #if defined(__arm__)
     __asm__ volatile ("wfi");

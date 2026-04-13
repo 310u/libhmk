@@ -112,6 +112,7 @@ void rgb_update(void);
 rgb_color_t hsv_to_rgb(hsv_t hsv);
 void rgb_matrix_record_keypress(uint8_t index);
 void rgb_set_clock_time(uint8_t hours, uint8_t minutes, uint8_t seconds);
+void rgb_flash_cpi(uint16_t cpi);
 
 // Provide access to the configuration block for EEPROM
 rgb_config_t* rgb_get_config(void);

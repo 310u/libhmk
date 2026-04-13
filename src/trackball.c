@@ -14,6 +14,7 @@
  */
 
 #include "trackball.h"
+#include "rgb.h"
 
 #include "hardware/hardware.h"
 #include "hid.h"
@@ -187,6 +188,9 @@ typedef struct {
   bool enabled;
   bool burst_mode_started;
   uint32_t last_poll_ms;
+  uint16_t current_cpi;
+  int16_t last_dx;
+  int16_t last_dy;
 } trackball_state_t;
 
 static trackball_state_t trackball_state = {
@@ -206,6 +210,9 @@ static trackball_state_t trackball_state = {
     .enabled = false,
     .burst_mode_started = false,
     .last_poll_ms = 0,
+    .current_cpi = TRACKBALL_CPI_DEFAULT,
+    .last_dx = 0,
+    .last_dy = 0,
 };
 
 static inline void trackball_delay_cycles(uint32_t cycles) {
@@ -858,11 +865,60 @@ void trackball_task(void) {
   }
 
   trackball_emit_motion(sample.dx, sample.dy);
+  trackball_state.last_dx = sample.dx;
+  trackball_state.last_dy = sample.dy;
+}
+
+void trackball_get_state(trackball_diagnostic_state_t *state) {
+  if (state == NULL) {
+    return;
+  }
+  state->enabled = trackball_state.enabled;
+  state->current_cpi = trackball_state.current_cpi;
+  state->last_dx = trackball_state.last_dx;
+  state->last_dy = trackball_state.last_dy;
+}
+
+static void trackball_set_cpi(uint16_t cpi) {
+  if (!trackball_state.enabled) {
+    return;
+  }
+  if (trackball_sensor_api.set_cpi != NULL) {
+    if (trackball_sensor_api.set_cpi(cpi)) {
+      trackball_state.current_cpi = cpi;
+#if defined(RGB_ENABLED)
+      rgb_flash_cpi(cpi);
+#endif
+    }
+  }
+}
+
+void trackball_increase_cpi(void) {
+#if defined(TRACKBALL_SENSOR_PAW3395)
+  trackball_set_cpi(trackball_state.current_cpi + 50);
+#else
+  trackball_set_cpi(trackball_state.current_cpi + 100);
+#endif
+}
+
+void trackball_decrease_cpi(void) {
+#if defined(TRACKBALL_SENSOR_PAW3395)
+  if (trackball_state.current_cpi > 50) {
+    trackball_set_cpi(trackball_state.current_cpi - 50);
+  }
+#else
+  if (trackball_state.current_cpi > 100) {
+    trackball_set_cpi(trackball_state.current_cpi - 100);
+  }
+#endif
 }
 
 #else
 
 void trackball_init(void) {}
 void trackball_task(void) {}
+void trackball_get_state(trackball_diagnostic_state_t *state) {}
+void trackball_increase_cpi(void) {}
+void trackball_decrease_cpi(void) {}
 
 #endif

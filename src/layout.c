@@ -28,6 +28,7 @@
 #include "profile_runtime.h"
 #include "rgb.h"
 #include "xinput.h"
+#include "trackball.h"
 
 // Layer mask. Each bit represents whether a layer is active or not.
 static uint16_t layer_mask;
@@ -808,6 +809,14 @@ void layout_register(uint8_t key, uint8_t keycode) {
 
   case SP_MOUSE_PAN_RIGHT:
     hid_mouse_scroll(0, 1, 0);
+    break;
+
+  case SP_TRACKBALL_CPI_UP:
+    trackball_increase_cpi();
+    break;
+
+  case SP_TRACKBALL_CPI_DOWN:
+    trackball_decrease_cpi();
     break;
 
   case SP_RGB_TOGGLE:
