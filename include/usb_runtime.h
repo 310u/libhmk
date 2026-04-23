@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "common.h"
+
 //--------------------------------------------------------------------+
 // USB Runtime Recovery API
 //--------------------------------------------------------------------+
@@ -53,3 +55,13 @@ void usb_runtime_suspend(void);
  * @return None
  */
 void usb_runtime_resume(void);
+
+/**
+ * @brief Return whether USB suspend handling is currently active
+ *
+ * This stays true while the host is suspended so other subsystems can
+ * temporarily quiesce user-facing behavior such as LEDs.
+ *
+ * @return true when the device should behave as suspended
+ */
+bool usb_runtime_is_suspended(void);

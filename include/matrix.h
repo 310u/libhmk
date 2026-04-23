@@ -34,16 +34,71 @@
 #define MATRIX_EMA_ALPHA_EXPONENT 4
 #endif
 
+#if !defined(MATRIX_EMA_TRACK_ALPHA_EXPONENT)
+// Intermediate EMA used for smaller movements, especially while hovering near
+// the rest position or actuation threshold.
+#define MATRIX_EMA_TRACK_ALPHA_EXPONENT 3
+#endif
+
 #if !defined(MATRIX_EMA_FAST_ALPHA_EXPONENT)
 // Faster EMA used while a key is actively moving or the sampled ADC delta is
 // large enough that smoothing would noticeably hurt responsiveness.
 #define MATRIX_EMA_FAST_ALPHA_EXPONENT 2
 #endif
 
+#if !defined(MATRIX_EMA_BURST_ALPHA_EXPONENT)
+// Fastest EMA used for large step changes where filter lag would dominate.
+#define MATRIX_EMA_BURST_ALPHA_EXPONENT 1
+#endif
+
+#if !defined(MATRIX_EMA_TRACK_DELTA)
+// Minimum raw-vs-filtered ADC delta required to leave the idle EMA path.
+#define MATRIX_EMA_TRACK_DELTA 6
+#endif
+
 #if !defined(MATRIX_EMA_FAST_DELTA)
 // Minimum ADC delta required to switch to the faster EMA path.
 #define MATRIX_EMA_FAST_DELTA 16
 #endif
+
+#if !defined(MATRIX_EMA_BURST_DELTA)
+// Minimum ADC delta required to switch to the fastest EMA path.
+#define MATRIX_EMA_BURST_DELTA 48
+#endif
+
+#if !defined(MATRIX_EMA_TRACK_VELOCITY)
+// Minimum per-scan raw ADC movement required to leave the idle EMA path.
+#define MATRIX_EMA_TRACK_VELOCITY 4
+#endif
+
+#if !defined(MATRIX_EMA_FAST_VELOCITY)
+// Minimum per-scan raw ADC movement required to switch to the fast EMA path.
+#define MATRIX_EMA_FAST_VELOCITY 12
+#endif
+
+#if !defined(MATRIX_EMA_BURST_VELOCITY)
+// Minimum per-scan raw ADC movement required to switch to the burst EMA path.
+#define MATRIX_EMA_BURST_VELOCITY 32
+#endif
+
+#if !defined(MATRIX_EMA_REST_WINDOW)
+// Distance window near rest where the filter should stay more responsive.
+#define MATRIX_EMA_REST_WINDOW 8
+#endif
+
+#if !defined(MATRIX_EMA_ACTUATION_WINDOW)
+// Distance window near the actuation threshold where responsiveness matters.
+#define MATRIX_EMA_ACTUATION_WINDOW 16
+#endif
+
+#if !defined(MATRIX_EMA_MODE_DECAY_SCANS)
+// Number of consecutive calmer samples required before decaying one filter
+// stage.
+#define MATRIX_EMA_MODE_DECAY_SCANS 2
+#endif
+
+_Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
+               "MATRIX_EMA_MODE_DECAY_SCANS must fit in key_state_t.filter_decay");
 
 #if !defined(MATRIX_CALIBRATION_EPSILON)
 // Minimum change in ADC values required to update the calibration values. This
@@ -101,6 +156,14 @@ typedef enum {
   KEY_DIR_UP,
 } key_dir_t;
 
+typedef enum {
+  MATRIX_FILTER_MODE_IDLE = 0,
+  MATRIX_FILTER_MODE_TRACK,
+  MATRIX_FILTER_MODE_FAST,
+  MATRIX_FILTER_MODE_BURST,
+  MATRIX_FILTER_MODE_COUNT,
+} matrix_filter_mode_t;
+
 // Key state
 typedef struct {
   // Most recent raw ADC value
@@ -111,6 +174,10 @@ typedef struct {
   uint16_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
+  // Current dynamic EMA stage (matrix_filter_mode_t)
+  uint8_t filter_mode;
+  // Consecutive calmer samples seen while decaying the filter stage
+  uint8_t filter_decay;
 
   // Key travel distance (0-255)
   uint8_t distance;
@@ -128,6 +195,17 @@ typedef struct {
 
 // Key matrix
 extern key_state_t key_matrix[NUM_KEYS];
+
+typedef struct {
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint16_t max_sample_delta;
+  uint16_t max_sample_velocity;
+  uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+} matrix_scan_diagnostics_t;
 
 //--------------------------------------------------------------------+
 // Key Matrix API
@@ -178,3 +256,23 @@ void matrix_disable_rapid_trigger(uint8_t key, bool disable);
  * @return Idle time in milliseconds, or 0 if any key is currently pressed
  */
 uint32_t matrix_get_idle_time(void);
+
+/**
+ * @brief Get cycle-based diagnostics for the most recent matrix scan
+ *
+ * These counters are intended for tuning high-rate analog scan pipelines
+ * without changing the public event timestamp semantics.
+ *
+ * @return Pointer to the current diagnostics snapshot
+ */
+const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void);
+
+/**
+ * @brief Reset accumulated matrix scan diagnostics counters
+ *
+ * This clears the scan counter, extrema, and last per-mode summary so a host
+ * can start a fresh measurement interval without recalibrating the matrix.
+ *
+ * @return None
+ */
+void matrix_reset_scan_diagnostics(void);

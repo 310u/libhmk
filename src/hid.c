@@ -60,12 +60,55 @@ static uint32_t raw_hid_diagnostic_last_send_cycle;
 static uint32_t raw_hid_diagnostic_last_completion_cycle;
 static uint32_t raw_hid_diagnostic_previous_completion_gap_cycles;
 
+typedef struct __attribute__((packed)) {
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint16_t max_sample_delta;
+  uint16_t max_sample_velocity;
+  uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+} hid_raw_matrix_diagnostic_payload_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t magic[4];
+  uint32_t sequence;
+  uint32_t tick_ms;
+  uint32_t previous_completion_gap_cycles;
+  uint32_t rearm_cycles;
+  uint32_t send_interval_cycles;
+  uint32_t cpu_hz;
+  uint32_t send_cycle;
+  hid_raw_matrix_diagnostic_payload_t matrix;
+} hid_raw_diagnostic_report_t;
+
+_Static_assert(offsetof(hid_raw_diagnostic_report_t, matrix) == 32u,
+               "RAW HID diagnostic matrix payload offset must stay at byte 32");
+_Static_assert(sizeof(hid_raw_diagnostic_report_t) == RAW_HID_EP_SIZE,
+               "RAW HID diagnostic report must fill the endpoint payload");
+
 static uint32_t hid_diagnostic_cpu_hz(void) {
 #if defined(F_CPU)
   return (uint32_t)F_CPU;
 #else
   return 0;
 #endif
+}
+
+static void
+hid_fill_raw_hid_matrix_diagnostics(hid_raw_diagnostic_report_t *report) {
+  const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
+
+  report->matrix.scan_count = diag->scan_count;
+  report->matrix.last_scan_cycles = diag->last_scan_cycles;
+  report->matrix.max_scan_cycles = diag->max_scan_cycles;
+  report->matrix.last_scan_us = diag->last_scan_us;
+  report->matrix.max_scan_us = diag->max_scan_us;
+  report->matrix.max_sample_delta = diag->max_sample_delta;
+  report->matrix.max_sample_velocity = diag->max_sample_velocity;
+  memcpy(report->matrix.last_mode_counts, diag->last_mode_counts,
+         sizeof(report->matrix.last_mode_counts));
 }
 
 static void hid_send_raw_hid_diagnostic_report(void) {
@@ -75,7 +118,7 @@ static void hid_send_raw_hid_diagnostic_report(void) {
   if (!tud_hid_n_ready(USB_ITF_RAW_HID))
     return;
 
-  uint8_t report[RAW_HID_EP_SIZE] = {0};
+  hid_raw_diagnostic_report_t report = {0};
   const uint32_t sequence = raw_hid_diagnostic_sequence;
   const uint32_t tick_ms = timer_read();
   const uint32_t send_cycle = board_cycle_count();
@@ -87,21 +130,21 @@ static void hid_send_raw_hid_diagnostic_report(void) {
 
   // Prefix the payload with a recognizable marker plus a monotonically
   // increasing sequence number so usbmon captures can confirm continuity.
-  report[0] = 'U';
-  report[1] = 'M';
-  report[2] = 'O';
-  report[3] = 'N';
-  memcpy(&report[4], &sequence, sizeof(sequence));
-  memcpy(&report[8], &tick_ms, sizeof(tick_ms));
-  memcpy(&report[12], &raw_hid_diagnostic_previous_completion_gap_cycles,
-         sizeof(raw_hid_diagnostic_previous_completion_gap_cycles));
-  memcpy(&report[16], &rearm_cycles, sizeof(rearm_cycles));
-  memcpy(&report[20], &send_interval_cycles, sizeof(send_interval_cycles));
-  memcpy(&report[24], &cpu_hz, sizeof(cpu_hz));
-  memcpy(&report[28], &send_cycle, sizeof(send_cycle));
-  memset(&report[32], (int)(sequence & 0xFFu), sizeof(report) - 32u);
+  report.magic[0] = 'U';
+  report.magic[1] = 'M';
+  report.magic[2] = 'O';
+  report.magic[3] = 'N';
+  report.sequence = sequence;
+  report.tick_ms = tick_ms;
+  report.previous_completion_gap_cycles =
+      raw_hid_diagnostic_previous_completion_gap_cycles;
+  report.rearm_cycles = rearm_cycles;
+  report.send_interval_cycles = send_interval_cycles;
+  report.cpu_hz = cpu_hz;
+  report.send_cycle = send_cycle;
+  hid_fill_raw_hid_matrix_diagnostics(&report);
 
-  if (tud_hid_n_report(USB_ITF_RAW_HID, 0, report, sizeof(report))) {
+  if (tud_hid_n_report(USB_ITF_RAW_HID, 0, &report, sizeof(report))) {
     EVENT_TRACE(
         "[event] hid send raw diag seq=%lu tick=%lu completion=%lu rearm=%lu "
         "send_interval=%lu send_cycle=%lu\n",

@@ -33,7 +33,9 @@
 #endif
 
 #define ADS7953_CHANNELS_PER_DEVICE 16u
-#define ADS7953_FRAMES_PER_SWEEP (ADS7953_CHANNELS_PER_DEVICE + 2u)
+#define ADS7953_PIPELINE_FLUSH_FRAMES 2u
+#define ADS7953_MAX_FRAMES_PER_SWEEP \
+  (ADS7953_CHANNELS_PER_DEVICE + ADS7953_PIPELINE_FLUSH_FRAMES)
 #define ADS7953_COMMAND_MANUAL_MODE 0x1800u
 #define ADS7953_COMMAND_CHANNEL_SHIFT 7u
 #define ADS7953_RESULT_CHANNEL_SHIFT 12u
@@ -53,6 +55,9 @@ _Static_assert(ADC_NUM_RAW_INPUTS ==
 
 static const uint8_t spi_adc_bus_ids[] = SPI_ADC_BUS_IDS;
 static const uint8_t spi_adc_device_bus[] = SPI_ADC_DEVICE_BUS;
+static const uint8_t spi_adc_device_scan_counts[] = SPI_ADC_DEVICE_SCAN_COUNTS;
+static const uint8_t spi_adc_device_scan_channels[][ADS7953_CHANNELS_PER_DEVICE] =
+    SPI_ADC_DEVICE_SCAN_CHANNELS;
 static gpio_type *spi_adc_device_cs_ports[] = SPI_ADC_DEVICE_CS_PORTS;
 static const uint16_t spi_adc_device_cs_pins[] = SPI_ADC_DEVICE_CS_PINS;
 
@@ -60,6 +65,11 @@ _Static_assert(M_ARRAY_SIZE(spi_adc_bus_ids) == SPI_ADC_NUM_BUSES,
                "Invalid number of SPI ADC buses");
 _Static_assert(M_ARRAY_SIZE(spi_adc_device_bus) == SPI_ADC_NUM_DEVICES,
                "Invalid number of SPI ADC device bus mappings");
+_Static_assert(M_ARRAY_SIZE(spi_adc_device_scan_counts) == SPI_ADC_NUM_DEVICES,
+               "Invalid number of SPI ADC scan counts");
+_Static_assert(M_ARRAY_SIZE(spi_adc_device_scan_channels) ==
+                   SPI_ADC_NUM_DEVICES,
+               "Invalid number of SPI ADC scan-channel maps");
 _Static_assert(M_ARRAY_SIZE(spi_adc_device_cs_ports) == SPI_ADC_NUM_DEVICES,
                "Invalid number of SPI ADC chip select ports");
 _Static_assert(M_ARRAY_SIZE(spi_adc_device_cs_pins) == SPI_ADC_NUM_DEVICES,
@@ -121,13 +131,16 @@ static spi_chip_select_t spi_adc_chip_selects[SPI_ADC_NUM_DEVICES];
 static spi_adc_bus_state_t spi_adc_buses[SPI_ADC_NUM_BUSES];
 
 __attribute__((aligned(8))) static uint16_t
-    spi_adc_tx_frames[SPI_ADC_NUM_DEVICES][ADS7953_FRAMES_PER_SWEEP];
+    spi_adc_tx_frames[SPI_ADC_NUM_DEVICES][ADS7953_MAX_FRAMES_PER_SWEEP];
 __attribute__((aligned(8))) static volatile uint16_t
-    spi_adc_rx_frames[SPI_ADC_NUM_DEVICES][ADS7953_FRAMES_PER_SWEEP];
+    spi_adc_rx_frames[SPI_ADC_NUM_DEVICES][ADS7953_MAX_FRAMES_PER_SWEEP];
 static uint16_t spi_adc_scan_buffer[ADC_NUM_RAW_INPUTS];
 
 static volatile bool spi_adc_initialized = false;
 static volatile uint8_t spi_adc_completed_buses = 0;
+static volatile uint32_t spi_adc_scan_cycle_start = 0;
+static volatile uint32_t spi_adc_first_bus_completion_cycle = 0;
+static analog_scan_diagnostics_t analog_scan_diagnostics;
 
 #if DIGITAL_NUM_INPUTS > 0
 // GPIO ports for each digital input.
@@ -284,6 +297,42 @@ static dmamux_requst_id_sel_type spi_adc_dma_request(spi_type *instance,
   return DMAMUX_DMAREQ_ID_SPI1_RX;
 }
 
+static uint16_t spi_adc_device_frame_count(uint8_t device_index) {
+  if (device_index >= SPI_ADC_NUM_DEVICES) {
+    board_error_handler();
+  }
+
+  const uint8_t scan_count = spi_adc_device_scan_counts[device_index];
+  if (scan_count > ADS7953_CHANNELS_PER_DEVICE) {
+    board_error_handler();
+  }
+
+  return (uint16_t)scan_count + ADS7953_PIPELINE_FLUSH_FRAMES;
+}
+
+static uint32_t spi_adc_cycles_to_us(uint32_t cycles) {
+#if defined(F_CPU) && F_CPU > 0
+  return (uint32_t)(((uint64_t)cycles * 1000000ull) / (uint64_t)F_CPU);
+#else
+  (void)cycles;
+  return 0;
+#endif
+}
+
+static void analog_reset_scan_diagnostics_impl(void) {
+  uint8_t active_device_count = 0;
+
+  for (uint32_t i = 0; i < SPI_ADC_NUM_DEVICES; i++) {
+    if (spi_adc_device_scan_counts[i] != 0u) {
+      active_device_count++;
+    }
+  }
+
+  memset(&analog_scan_diagnostics, 0, sizeof(analog_scan_diagnostics));
+  analog_scan_diagnostics.active_bus_count = SPI_ADC_NUM_BUSES;
+  analog_scan_diagnostics.active_device_count = active_device_count;
+}
+
 static void spi_adc_init_dma_channel(dma_channel_type *channel,
                                      uint32_t peripheral_base_addr,
                                      dma_dir_type direction) {
@@ -291,7 +340,7 @@ static void spi_adc_init_dma_channel(dma_channel_type *channel,
 
   dma_reset(channel);
   dma_default_para_init(&dma_init_struct);
-  dma_init_struct.buffer_size = ADS7953_FRAMES_PER_SWEEP;
+  dma_init_struct.buffer_size = ADS7953_MAX_FRAMES_PER_SWEEP;
   dma_init_struct.direction = direction;
   dma_init_struct.memory_data_width = DMA_MEMORY_DATA_WIDTH_HALFWORD;
   dma_init_struct.memory_inc_enable = TRUE;
@@ -331,14 +380,27 @@ static void spi_adc_prepare_tx_frames(void) {
       ADS7953_COMMAND_MANUAL_MODE | ADS7953_COMMAND_RANGE_BIT;
 
   for (uint32_t device = 0; device < SPI_ADC_NUM_DEVICES; device++) {
-    for (uint32_t channel = 0; channel < ADS7953_CHANNELS_PER_DEVICE; channel++) {
-      spi_adc_tx_frames[device][channel] =
+    const uint8_t scan_count = spi_adc_device_scan_counts[device];
+    uint32_t frame = 0;
+
+    for (; frame < scan_count; frame++) {
+      const uint8_t channel = spi_adc_device_scan_channels[device][frame];
+      if (channel >= ADS7953_CHANNELS_PER_DEVICE) {
+        board_error_handler();
+      }
+
+      spi_adc_tx_frames[device][frame] =
           command_base | (uint16_t)(channel << ADS7953_COMMAND_CHANNEL_SHIFT);
     }
 
     // Two trailing frames flush the device's two-frame conversion pipeline.
-    spi_adc_tx_frames[device][ADS7953_CHANNELS_PER_DEVICE] = command_base;
-    spi_adc_tx_frames[device][ADS7953_CHANNELS_PER_DEVICE + 1u] = command_base;
+    for (; frame < spi_adc_device_frame_count((uint8_t)device); frame++) {
+      spi_adc_tx_frames[device][frame] = command_base;
+    }
+
+    for (; frame < ADS7953_MAX_FRAMES_PER_SWEEP; frame++) {
+      spi_adc_tx_frames[device][frame] = command_base;
+    }
   }
 }
 
@@ -385,7 +447,8 @@ static void spi_adc_init_bus_state(spi_adc_bus_state_t *bus,
   bus->tx_request = spi_adc_dma_request(bus->instance, false);
 
   for (uint8_t device = 0; device < SPI_ADC_NUM_DEVICES; device++) {
-    if (spi_adc_device_bus[device] != bus->bus_id) {
+    if (spi_adc_device_bus[device] != bus->bus_id ||
+        spi_adc_device_scan_counts[device] == 0u) {
       continue;
     }
 
@@ -415,9 +478,9 @@ static void spi_adc_start_bus_transfer(spi_adc_bus_state_t *bus,
   dma_flag_clear(bus->rx_flag);
 
   bus->rx_dma->maddr = (uint32_t)spi_adc_rx_frames[device_index];
-  bus->rx_dma->dtcnt = ADS7953_FRAMES_PER_SWEEP;
+  bus->rx_dma->dtcnt = spi_adc_device_frame_count(device_index);
   bus->tx_dma->maddr = (uint32_t)spi_adc_tx_frames[device_index];
-  bus->tx_dma->dtcnt = ADS7953_FRAMES_PER_SWEEP;
+  bus->tx_dma->dtcnt = spi_adc_device_frame_count(device_index);
 
   spi_cs_select(&spi_adc_chip_selects[device_index]);
   dma_channel_enable(bus->rx_dma, TRUE);
@@ -428,6 +491,8 @@ static void spi_adc_start_bus_transfer(spi_adc_bus_state_t *bus,
 
 static void spi_adc_start_scan_cycle(void) {
   spi_adc_completed_buses = 0;
+  spi_adc_scan_cycle_start = board_cycle_count();
+  spi_adc_first_bus_completion_cycle = 0;
   memset(spi_adc_scan_buffer, 0, sizeof(spi_adc_scan_buffer));
 
   for (uint32_t i = 0; i < SPI_ADC_NUM_BUSES; i++) {
@@ -437,8 +502,9 @@ static void spi_adc_start_scan_cycle(void) {
 
 static void spi_adc_store_device_samples(uint8_t device_index) {
   const uint32_t raw_offset = (uint32_t)device_index * ADS7953_CHANNELS_PER_DEVICE;
+  const uint16_t frame_count = spi_adc_device_frame_count(device_index);
 
-  for (uint32_t frame = 0; frame < ADS7953_FRAMES_PER_SWEEP; frame++) {
+  for (uint32_t frame = 0; frame < frame_count; frame++) {
     const uint16_t value = spi_adc_rx_frames[device_index][frame];
     const uint8_t channel = (uint8_t)((value >> ADS7953_RESULT_CHANNEL_SHIFT) &
                                       ADS7953_RESULT_CHANNEL_MASK);
@@ -453,6 +519,7 @@ static void spi_adc_store_device_samples(uint8_t device_index) {
 
 static void spi_adc_complete_bus_transfer(spi_adc_bus_state_t *bus) {
   const uint8_t device_index = bus->device_indices[bus->current_device_slot];
+  const uint32_t completion_cycle = board_cycle_count();
 
   dma_channel_enable(bus->rx_dma, FALSE);
   dma_channel_enable(bus->tx_dma, FALSE);
@@ -469,9 +536,30 @@ static void spi_adc_complete_bus_transfer(spi_adc_bus_state_t *bus) {
     return;
   }
 
+  if (spi_adc_completed_buses == 0u) {
+    spi_adc_first_bus_completion_cycle = completion_cycle;
+  }
+
   spi_adc_completed_buses++;
   if (spi_adc_completed_buses < SPI_ADC_NUM_BUSES) {
     return;
+  }
+
+  const uint32_t round_cycles = completion_cycle - spi_adc_scan_cycle_start;
+  const uint32_t bus_skew_cycles =
+      completion_cycle - spi_adc_first_bus_completion_cycle;
+  analog_scan_diagnostics.scan_count++;
+  analog_scan_diagnostics.last_scan_cycles = round_cycles;
+  analog_scan_diagnostics.last_scan_us = spi_adc_cycles_to_us(round_cycles);
+  analog_scan_diagnostics.last_bus_completion_skew_cycles = bus_skew_cycles;
+  if (round_cycles > analog_scan_diagnostics.max_scan_cycles) {
+    analog_scan_diagnostics.max_scan_cycles = round_cycles;
+    analog_scan_diagnostics.max_scan_us =
+        analog_scan_diagnostics.last_scan_us;
+  }
+  if (bus_skew_cycles >
+      analog_scan_diagnostics.max_bus_completion_skew_cycles) {
+    analog_scan_diagnostics.max_bus_completion_skew_cycles = bus_skew_cycles;
   }
 
   analog_scan_store_samples(spi_adc_scan_buffer, 0);
@@ -515,6 +603,7 @@ void analog_init(void) {
 #endif
 
   analog_scan_reset();
+  analog_reset_scan_diagnostics_impl();
   spi_adc_init_buses();
   spi_adc_start_scan_cycle();
 
@@ -547,6 +636,14 @@ uint16_t analog_read(uint8_t key) {
 #if ADC_NUM_RAW_INPUTS > 0
 uint16_t analog_read_raw(uint8_t index) { return analog_scan_read_raw(index); }
 #endif
+
+const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
+  return &analog_scan_diagnostics;
+}
+
+void analog_reset_scan_diagnostics(void) {
+  analog_reset_scan_diagnostics_impl();
+}
 
 static void spi_adc_handle_dma_irq(uint8_t logical_bus_index) {
   spi_adc_bus_state_t *bus;

@@ -63,6 +63,8 @@ void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons) {}
 void hid_send_reports(void) {}
 
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {}
+void trackball_increase_cpi(void) {}
+void trackball_decrease_cpi(void) {}
 
 void profile_runtime_apply_current(void) {}
 void profile_runtime_reload_current(void) {}

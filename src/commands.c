@@ -496,6 +496,46 @@ void command_process(const uint8_t *buf) {
     out->trackball_state.last_dy = state.last_dy;
     break;
   }
+  case COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS: {
+    const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
+    out->matrix_scan_diagnostics.scan_count = diag->scan_count;
+    out->matrix_scan_diagnostics.last_scan_cycles = diag->last_scan_cycles;
+    out->matrix_scan_diagnostics.max_scan_cycles = diag->max_scan_cycles;
+    out->matrix_scan_diagnostics.last_scan_us = diag->last_scan_us;
+    out->matrix_scan_diagnostics.max_scan_us = diag->max_scan_us;
+    out->matrix_scan_diagnostics.max_sample_delta = diag->max_sample_delta;
+    out->matrix_scan_diagnostics.max_sample_velocity =
+        diag->max_sample_velocity;
+    memcpy(out->matrix_scan_diagnostics.last_mode_counts,
+           diag->last_mode_counts,
+           sizeof(out->matrix_scan_diagnostics.last_mode_counts));
+    break;
+  }
+  case COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS: {
+    matrix_reset_scan_diagnostics();
+    break;
+  }
+  case COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS: {
+    const analog_scan_diagnostics_t *diag = analog_get_scan_diagnostics();
+    out->analog_scan_diagnostics.scan_count = diag->scan_count;
+    out->analog_scan_diagnostics.last_scan_cycles = diag->last_scan_cycles;
+    out->analog_scan_diagnostics.max_scan_cycles = diag->max_scan_cycles;
+    out->analog_scan_diagnostics.last_scan_us = diag->last_scan_us;
+    out->analog_scan_diagnostics.max_scan_us = diag->max_scan_us;
+    out->analog_scan_diagnostics.last_bus_completion_skew_cycles =
+        diag->last_bus_completion_skew_cycles;
+    out->analog_scan_diagnostics.max_bus_completion_skew_cycles =
+        diag->max_bus_completion_skew_cycles;
+    out->analog_scan_diagnostics.active_bus_count = diag->active_bus_count;
+    out->analog_scan_diagnostics.active_device_count =
+        diag->active_device_count;
+    out->analog_scan_diagnostics.reserved = diag->reserved;
+    break;
+  }
+  case COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS: {
+    analog_reset_scan_diagnostics();
+    break;
+  }
   default: {
     // Unknown command
     success = false;

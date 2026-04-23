@@ -15,6 +15,7 @@ key_state_t key_matrix[NUM_KEYS];
 static uint8_t last_grb_frame[NUM_LEDS * 3];
 static uint16_t last_grb_frame_len;
 static uint32_t mock_time;
+static bool mock_usb_runtime_suspended;
 
 void rgb_driver_init(void) {}
 void rgb_driver_task(void) {}
@@ -27,6 +28,8 @@ void rgb_driver_write(const uint8_t *grb_data, uint16_t byte_count) {
 uint32_t timer_read(void) { return mock_time; }
 
 uint32_t matrix_get_idle_time(void) { return 0; }
+
+bool usb_runtime_is_suspended(void) { return mock_usb_runtime_suspended; }
 
 uint8_t layout_get_current_layer(void) { return 0; }
 
@@ -98,6 +101,7 @@ void setUp(void) {
   memset(last_grb_frame, 0, sizeof(last_grb_frame));
   last_grb_frame_len = 0;
   mock_time = 0;
+  mock_usb_runtime_suspended = false;
 
   mock_eeconfig.profiles[0].rgb_config.enabled = 1u;
   mock_eeconfig.profiles[0].rgb_config.global_brightness = 255u;
@@ -235,10 +239,43 @@ void test_rgb_binary_clock_renders_time_digits_and_seconds_progress(void) {
   }
 }
 
+void test_rgb_turns_off_while_usb_is_suspended_and_recovers_after_resume(void) {
+  rgb_config_t *config = rgb_get_config();
+  config->current_effect = RGB_EFFECT_SOLID_COLOR;
+  config->solid_color = (rgb_color_t){.r = 100u, .g = 50u, .b = 25u};
+
+  mock_time = 1000u;
+  rgb_task();
+
+  rgb_color_t solid = driver_rgb_at(0u);
+  TEST_ASSERT_EQUAL_UINT8(100u, solid.r);
+  TEST_ASSERT_EQUAL_UINT8(50u, solid.g);
+  TEST_ASSERT_EQUAL_UINT8(25u, solid.b);
+
+  mock_usb_runtime_suspended = true;
+  mock_time = 1016u;
+  rgb_task();
+
+  rgb_color_t off = driver_rgb_at(0u);
+  TEST_ASSERT_EQUAL_UINT8(0u, off.r);
+  TEST_ASSERT_EQUAL_UINT8(0u, off.g);
+  TEST_ASSERT_EQUAL_UINT8(0u, off.b);
+
+  mock_usb_runtime_suspended = false;
+  mock_time = 1032u;
+  rgb_task();
+
+  solid = driver_rgb_at(0u);
+  TEST_ASSERT_EQUAL_UINT8(100u, solid.r);
+  TEST_ASSERT_EQUAL_UINT8(50u, solid.g);
+  TEST_ASSERT_EQUAL_UINT8(25u, solid.b);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_rgb_trigger_state_uses_configured_color_for_each_state);
   RUN_TEST(test_rgb_solid_color_scales_global_brightness);
   RUN_TEST(test_rgb_binary_clock_renders_time_digits_and_seconds_progress);
+  RUN_TEST(test_rgb_turns_off_while_usb_is_suspended_and_recovers_after_resume);
   return UNITY_END();
 }

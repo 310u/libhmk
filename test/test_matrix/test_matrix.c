@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "eeconfig.h"
+#include "hardware/analog_api.h"
 #include "matrix.h"
 
 eeconfig_t mock_eeconfig;
@@ -8,12 +9,19 @@ const eeconfig_t *eeconfig = &mock_eeconfig;
 
 static uint16_t analog_values[NUM_KEYS];
 static uint32_t mock_timer;
+static uint32_t mock_cycle;
+static uint32_t mock_cycle_step;
 
 void analog_task(void) {}
 
 uint16_t analog_read(uint8_t key) { return analog_values[key]; }
 
 uint32_t timer_read(void) { return mock_timer++; }
+
+uint32_t board_cycle_count(void) {
+  mock_cycle += mock_cycle_step;
+  return mock_cycle;
+}
 
 bool wear_leveling_write(uint32_t address, const void *data, uint32_t len) {
   (void)address;
@@ -23,9 +31,12 @@ bool wear_leveling_write(uint32_t address, const void *data, uint32_t len) {
 }
 
 static void init_key_state(uint8_t key) {
+  key_matrix[key].adc_raw = 2400;
   key_matrix[key].adc_filtered = 2400;
   key_matrix[key].adc_rest_value = 2400;
   key_matrix[key].adc_bottom_out_value = 3050;
+  key_matrix[key].filter_mode = MATRIX_FILTER_MODE_IDLE;
+  key_matrix[key].filter_decay = 0;
   key_matrix[key].distance = 0;
   key_matrix[key].extremum = 0;
   key_matrix[key].key_dir = KEY_DIR_INACTIVE;
@@ -47,12 +58,17 @@ void setUp(void) {
   memset(key_matrix, 0, sizeof(key_matrix));
   memset(analog_values, 0, sizeof(analog_values));
   mock_timer = 0;
+  mock_cycle = 0;
+  mock_cycle_step = 4320u;
 
   mock_eeconfig.current_profile = 0;
   mock_eeconfig.calibration.initial_rest_value = 2400;
   mock_eeconfig.calibration.initial_bottom_out_threshold = 650;
   mock_eeconfig.options.continuous_calibration = false;
   mock_eeconfig.options.save_bottom_out_threshold = false;
+  matrix_recalibrate(false);
+  mock_timer = 0;
+  mock_cycle = 0;
 
   for (uint8_t i = 0; i < NUM_KEYS; i++) {
     init_key_state(i);
@@ -79,6 +95,7 @@ void test_matrix_large_delta_press_and_release_stay_responsive(void) {
 }
 
 void test_matrix_uses_faster_filter_for_large_adc_delta(void) {
+  key_matrix[0].adc_raw = 2980;
   key_matrix[0].adc_filtered = 3000;
   key_matrix[0].adc_rest_value = 2400;
   key_matrix[0].adc_bottom_out_value = 3050;
@@ -87,10 +104,66 @@ void test_matrix_uses_faster_filter_for_large_adc_delta(void) {
   key_matrix[0].key_dir = KEY_DIR_DOWN;
   key_matrix[0].is_pressed = true;
 
-  analog_values[0] = 2400;
+  analog_values[0] = 2960;
   matrix_scan();
 
-  TEST_ASSERT_EQUAL_UINT16(2850, key_matrix[0].adc_filtered);
+  TEST_ASSERT_EQUAL_UINT16(2990, key_matrix[0].adc_filtered);
+  TEST_ASSERT_EQUAL_UINT8(MATRIX_FILTER_MODE_FAST, key_matrix[0].filter_mode);
+}
+
+void test_matrix_uses_track_filter_for_small_adc_delta(void) {
+  key_matrix[0].adc_raw = 2408;
+  key_matrix[0].adc_filtered = 2400;
+  analog_values[0] = 2410;
+
+  matrix_scan();
+
+  TEST_ASSERT_EQUAL_UINT16(2401, key_matrix[0].adc_filtered);
+  TEST_ASSERT_EQUAL_UINT8(MATRIX_FILTER_MODE_TRACK, key_matrix[0].filter_mode);
+}
+
+void test_matrix_uses_burst_filter_and_records_scan_diagnostics(void) {
+  key_matrix[0].adc_raw = 2400;
+  key_matrix[0].adc_filtered = 2400;
+  analog_values[0] = 3000;
+
+  matrix_scan();
+
+  const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
+  TEST_ASSERT_EQUAL_UINT16(2700, key_matrix[0].adc_filtered);
+  TEST_ASSERT_EQUAL_UINT8(MATRIX_FILTER_MODE_BURST, key_matrix[0].filter_mode);
+  TEST_ASSERT_EQUAL_UINT32(1, diag->scan_count);
+  TEST_ASSERT_EQUAL_UINT32(4320, diag->last_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(4320, diag->max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(20, diag->last_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(20, diag->max_scan_us);
+  TEST_ASSERT_EQUAL_UINT16(600, diag->max_sample_delta);
+  TEST_ASSERT_EQUAL_UINT16(600, diag->max_sample_velocity);
+  TEST_ASSERT_EQUAL_UINT16(NUM_KEYS - 1, diag->last_mode_counts[MATRIX_FILTER_MODE_IDLE]);
+  TEST_ASSERT_EQUAL_UINT16(1, diag->last_mode_counts[MATRIX_FILTER_MODE_BURST]);
+}
+
+void test_matrix_clips_bottom_out_value_to_adc_maximum(void) {
+  key_matrix[0].adc_raw = ADC_MAX_VALUE;
+  key_matrix[0].adc_filtered = ADC_MAX_VALUE;
+  key_matrix[0].adc_bottom_out_value =
+      (uint16_t)(ADC_MAX_VALUE - MATRIX_CALIBRATION_EPSILON);
+  analog_values[0] = UINT16_MAX;
+
+  matrix_scan();
+
+  TEST_ASSERT_EQUAL_UINT16(ADC_MAX_VALUE, key_matrix[0].adc_bottom_out_value);
+}
+
+void test_matrix_records_large_scan_intervals_in_microseconds(void) {
+  mock_cycle_step = 3000000000u;
+
+  matrix_scan();
+
+  const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
+  TEST_ASSERT_EQUAL_UINT32(3000000000u, diag->last_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(13888888u, diag->last_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(13888888u, diag->max_scan_us);
 }
 
 void test_matrix_continuous_calibration_tracks_small_rest_drift(void) {
@@ -142,6 +215,10 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_matrix_large_delta_press_and_release_stay_responsive);
   RUN_TEST(test_matrix_uses_faster_filter_for_large_adc_delta);
+  RUN_TEST(test_matrix_uses_track_filter_for_small_adc_delta);
+  RUN_TEST(test_matrix_uses_burst_filter_and_records_scan_diagnostics);
+  RUN_TEST(test_matrix_clips_bottom_out_value_to_adc_maximum);
+  RUN_TEST(test_matrix_records_large_scan_intervals_in_microseconds);
   RUN_TEST(test_matrix_continuous_calibration_tracks_small_rest_drift);
   RUN_TEST(test_matrix_continuous_calibration_ignores_large_rest_drift);
   RUN_TEST(test_matrix_continuous_calibration_ignores_unstable_keystroke_motion);

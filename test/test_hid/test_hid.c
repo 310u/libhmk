@@ -3,6 +3,7 @@
 #include "commands.h"
 #include "hid.h"
 #include "keycodes.h"
+#include "matrix.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
 
@@ -33,6 +34,42 @@ static uint8_t raw_hid_reports[8][RAW_HID_EP_SIZE];
 static uint8_t raw_hid_report_count;
 static uint8_t last_command_packet[RAW_HID_EP_SIZE];
 static uint16_t last_command_packet_len;
+static matrix_scan_diagnostics_t mock_matrix_diag;
+
+#if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
+typedef struct __attribute__((packed)) {
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint16_t max_sample_delta;
+  uint16_t max_sample_velocity;
+  uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+} test_raw_hid_matrix_diagnostic_payload_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t magic[4];
+  uint32_t sequence;
+  uint32_t tick_ms;
+  uint32_t previous_completion_gap_cycles;
+  uint32_t rearm_cycles;
+  uint32_t send_interval_cycles;
+  uint32_t cpu_hz;
+  uint32_t send_cycle;
+  test_raw_hid_matrix_diagnostic_payload_t matrix;
+} test_raw_hid_diagnostic_report_t;
+
+_Static_assert(sizeof(test_raw_hid_diagnostic_report_t) == RAW_HID_EP_SIZE,
+               "test raw hid diagnostic report must match endpoint size");
+
+static test_raw_hid_diagnostic_report_t
+raw_hid_diag_report_at(uint8_t index) {
+  test_raw_hid_diagnostic_report_t report;
+  memcpy(&report, raw_hid_reports[index], sizeof(report));
+  return report;
+}
+#endif
 
 const uint16_t keycode_to_hid[256] = {
     [KC_A] = 0x0004,
@@ -58,6 +95,10 @@ bool command_enqueue(const uint8_t *buffer, uint16_t len) {
 
 void command_process(const uint8_t *buffer) {
   (void)buffer;
+}
+
+const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
+  return &mock_matrix_diag;
 }
 
 uint32_t timer_read(void) { return mock_timer++; }
@@ -157,6 +198,18 @@ void setUp(void) {
   usb_suspended = false;
   mock_timer = 0;
   mock_cycle = 0;
+  memset(&mock_matrix_diag, 0, sizeof(mock_matrix_diag));
+  mock_matrix_diag.scan_count = 4u;
+  mock_matrix_diag.last_scan_cycles = 700u;
+  mock_matrix_diag.max_scan_cycles = 900u;
+  mock_matrix_diag.last_scan_us = 3u;
+  mock_matrix_diag.max_scan_us = 4u;
+  mock_matrix_diag.max_sample_delta = 18u;
+  mock_matrix_diag.max_sample_velocity = 11u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_IDLE] = 6u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_TRACK] = 2u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_FAST] = 1u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_BURST] = 1u;
   reset_observations();
 }
 
@@ -349,6 +402,8 @@ void test_hid_tracks_mouse_hi_res_scroll_feature_state(void) {
 #if defined(USBMON_DIAGNOSTIC_RAW_HID_STREAM)
 void test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports(void) {
   uint8_t control_packet[RAW_HID_EP_SIZE] = {0};
+  test_raw_hid_diagnostic_report_t first_report;
+  test_raw_hid_diagnostic_report_t second_report;
   memcpy(control_packet, "UMON", 4);
   control_packet[4] = 1;
 
@@ -361,36 +416,40 @@ void test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports(void) {
   TEST_ASSERT_EQUAL_UINT8(USB_ITF_RAW_HID, last_instance);
   TEST_ASSERT_EQUAL_UINT16(RAW_HID_EP_SIZE, last_report_len);
   TEST_ASSERT_EQUAL_UINT8(1, raw_hid_report_count);
-  TEST_ASSERT_EQUAL_UINT8('U', raw_hid_reports[0][0]);
-  TEST_ASSERT_EQUAL_UINT8('M', raw_hid_reports[0][1]);
-  TEST_ASSERT_EQUAL_UINT8('O', raw_hid_reports[0][2]);
-  TEST_ASSERT_EQUAL_UINT8('N', raw_hid_reports[0][3]);
-
-  uint32_t sequence = UINT32_MAX;
-  uint32_t completion_cycles = UINT32_MAX;
-  uint32_t rearm_cycles = UINT32_MAX;
-  uint32_t send_interval_cycles = UINT32_MAX;
-  memcpy(&sequence, &raw_hid_reports[0][4], sizeof(sequence));
-  TEST_ASSERT_EQUAL_UINT32(0, sequence);
-  memcpy(&completion_cycles, &raw_hid_reports[0][12], sizeof(completion_cycles));
-  memcpy(&rearm_cycles, &raw_hid_reports[0][16], sizeof(rearm_cycles));
-  memcpy(&send_interval_cycles, &raw_hid_reports[0][20], sizeof(send_interval_cycles));
-  TEST_ASSERT_EQUAL_UINT32(0, completion_cycles);
-  TEST_ASSERT_EQUAL_UINT32(0, rearm_cycles);
-  TEST_ASSERT_EQUAL_UINT32(0, send_interval_cycles);
+  first_report = raw_hid_diag_report_at(0);
+  TEST_ASSERT_EQUAL_UINT8('U', first_report.magic[0]);
+  TEST_ASSERT_EQUAL_UINT8('M', first_report.magic[1]);
+  TEST_ASSERT_EQUAL_UINT8('O', first_report.magic[2]);
+  TEST_ASSERT_EQUAL_UINT8('N', first_report.magic[3]);
+  TEST_ASSERT_EQUAL_UINT32(0, first_report.sequence);
+  TEST_ASSERT_EQUAL_UINT32(0, first_report.previous_completion_gap_cycles);
+  TEST_ASSERT_EQUAL_UINT32(0, first_report.rearm_cycles);
+  TEST_ASSERT_EQUAL_UINT32(0, first_report.send_interval_cycles);
+  TEST_ASSERT_EQUAL_UINT32(4u, first_report.matrix.scan_count);
+  TEST_ASSERT_EQUAL_UINT32(700u, first_report.matrix.last_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(900u, first_report.matrix.max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(3u, first_report.matrix.last_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(4u, first_report.matrix.max_scan_us);
+  TEST_ASSERT_EQUAL_UINT16(18u, first_report.matrix.max_sample_delta);
+  TEST_ASSERT_EQUAL_UINT16(11u, first_report.matrix.max_sample_velocity);
+  TEST_ASSERT_EQUAL_UINT16(6u,
+                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_IDLE]);
+  TEST_ASSERT_EQUAL_UINT16(2u,
+                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_TRACK]);
+  TEST_ASSERT_EQUAL_UINT16(1u,
+                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_FAST]);
+  TEST_ASSERT_EQUAL_UINT16(1u,
+                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_BURST]);
 
   tud_hid_report_complete_cb(USB_ITF_RAW_HID, raw_hid_reports[0], RAW_HID_EP_SIZE);
 
   TEST_ASSERT_EQUAL_UINT32(2, report_count);
   TEST_ASSERT_EQUAL_UINT8(2, raw_hid_report_count);
-  memcpy(&sequence, &raw_hid_reports[1][4], sizeof(sequence));
-  TEST_ASSERT_EQUAL_UINT32(1, sequence);
-  memcpy(&completion_cycles, &raw_hid_reports[1][12], sizeof(completion_cycles));
-  memcpy(&rearm_cycles, &raw_hid_reports[1][16], sizeof(rearm_cycles));
-  memcpy(&send_interval_cycles, &raw_hid_reports[1][20], sizeof(send_interval_cycles));
-  TEST_ASSERT_EQUAL_UINT32(100, completion_cycles);
-  TEST_ASSERT_EQUAL_UINT32(100, rearm_cycles);
-  TEST_ASSERT_EQUAL_UINT32(200, send_interval_cycles);
+  second_report = raw_hid_diag_report_at(1);
+  TEST_ASSERT_EQUAL_UINT32(1, second_report.sequence);
+  TEST_ASSERT_EQUAL_UINT32(100, second_report.previous_completion_gap_cycles);
+  TEST_ASSERT_EQUAL_UINT32(100, second_report.rearm_cycles);
+  TEST_ASSERT_EQUAL_UINT32(200, second_report.send_interval_cycles);
 }
 
 void test_hid_usbmon_diagnostic_stream_stops_for_regular_commands(void) {

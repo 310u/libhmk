@@ -64,6 +64,10 @@ typedef enum {
   COMMAND_SET_JOYSTICK_CONFIG,
   COMMAND_SET_HOST_TIME,
   COMMAND_GET_TRACKBALL_STATE,
+  COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS,
+  COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS,
+  COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS,
+  COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -222,6 +226,30 @@ typedef struct __attribute__((packed)) {
   int16_t last_dy;
 } command_out_trackball_state_t;
 
+typedef struct __attribute__((packed)) {
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint16_t max_sample_delta;
+  uint16_t max_sample_velocity;
+  uint16_t last_mode_counts[4];
+} command_out_matrix_scan_diagnostics_t;
+
+typedef struct __attribute__((packed)) {
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint32_t last_bus_completion_skew_cycles;
+  uint32_t max_bus_completion_skew_cycles;
+  uint8_t active_bus_count;
+  uint8_t active_device_count;
+  uint16_t reserved;
+} command_out_analog_scan_diagnostics_t;
+
 // Command output buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -263,6 +291,10 @@ typedef struct __attribute__((packed)) {
     command_out_joystick_config_t joystick_config;
     // For `COMMAND_GET_TRACKBALL_STATE`
     command_out_trackball_state_t trackball_state;
+    // For `COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS`
+    command_out_matrix_scan_diagnostics_t matrix_scan_diagnostics;
+    // For `COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS`
+    command_out_analog_scan_diagnostics_t analog_scan_diagnostics;
   };
 } command_out_buffer_t;
 

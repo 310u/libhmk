@@ -1,9 +1,11 @@
 #include <unity.h>
 
 #include "commands.h"
+#include "hardware/analog_api.h"
 #include "layout.h"
 #include "matrix.h"
 #include "rgb.h"
+#include "trackball.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
 
@@ -24,10 +26,14 @@ static uint32_t recalibrate_count;
 static uint32_t board_reset_count;
 static uint32_t board_bootloader_count;
 static uint32_t rgb_apply_count;
+static uint32_t matrix_diag_reset_count;
+static uint32_t analog_diag_reset_count;
 static bool host_time_synced;
 static uint8_t host_time_hours;
 static uint8_t host_time_minutes;
 static uint8_t host_time_seconds;
+static matrix_scan_diagnostics_t mock_matrix_diag;
+static analog_scan_diagnostics_t mock_analog_diag;
 
 #if defined(RGB_ENABLED)
 static rgb_config_t mock_rgb_config;
@@ -55,6 +61,28 @@ void profile_runtime_reload_current(void) { profile_reload_count++; }
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   (void)reset_bottom_out_threshold;
   recalibrate_count++;
+}
+
+const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
+  return &mock_matrix_diag;
+}
+
+void matrix_reset_scan_diagnostics(void) {
+  memset(&mock_matrix_diag, 0, sizeof(mock_matrix_diag));
+  matrix_diag_reset_count++;
+}
+
+const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
+  return &mock_analog_diag;
+}
+
+void analog_reset_scan_diagnostics(void) {
+  memset(&mock_analog_diag, 0, sizeof(mock_analog_diag));
+  analog_diag_reset_count++;
+}
+
+void trackball_get_state(trackball_diagnostic_state_t *state) {
+  memset(state, 0, sizeof(*state));
 }
 
 void board_reset(void) { board_reset_count++; }
@@ -120,10 +148,14 @@ void setUp(void) {
   board_reset_count = 0;
   board_bootloader_count = 0;
   rgb_apply_count = 0;
+  matrix_diag_reset_count = 0;
+  analog_diag_reset_count = 0;
   host_time_synced = false;
   host_time_hours = 0;
   host_time_minutes = 0;
   host_time_seconds = 0;
+  memset(&mock_matrix_diag, 0, sizeof(mock_matrix_diag));
+  memset(&mock_analog_diag, 0, sizeof(mock_analog_diag));
 #if defined(RGB_ENABLED)
   memset(&mock_rgb_config, 0, sizeof(mock_rgb_config));
 #endif
@@ -242,6 +274,127 @@ void test_command_enqueue_rejects_second_pending_request(void) {
   TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
 }
 
+void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
+  command_in_buffer_t get_diag = {
+      .command_id = COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS,
+  };
+
+  mock_matrix_diag.scan_count = 77u;
+  mock_matrix_diag.last_scan_cycles = 8100u;
+  mock_matrix_diag.max_scan_cycles = 9100u;
+  mock_matrix_diag.last_scan_us = 37u;
+  mock_matrix_diag.max_scan_us = 42u;
+  mock_matrix_diag.max_sample_delta = 55u;
+  mock_matrix_diag.max_sample_velocity = 34u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_IDLE] = 12u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_TRACK] = 7u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_FAST] = 2u;
+  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_BURST] = 1u;
+
+  command_send_and_flush(&get_diag);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS,
+                          raw_hid_reports[0][0]);
+
+  command_out_buffer_t out = {0};
+  memcpy(&out, raw_hid_reports[0], sizeof(out));
+  TEST_ASSERT_EQUAL_UINT32(77u, out.matrix_scan_diagnostics.scan_count);
+  TEST_ASSERT_EQUAL_UINT32(8100u, out.matrix_scan_diagnostics.last_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(9100u, out.matrix_scan_diagnostics.max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(37u, out.matrix_scan_diagnostics.last_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(42u, out.matrix_scan_diagnostics.max_scan_us);
+  TEST_ASSERT_EQUAL_UINT16(55u, out.matrix_scan_diagnostics.max_sample_delta);
+  TEST_ASSERT_EQUAL_UINT16(34u,
+                           out.matrix_scan_diagnostics.max_sample_velocity);
+  TEST_ASSERT_EQUAL_UINT16(
+      12u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_IDLE]);
+  TEST_ASSERT_EQUAL_UINT16(
+      7u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_TRACK]);
+  TEST_ASSERT_EQUAL_UINT16(
+      2u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_FAST]);
+  TEST_ASSERT_EQUAL_UINT16(
+      1u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_BURST]);
+}
+
+void test_command_reset_matrix_scan_diagnostics_clears_snapshot(void) {
+  command_in_buffer_t reset_diag = {
+      .command_id = COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS,
+  };
+
+  mock_matrix_diag.scan_count = 1u;
+  mock_matrix_diag.max_scan_cycles = 2u;
+  mock_matrix_diag.max_sample_delta = 3u;
+
+  command_send_and_flush(&reset_diag);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS,
+                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(1, matrix_diag_reset_count);
+  TEST_ASSERT_EQUAL_UINT32(0, mock_matrix_diag.scan_count);
+  TEST_ASSERT_EQUAL_UINT32(0, mock_matrix_diag.max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT16(0, mock_matrix_diag.max_sample_delta);
+}
+
+void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
+  command_in_buffer_t get_diag = {
+      .command_id = COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS,
+  };
+
+  mock_analog_diag.scan_count = 123u;
+  mock_analog_diag.last_scan_cycles = 8200u;
+  mock_analog_diag.max_scan_cycles = 9100u;
+  mock_analog_diag.last_scan_us = 38u;
+  mock_analog_diag.max_scan_us = 42u;
+  mock_analog_diag.last_bus_completion_skew_cycles = 120u;
+  mock_analog_diag.max_bus_completion_skew_cycles = 180u;
+  mock_analog_diag.active_bus_count = 2u;
+  mock_analog_diag.active_device_count = 4u;
+
+  command_send_and_flush(&get_diag);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS,
+                          raw_hid_reports[0][0]);
+
+  command_out_buffer_t out = {0};
+  memcpy(&out, raw_hid_reports[0], sizeof(out));
+  TEST_ASSERT_EQUAL_UINT32(123u, out.analog_scan_diagnostics.scan_count);
+  TEST_ASSERT_EQUAL_UINT32(8200u,
+                           out.analog_scan_diagnostics.last_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(9100u,
+                           out.analog_scan_diagnostics.max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(38u, out.analog_scan_diagnostics.last_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(42u, out.analog_scan_diagnostics.max_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(
+      120u, out.analog_scan_diagnostics.last_bus_completion_skew_cycles);
+  TEST_ASSERT_EQUAL_UINT32(
+      180u, out.analog_scan_diagnostics.max_bus_completion_skew_cycles);
+  TEST_ASSERT_EQUAL_UINT8(2u, out.analog_scan_diagnostics.active_bus_count);
+  TEST_ASSERT_EQUAL_UINT8(4u, out.analog_scan_diagnostics.active_device_count);
+}
+
+void test_command_reset_analog_scan_diagnostics_clears_snapshot(void) {
+  command_in_buffer_t reset_diag = {
+      .command_id = COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS,
+  };
+
+  mock_analog_diag.scan_count = 1u;
+  mock_analog_diag.max_scan_cycles = 2u;
+  mock_analog_diag.active_bus_count = 2u;
+
+  command_send_and_flush(&reset_diag);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS,
+                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(1, analog_diag_reset_count);
+  TEST_ASSERT_EQUAL_UINT32(0, mock_analog_diag.scan_count);
+  TEST_ASSERT_EQUAL_UINT32(0, mock_analog_diag.max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT8(0, mock_analog_diag.active_bus_count);
+}
+
 #if defined(RGB_ENABLED)
 void test_command_set_host_time_updates_runtime_clock_without_flash_write(void) {
   command_in_buffer_t set_host_time = {
@@ -274,6 +427,10 @@ int main(void) {
   RUN_TEST(test_command_task_waits_until_raw_hid_is_ready);
   RUN_TEST(test_command_enqueue_defers_processing_until_task);
   RUN_TEST(test_command_enqueue_rejects_second_pending_request);
+  RUN_TEST(test_command_get_matrix_scan_diagnostics_returns_current_snapshot);
+  RUN_TEST(test_command_reset_matrix_scan_diagnostics_clears_snapshot);
+  RUN_TEST(test_command_get_analog_scan_diagnostics_returns_current_snapshot);
+  RUN_TEST(test_command_reset_analog_scan_diagnostics_clears_snapshot);
 #if defined(RGB_ENABLED)
   RUN_TEST(test_command_set_host_time_updates_runtime_clock_without_flash_write);
 #endif

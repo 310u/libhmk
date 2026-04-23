@@ -110,3 +110,102 @@ def resolve_default_keymaps(kb_json: dict) -> list[list[list[str]]]:
                 "Default keymap must be specified when no per-profile default keymaps are specified"
             )
         return [kb_json["keymap"]] * kb_json["keyboard"]["num_profiles"]
+
+
+def iter_layout_keys(kb_json: dict):
+    for row_index, row in enumerate(kb_json.get("layout", {}).get("keymap", [])):
+        for col_index, key_data in enumerate(row):
+            if not isinstance(key_data, dict):
+                continue
+
+            key_index = key_data.get("key")
+            if key_index is not None:
+                yield row_index, col_index, key_index
+
+
+def validate_spi_adc_mapping(kb_json: dict):
+    analog = kb_json.get("analog", {})
+    if analog.get("backend", "mcu_adc") != "spi_adc":
+        return
+
+    spi = analog.get("spi")
+    if spi is None:
+        raise ValueError("analog.spi must be defined when analog.backend='spi_adc'")
+
+    num_keys = kb_json["keyboard"]["num_keys"]
+    assigned_physical_keys: dict[int, str] = {}
+    seen_bus_ids: set[int] = set()
+    seen_cs_pins: dict[str, str] = {}
+    active_channel_count = 0
+
+    def record_physical_key(physical_key: int, source: str):
+        previous = assigned_physical_keys.get(physical_key)
+        if previous is not None:
+            raise ValueError(
+                f"Physical key {physical_key} is assigned more than once: {previous} and {source}"
+            )
+        assigned_physical_keys[physical_key] = source
+
+    for bus_entry in spi.get("buses", []):
+        bus_id = bus_entry["bus"]
+        if bus_id in seen_bus_ids:
+            raise ValueError(f"SPI ADC bus {bus_id} is configured more than once")
+        seen_bus_ids.add(bus_id)
+
+        for device_index, device in enumerate(bus_entry["devices"]):
+            source_prefix = f"analog.spi bus {bus_id} device {device_index}"
+            cs = device["cs"]
+            previous_cs = seen_cs_pins.get(cs)
+            if previous_cs is not None:
+                raise ValueError(
+                    f"SPI ADC chip select {cs} is reused by {previous_cs} and {source_prefix}"
+                )
+            seen_cs_pins[cs] = source_prefix
+
+            device_map = device["map"]
+            if len(device_map) != 16:
+                raise ValueError(
+                    f"{source_prefix} must declare exactly 16 ADS7953 channel slots"
+                )
+
+            for channel_index, physical_key in enumerate(device_map):
+                if physical_key == 0:
+                    continue
+
+                active_channel_count += 1
+                if physical_key > num_keys:
+                    raise ValueError(
+                        f"{source_prefix} channel {channel_index} maps to physical key {physical_key}, which exceeds keyboard.num_keys={num_keys}"
+                    )
+                record_physical_key(
+                    physical_key, f"{source_prefix} channel {channel_index}"
+                )
+
+    if active_channel_count == 0:
+        raise ValueError("analog.spi must map at least one ADS7953 channel")
+
+    digital = kb_json.get("digital", {})
+    for input_index, physical_key in enumerate(digital.get("vector", [])):
+        if physical_key == 0:
+            continue
+        if physical_key > num_keys:
+            raise ValueError(
+                f"digital.vector[{input_index}]={physical_key} exceeds keyboard.num_keys={num_keys}"
+            )
+        record_physical_key(physical_key, f"digital.vector[{input_index}]")
+
+    for row_index, col_index, key_index in iter_layout_keys(kb_json):
+        if not isinstance(key_index, int):
+            raise ValueError(
+                f"layout.keymap[{row_index}][{col_index}].key must be an integer"
+            )
+        if not 0 <= key_index < num_keys:
+            raise ValueError(
+                f"layout.keymap[{row_index}][{col_index}].key={key_index} is out of range for keyboard.num_keys={num_keys}"
+            )
+
+        physical_key = key_index + 1
+        if physical_key not in assigned_physical_keys:
+            raise ValueError(
+                f"layout key {key_index} (physical key {physical_key}) is not assigned in analog.spi map or digital.vector"
+            )

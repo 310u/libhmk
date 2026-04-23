@@ -142,6 +142,24 @@ void test_usb_runtime_task_recovers_during_long_suspend_without_resume_callback(
   TEST_ASSERT_EQUAL_UINT32(1, usb_connect_count);
 }
 
+void test_usb_runtime_reports_suspend_state_from_callbacks(void) {
+  TEST_ASSERT_FALSE(usb_runtime_is_suspended());
+
+  usb_runtime_suspend();
+  TEST_ASSERT_TRUE(usb_runtime_is_suspended());
+
+  usb_runtime_resume();
+  TEST_ASSERT_FALSE(usb_runtime_is_suspended());
+}
+
+void test_usb_runtime_reports_suspend_state_from_tinyusb_flag(void) {
+  mock_usb_suspended = true;
+  TEST_ASSERT_TRUE(usb_runtime_is_suspended());
+
+  mock_usb_suspended = false;
+  TEST_ASSERT_FALSE(usb_runtime_is_suspended());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_usb_runtime_mount_resyncs_state);
@@ -149,5 +167,7 @@ int main(void) {
   RUN_TEST(test_usb_runtime_long_suspend_reconnects_after_delay);
   RUN_TEST(test_usb_runtime_mount_clears_pending_reconnect);
   RUN_TEST(test_usb_runtime_task_recovers_during_long_suspend_without_resume_callback);
+  RUN_TEST(test_usb_runtime_reports_suspend_state_from_callbacks);
+  RUN_TEST(test_usb_runtime_reports_suspend_state_from_tinyusb_flag);
   return UNITY_END();
 }

@@ -81,6 +81,7 @@ build_flags.define("USB_PRODUCT_ID", kb_json["usb"]["pid"])
 # Analog Configuration
 analog = kb_json["analog"]
 analog_backend = analog.get("backend", "mcu_adc")
+utils.validate_spi_adc_mapping(kb_json)
 
 # Keep MCU ADC channel metadata available for native tests and shared code,
 # even when the active analog backend is an external SPI ADC.
@@ -105,30 +106,60 @@ match analog_backend:
             raise ValueError(f"Unsupported analog.spi.driver: {spi['driver']}")
 
         bus_ids: list[int] = []
+        active_bus_ids: list[int] = []
         device_bus: list[int] = []
         device_cs: list[str] = []
         flattened_map: list[int] = []
+        device_scan_counts: list[int] = []
+        device_scan_channels: list[list[int]] = []
 
         for bus_entry in spi["buses"]:
             bus_id = bus_entry["bus"]
             if bus_id in bus_ids:
                 raise ValueError(f"SPI ADC bus {bus_id} is configured more than once")
             bus_ids.append(bus_id)
+            bus_has_active_channels = False
 
             for device in bus_entry["devices"]:
+                device_map = device["map"]
+                if len(device_map) != 16:
+                    raise ValueError("ADS7953 devices must declare exactly 16 channel slots")
+
                 device_bus.append(bus_id)
                 device_cs.append(device["cs"])
-                flattened_map.extend(device["map"])
+                flattened_map.extend(device_map)
+
+                active_channels = [
+                    channel for channel, key in enumerate(device_map) if key != 0
+                ]
+                device_scan_counts.append(len(active_channels))
+                device_scan_channels.append(
+                    active_channels + [0] * (16 - len(active_channels))
+                )
+                bus_has_active_channels = bus_has_active_channels or bool(
+                    active_channels
+                )
+
+            if bus_has_active_channels:
+                active_bus_ids.append(bus_id)
 
         if not flattened_map:
             raise ValueError("analog.spi must declare at least one ADS7953 device")
+        if not active_bus_ids:
+            raise ValueError("analog.spi must map at least one ADS7953 channel")
 
         build_flags.define("ANALOG_BACKEND_SPI_ADC")
         build_flags.define("SPI_ADC_DRIVER_ADS7953")
-        build_flags.define("SPI_ADC_NUM_BUSES", len(bus_ids))
-        build_flags.define("SPI_ADC_BUS_IDS", utils.to_c_array(bus_ids))
+        build_flags.define("SPI_ADC_NUM_BUSES", len(active_bus_ids))
+        build_flags.define("SPI_ADC_BUS_IDS", utils.to_c_array(active_bus_ids))
         build_flags.define("SPI_ADC_NUM_DEVICES", len(device_bus))
         build_flags.define("SPI_ADC_DEVICE_BUS", utils.to_c_array(device_bus))
+        build_flags.define(
+            "SPI_ADC_DEVICE_SCAN_COUNTS", utils.to_c_array(device_scan_counts)
+        )
+        build_flags.define(
+            "SPI_ADC_DEVICE_SCAN_CHANNELS", utils.to_c_array(device_scan_channels)
+        )
         build_flags.define("SPI_ADC_FREQUENCY_HZ", spi.get("frequency_hz", 20_000_000))
 
         if spi.get("range", "vref") == "2xvref":

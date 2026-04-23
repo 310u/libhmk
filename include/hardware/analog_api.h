@@ -130,6 +130,19 @@ _Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
 // Analog API
 //--------------------------------------------------------------------+
 
+typedef struct {
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint32_t last_bus_completion_skew_cycles;
+  uint32_t max_bus_completion_skew_cycles;
+  uint8_t active_bus_count;
+  uint8_t active_device_count;
+  uint16_t reserved;
+} analog_scan_diagnostics_t;
+
 /**
  * @brief Initialize the analog module
  *
@@ -172,3 +185,23 @@ uint16_t analog_read(uint8_t key);
  */
 uint16_t analog_read_raw(uint8_t index);
 #endif
+
+/**
+ * @brief Get backend-specific analog scan diagnostics
+ *
+ * For SPI ADC backends, this reports full scan-round timing. For simpler MCU
+ * ADC backends, the counters may remain zeroed.
+ *
+ * @return Pointer to the current diagnostics snapshot
+ */
+const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void);
+
+/**
+ * @brief Reset accumulated analog scan diagnostics counters
+ *
+ * This clears the timing counters so a host can start a fresh measurement
+ * interval.
+ *
+ * @return None
+ */
+void analog_reset_scan_diagnostics(void);

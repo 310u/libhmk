@@ -29,6 +29,7 @@ kb_json = utils.get_kb_json(keyboard)
 with open(os.path.join("scripts", "schema", "keyboard.schema.json")) as f:
     kb_schema = json.load(f)
 jsonschema.validate(kb_json, schema=kb_schema)
+utils.validate_spi_adc_mapping(kb_json)
 
 # Validate default keymaps
 default_keymaps = utils.resolve_default_keymaps(kb_json)

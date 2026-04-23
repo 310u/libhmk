@@ -19,6 +19,7 @@
 #include "rgb_math.h"
 #include "rgb_reactive.h"
 #include "rgb_static.h"
+#include "usb_runtime.h"
 
 /*
  * Attribution:
@@ -409,7 +410,17 @@ void rgb_task(void) {
     if (!rgb_config.enabled) return;
 
     static uint32_t last_render_tick = 0;
+    static bool was_asleep = false;
     uint32_t current_tick = timer_read();
+
+    if (usb_runtime_is_suspended()) {
+        if (!was_asleep) {
+            rgb_set_all_color(0, 0, 0);
+            rgb_update();
+            was_asleep = true;
+        }
+        return;
+    }
 
     rgb_reactive_decay_heatmap(current_tick);
 
@@ -420,8 +431,7 @@ void rgb_task(void) {
     uint8_t effective_brightness = rgb_config.global_brightness;
     uint32_t idle_time = matrix_get_idle_time();
     uint32_t timeout_ms = (uint32_t)rgb_config.sleep_timeout * 60000u;
-    
-    static bool was_asleep = false;
+
     if (timeout_ms > 0 && idle_time > timeout_ms) {
         uint32_t fade_duration = 2000; // 2 seconds to fade out
         if (idle_time >= timeout_ms + fade_duration) {

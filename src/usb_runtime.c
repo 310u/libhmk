@@ -109,6 +109,10 @@ void usb_runtime_resume(void) {
   }
 }
 
+bool usb_runtime_is_suspended(void) {
+  return usb_runtime_state.suspend_observed || tud_suspended();
+}
+
 //--------------------------------------------------------------------+
 // TinyUSB Callbacks
 //--------------------------------------------------------------------+

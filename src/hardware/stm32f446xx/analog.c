@@ -205,6 +205,7 @@ static volatile bool adc_initialized = false;
 // Buffer for DMA transfer
 __attribute__((aligned(8))) static volatile uint16_t
     adc_buffer[ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS];
+static analog_scan_diagnostics_t analog_scan_diagnostics;
 void analog_init(void) {
   ADC_ChannelConfTypeDef channel_config = {0};
 
@@ -222,6 +223,7 @@ void analog_init(void) {
   analog_init_digital_inputs();
 #endif
   analog_scan_reset();
+  memset(&analog_scan_diagnostics, 0, sizeof(analog_scan_diagnostics));
 
   // Initialize the ADC peripheral
   adc_handle.Instance = ADC1;
@@ -357,6 +359,14 @@ uint16_t analog_read(uint8_t key) {
 #if ADC_NUM_RAW_INPUTS > 0
 uint16_t analog_read_raw(uint8_t index) { return analog_scan_read_raw(index); }
 #endif
+
+const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
+  return &analog_scan_diagnostics;
+}
+
+void analog_reset_scan_diagnostics(void) {
+  memset(&analog_scan_diagnostics, 0, sizeof(analog_scan_diagnostics));
+}
 
 //--------------------------------------------------------------------+
 // Interrupt Handlers
