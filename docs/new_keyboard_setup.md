@@ -22,9 +22,9 @@ The `keyboard.json` file is the heart of your keyboard definition. It defines th
 ### Key Sections:
 
 - **`usb`**: Set your Vendor ID (VID), Product ID (PID), and USB speed (`fs` for Full Speed, `hs` for High Speed).
-- **`hardware`**: Specify the MCU driver. Current in-tree drivers are `at32f405xx` and `stm32f446xx`.
+- **`hardware`**: Specify the MCU driver. Current in-tree drivers are `at32f405xx` and `stm32f446xx`. Use `cpu_hz` only when the keyboard overrides the default MCU clock tree.
 - **`analog`**: Configure the scanning matrix.
-    - `backend`: Select the analog sampling backend. Use `mcu_adc` for current in-tree keyboards. `spi_adc` is reserved for future external ADC support and is not implemented yet.
+    - `backend`: Select the analog sampling backend. Use `mcu_adc` for the MCU ADC path, or `spi_adc` for supported external SPI ADC designs such as ADS7953 on AT32F405xx.
     - `mux`: Define multiplexer select pins and input pins.
     - `matrix`: A 2D array mapping matrix intersections to physical key numbers.
 - **`digital`**: (Optional) Configure direct GPIO-backed switch inputs.
@@ -79,7 +79,7 @@ still works, but its directions are no longer remappable from `hmkconf`.
 
 Use `board_def.h` for hardware-backed optional features, and `config.h` for any extra compile-time overrides.
 
-- `board_def.h` is optional. You only need it when your keyboard uses optional hardware features such as RGB, joystick, rotary encoder, slider, or board-specific tuning macros.
+- `board_def.h` is optional. You only need it when your keyboard uses optional hardware features such as RGB, joystick, rotary encoder, slider, or board-specific tuning macros such as clock-tree or bus-clock overrides.
 - `config.h` is also optional, and is the right place for compile-time overrides that are not simple pin/feature definitions.
 - GPIO macro names are driver-specific. For example, AT32 uses `GPIO_PINS_10`, while STM32 uses `GPIO_PIN_10`.
 

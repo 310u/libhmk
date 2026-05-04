@@ -521,8 +521,8 @@ bool v1_3_global_config_func(uint8_t *dst, const uint8_t *src) {
 
   // Copy `magic_start` to `bottom_out_threshold`
   migration_memcpy(&dst, &src, 10 + NUM_KEYS * 2);
-  // Default `save_bottom_out_threshold` to true
-  uint16_t options = *((uint16_t *)src) | (1 << 1);
+  // Keep `save_bottom_out_threshold` disabled by default for migrated configs.
+  uint16_t options = *((uint16_t *)src);
   migration_assign_uint16_t(&dst, options);
   src += sizeof(options);
   // Copy `current_profile` to `last_non_default_profile`

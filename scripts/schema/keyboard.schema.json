@@ -65,6 +65,11 @@
           "type": "integer",
           "description": "High-speed external oscillator value in Hz"
         },
+        "cpu_hz": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional CPU/system clock frequency in Hz for the PlatformIO F_CPU definition"
+        },
         "driver": {
           "type": "string",
           "description": "Keyboard driver name"

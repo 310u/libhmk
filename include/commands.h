@@ -248,6 +248,10 @@ typedef struct __attribute__((packed)) {
   uint8_t active_bus_count;
   uint8_t active_device_count;
   uint16_t reserved;
+  uint32_t bad_channel_id_count;
+  uint32_t dma_overrun_count;
+  uint32_t spi_error_count;
+  uint32_t missed_scan_count;
 } command_out_analog_scan_diagnostics_t;
 
 // Command output buffer type

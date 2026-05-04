@@ -170,7 +170,7 @@ Current in-tree keyboard definitions include `he16`, `he60`, `he60-v2`,
 To develop a new keyboard, create a new directory under `keyboards/` with your keyboard's name. This directory should include the following files:
 
 - `keyboard.json`: A JSON file containing metadata about your keyboard, used for both firmware compilation and the web configurator. Refer to [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json) for the schema.
-- `board_def.h` (Optional): Per-keyboard hardware macro definitions for optional features such as RGB, joystick, rotary encoder, or slider.
+- `board_def.h` (Optional): Per-keyboard hardware macro definitions for optional features such as RGB, joystick, rotary encoder, slider, or board-specific clock/bus tuning.
 - `config.h` (Optional): Additional configuration header for your keyboard to define custom configurations beyond what's specified in `keyboard.json`.
 
 For a step-by-step guide on creating a new keyboard definition, see the [New Keyboard Setup Guide](docs/new_keyboard_setup.md).

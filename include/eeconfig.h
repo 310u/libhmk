@@ -146,7 +146,7 @@ extern const eeconfig_t *eeconfig;
 #define DEFAULT_OPTIONS                                                        \
   {                                                                            \
       .xinput_enabled = false,                                                 \
-      .save_bottom_out_threshold = true,                                       \
+      .save_bottom_out_threshold = false,                                      \
       .high_polling_rate_enabled = true,                                       \
       .continuous_calibration = true,                                          \
       .sniper_mode_multiplier = 128, /* 50% speed */                           \

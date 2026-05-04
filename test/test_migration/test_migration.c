@@ -456,6 +456,7 @@ void test_migration_v1_0_reaches_current_and_preserves_profile_data(void) {
   TEST_ASSERT_EQUAL_HEX32(EECONFIG_MAGIC_END, written_config.magic_end);
   TEST_ASSERT_EQUAL_UINT8(1, written_config.current_profile);
   TEST_ASSERT_EQUAL_UINT8(2, written_config.last_non_default_profile);
+  TEST_ASSERT_FALSE(written_config.options.save_bottom_out_threshold);
 
   TEST_ASSERT_EQUAL_UINT8(0x76, written_config.profiles[0].keymap[0][0]);
   TEST_ASSERT_EQUAL_UINT8(0x7B, written_config.profiles[0].keymap[0][1]);

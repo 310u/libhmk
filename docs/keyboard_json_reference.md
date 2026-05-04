@@ -109,11 +109,13 @@ LEDやジョイスティックなどのオプション機能を有効化しま�
 | フィールド | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `hse_value` | integer | ✅ | 外部高速発振器の周波数（Hz） |
+| `cpu_hz` | integer | — | CPU/システムクロック周波数（Hz）。省略時はPlatformIOボード定義のデフォルト |
 | `driver` | string | ✅ | ハードウェアドライバ名（現状は `"at32f405xx"` または `"stm32f446xx"`） |
 
 ```json
 "hardware": {
   "hse_value": 12000000,
+  "cpu_hz": 160000000,
   "driver": "at32f405xx"
 }
 ```

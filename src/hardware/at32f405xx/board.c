@@ -18,6 +18,44 @@
 #include "at32f402_405.h"
 #include "tusb.h"
 
+// Keyboard board definitions may override these when a design needs a
+// clock tree different from the driver default.
+#if !defined(BOARD_FLASH_WAIT_CYCLES)
+#define BOARD_FLASH_WAIT_CYCLES FLASH_WAIT_CYCLE_6
+#endif
+
+#if !defined(BOARD_PWC_LDO_OUTPUT)
+#define BOARD_PWC_LDO_OUTPUT PWC_LDO_OUTPUT_1V3
+#endif
+
+#if !defined(BOARD_PLL_NS)
+#define BOARD_PLL_NS 72u
+#endif
+
+#if !defined(BOARD_PLL_MS)
+#define BOARD_PLL_MS 1u
+#endif
+
+#if !defined(BOARD_PLL_FP)
+#define BOARD_PLL_FP CRM_PLL_FP_4
+#endif
+
+#if !defined(BOARD_PLL_FU)
+#define BOARD_PLL_FU CRM_PLL_FU_18
+#endif
+
+#if !defined(BOARD_AHB_DIV)
+#define BOARD_AHB_DIV CRM_AHB_DIV_1
+#endif
+
+#if !defined(BOARD_APB2_DIV)
+#define BOARD_APB2_DIV CRM_APB2_DIV_1
+#endif
+
+#if !defined(BOARD_APB1_DIV)
+#define BOARD_APB1_DIV CRM_APB1_DIV_2
+#endif
+
 /**
  * @brief Initialize the clock
  *
@@ -26,12 +64,12 @@
 static void board_clock_init(void) {
   // Reset the CRM
   crm_reset();
-  // Configure flash PSR register with 6 wait states for 216MHz system clock
-  flash_psr_set(FLASH_WAIT_CYCLE_6);
+  // Configure flash PSR register for the selected system clock
+  flash_psr_set(BOARD_FLASH_WAIT_CYCLES);
   // Enable PWC peripheral clock
   crm_periph_clock_enable(CRM_PWC_PERIPH_CLOCK, TRUE);
-  // Set power LDO output voltage to 1.3V to support 216MHz system clock
-  pwc_ldo_output_voltage_set(PWC_LDO_OUTPUT_1V3);
+  // Set power LDO output voltage for the selected system clock
+  pwc_ldo_output_voltage_set(BOARD_PWC_LDO_OUTPUT);
   // Set clock source to HSE
   crm_clock_source_enable(CRM_CLOCK_SOURCE_HEXT, TRUE);
 
@@ -39,10 +77,10 @@ static void board_clock_init(void) {
   while (crm_hext_stable_wait() == ERROR)
     ;
 
-  // Configure PLL to 216MHz, assuming HSE is 12MHz
-  crm_pll_config(CRM_PLL_SOURCE_HEXT, 72, 1, CRM_PLL_FP_4);
+  // Configure PLL
+  crm_pll_config(CRM_PLL_SOURCE_HEXT, BOARD_PLL_NS, BOARD_PLL_MS, BOARD_PLL_FP);
   // Configure PLLU to 48MHz for USB FS
-  crm_pllu_div_set(CRM_PLL_FU_18);
+  crm_pllu_div_set(BOARD_PLL_FU);
   // Enable PLL as system clock source
   crm_clock_source_enable(CRM_CLOCK_SOURCE_PLL, TRUE);
 
@@ -51,11 +89,11 @@ static void board_clock_init(void) {
     ;
 
   // Configure AHB clock
-  crm_ahb_div_set(CRM_AHB_DIV_1);
+  crm_ahb_div_set(BOARD_AHB_DIV);
   // Configure APB2 clock
-  crm_apb2_div_set(CRM_APB2_DIV_1);
+  crm_apb2_div_set(BOARD_APB2_DIV);
   // Configure APB1 clock
-  crm_apb1_div_set(CRM_APB1_DIV_2);
+  crm_apb1_div_set(BOARD_APB1_DIV);
   // Enable auto step mode before switching system clock source to PLL
   crm_auto_step_mode_enable(TRUE);
   // Select PLL as system clock source

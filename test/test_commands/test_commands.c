@@ -351,6 +351,10 @@ void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
   mock_analog_diag.max_bus_completion_skew_cycles = 180u;
   mock_analog_diag.active_bus_count = 2u;
   mock_analog_diag.active_device_count = 4u;
+  mock_analog_diag.bad_channel_id_count = 3u;
+  mock_analog_diag.dma_overrun_count = 4u;
+  mock_analog_diag.spi_error_count = 5u;
+  mock_analog_diag.missed_scan_count = 6u;
 
   command_send_and_flush(&get_diag);
 
@@ -373,6 +377,10 @@ void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
       180u, out.analog_scan_diagnostics.max_bus_completion_skew_cycles);
   TEST_ASSERT_EQUAL_UINT8(2u, out.analog_scan_diagnostics.active_bus_count);
   TEST_ASSERT_EQUAL_UINT8(4u, out.analog_scan_diagnostics.active_device_count);
+  TEST_ASSERT_EQUAL_UINT32(3u, out.analog_scan_diagnostics.bad_channel_id_count);
+  TEST_ASSERT_EQUAL_UINT32(4u, out.analog_scan_diagnostics.dma_overrun_count);
+  TEST_ASSERT_EQUAL_UINT32(5u, out.analog_scan_diagnostics.spi_error_count);
+  TEST_ASSERT_EQUAL_UINT32(6u, out.analog_scan_diagnostics.missed_scan_count);
 }
 
 void test_command_reset_analog_scan_diagnostics_clears_snapshot(void) {

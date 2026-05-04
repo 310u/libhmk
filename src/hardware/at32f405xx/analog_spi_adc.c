@@ -47,6 +47,23 @@
 #define ADS7953_COMMAND_RANGE_BIT 0x0000u
 #endif
 
+#if !defined(SPI_ADC_DEBUG_INIT)
+#define SPI_ADC_DEBUG_INIT() ((void)0)
+#endif
+
+#if !defined(SPI_ADC_DEBUG_SCAN_ROUND_START)
+#define SPI_ADC_DEBUG_SCAN_ROUND_START() ((void)0)
+#endif
+
+#if !defined(SPI_ADC_DEBUG_BUS_COMPLETE)
+#define SPI_ADC_DEBUG_BUS_COMPLETE(logical_bus_index)                          \
+  ((void)(logical_bus_index))
+#endif
+
+#if !defined(SPI_ADC_DEBUG_COMMIT)
+#define SPI_ADC_DEBUG_COMMIT() ((void)0)
+#endif
+
 _Static_assert(ADC_NUM_MUX_INPUTS == 0,
                "spi_adc backend expects mux inputs to be flattened at build time");
 _Static_assert(ADC_NUM_RAW_INPUTS ==
@@ -111,6 +128,7 @@ _Static_assert(M_ARRAY_SIZE(spi_adc_hw_buses) == SPI_NUM_BUSES,
                "SPI bus macro definitions are incomplete");
 
 typedef struct {
+  uint8_t logical_bus_index;
   uint8_t bus_id;
   spi_type *instance;
   uint32_t clock_hz;
@@ -121,6 +139,7 @@ typedef struct {
   dmamux_requst_id_sel_type rx_request;
   dmamux_requst_id_sel_type tx_request;
   uint32_t rx_flag;
+  uint32_t rx_error_flag;
   IRQn_Type rx_irq;
   uint8_t device_indices[2];
   uint8_t num_devices;
@@ -134,7 +153,10 @@ __attribute__((aligned(8))) static uint16_t
     spi_adc_tx_frames[SPI_ADC_NUM_DEVICES][ADS7953_MAX_FRAMES_PER_SWEEP];
 __attribute__((aligned(8))) static volatile uint16_t
     spi_adc_rx_frames[SPI_ADC_NUM_DEVICES][ADS7953_MAX_FRAMES_PER_SWEEP];
+// Phase 1 keeps a fixed 64-slot-style raw buffer: each ADS7953 device owns a
+// contiguous 16-sample slice even when only channels 0..9 are active.
 static uint16_t spi_adc_scan_buffer[ADC_NUM_RAW_INPUTS];
+static uint16_t spi_adc_device_channel_masks[SPI_ADC_NUM_DEVICES];
 
 static volatile bool spi_adc_initialized = false;
 static volatile uint8_t spi_adc_completed_buses = 0;
@@ -319,6 +341,27 @@ static uint32_t spi_adc_cycles_to_us(uint32_t cycles) {
 #endif
 }
 
+static bool spi_adc_channel_expected(uint8_t device_index, uint8_t channel) {
+  return (spi_adc_device_channel_masks[device_index] & M_BIT(channel)) != 0u;
+}
+
+static void spi_adc_record_bus_errors(spi_adc_bus_state_t *bus) {
+  if (dma_flag_get(bus->rx_error_flag) == SET) {
+    analog_scan_diagnostics.dma_overrun_count++;
+    dma_flag_clear(bus->rx_error_flag);
+  }
+
+  if (spi_i2s_flag_get(bus->instance, SPI_I2S_ROERR_FLAG) == SET) {
+    analog_scan_diagnostics.spi_error_count++;
+    spi_i2s_flag_clear(bus->instance, SPI_I2S_ROERR_FLAG);
+  }
+
+  if (spi_i2s_flag_get(bus->instance, SPI_I2S_CSPAS_FLAG) == SET) {
+    analog_scan_diagnostics.spi_error_count++;
+    spi_i2s_flag_clear(bus->instance, SPI_I2S_CSPAS_FLAG);
+  }
+}
+
 static void analog_reset_scan_diagnostics_impl(void) {
   uint8_t active_device_count = 0;
 
@@ -381,6 +424,7 @@ static void spi_adc_prepare_tx_frames(void) {
 
   for (uint32_t device = 0; device < SPI_ADC_NUM_DEVICES; device++) {
     const uint8_t scan_count = spi_adc_device_scan_counts[device];
+    uint16_t channel_mask = 0u;
     uint32_t frame = 0;
 
     for (; frame < scan_count; frame++) {
@@ -388,10 +432,17 @@ static void spi_adc_prepare_tx_frames(void) {
       if (channel >= ADS7953_CHANNELS_PER_DEVICE) {
         board_error_handler();
       }
+      if ((channel_mask & M_BIT(channel)) != 0u) {
+        board_error_handler();
+      }
+
+      channel_mask |= (uint16_t)M_BIT(channel);
 
       spi_adc_tx_frames[device][frame] =
           command_base | (uint16_t)(channel << ADS7953_COMMAND_CHANNEL_SHIFT);
     }
+
+    spi_adc_device_channel_masks[device] = channel_mask;
 
     // Two trailing frames flush the device's two-frame conversion pipeline.
     for (; frame < spi_adc_device_frame_count((uint8_t)device); frame++) {
@@ -413,6 +464,7 @@ static void spi_adc_assign_bus_resources(spi_adc_bus_state_t *bus,
     bus->rx_mux = DMA2MUX_CHANNEL1;
     bus->tx_mux = DMA2MUX_CHANNEL2;
     bus->rx_flag = DMA2_FDT1_FLAG;
+    bus->rx_error_flag = DMA2_DTERR1_FLAG;
     bus->rx_irq = DMA2_Channel1_IRQn;
     return;
 
@@ -422,6 +474,7 @@ static void spi_adc_assign_bus_resources(spi_adc_bus_state_t *bus,
     bus->rx_mux = DMA2MUX_CHANNEL3;
     bus->tx_mux = DMA2MUX_CHANNEL4;
     bus->rx_flag = DMA2_FDT3_FLAG;
+    bus->rx_error_flag = DMA2_DTERR3_FLAG;
     bus->rx_irq = DMA2_Channel3_IRQn;
     return;
 
@@ -436,6 +489,7 @@ static void spi_adc_init_bus_state(spi_adc_bus_state_t *bus,
   uint8_t write_index = 0;
 
   memset(bus, 0, sizeof(*bus));
+  bus->logical_bus_index = logical_bus_index;
   bus->bus_id = spi_adc_bus_ids[logical_bus_index];
   if (bus->bus_id >= M_ARRAY_SIZE(spi_adc_hw_buses)) {
     board_error_handler();
@@ -476,6 +530,9 @@ static void spi_adc_start_bus_transfer(spi_adc_bus_state_t *bus,
   dma_channel_enable(bus->rx_dma, FALSE);
   dma_channel_enable(bus->tx_dma, FALSE);
   dma_flag_clear(bus->rx_flag);
+  dma_flag_clear(bus->rx_error_flag);
+  spi_i2s_flag_clear(bus->instance, SPI_I2S_ROERR_FLAG);
+  spi_i2s_flag_clear(bus->instance, SPI_I2S_CSPAS_FLAG);
 
   bus->rx_dma->maddr = (uint32_t)spi_adc_rx_frames[device_index];
   bus->rx_dma->dtcnt = spi_adc_device_frame_count(device_index);
@@ -490,10 +547,16 @@ static void spi_adc_start_bus_transfer(spi_adc_bus_state_t *bus,
 }
 
 static void spi_adc_start_scan_cycle(void) {
+  if (spi_adc_scan_cycle_start != 0u &&
+      spi_adc_completed_buses < SPI_ADC_NUM_BUSES) {
+    analog_scan_diagnostics.missed_scan_count++;
+  }
+
   spi_adc_completed_buses = 0;
   spi_adc_scan_cycle_start = board_cycle_count();
   spi_adc_first_bus_completion_cycle = 0;
   memset(spi_adc_scan_buffer, 0, sizeof(spi_adc_scan_buffer));
+  SPI_ADC_DEBUG_SCAN_ROUND_START();
 
   for (uint32_t i = 0; i < SPI_ADC_NUM_BUSES; i++) {
     spi_adc_start_bus_transfer(&spi_adc_buses[i], 0);
@@ -510,6 +573,12 @@ static void spi_adc_store_device_samples(uint8_t device_index) {
                                       ADS7953_RESULT_CHANNEL_MASK);
 
     if (channel >= ADS7953_CHANNELS_PER_DEVICE) {
+      analog_scan_diagnostics.bad_channel_id_count++;
+      continue;
+    }
+
+    if (!spi_adc_channel_expected(device_index, channel)) {
+      analog_scan_diagnostics.bad_channel_id_count++;
       continue;
     }
 
@@ -527,6 +596,7 @@ static void spi_adc_complete_bus_transfer(spi_adc_bus_state_t *bus) {
   spi_i2s_dma_transmitter_enable(bus->instance, FALSE);
   while (spi_i2s_flag_get(bus->instance, SPI_I2S_BF_FLAG) != RESET) {
   }
+  spi_adc_record_bus_errors(bus);
   spi_cs_deselect(&spi_adc_chip_selects[device_index]);
 
   spi_adc_store_device_samples(device_index);
@@ -536,6 +606,7 @@ static void spi_adc_complete_bus_transfer(spi_adc_bus_state_t *bus) {
     return;
   }
 
+  SPI_ADC_DEBUG_BUS_COMPLETE(bus->logical_bus_index);
   if (spi_adc_completed_buses == 0u) {
     spi_adc_first_bus_completion_cycle = completion_cycle;
   }
@@ -562,6 +633,7 @@ static void spi_adc_complete_bus_transfer(spi_adc_bus_state_t *bus) {
     analog_scan_diagnostics.max_bus_completion_skew_cycles = bus_skew_cycles;
   }
 
+  SPI_ADC_DEBUG_COMMIT();
   analog_scan_store_samples(spi_adc_scan_buffer, 0);
   spi_adc_initialized = true;
   spi_adc_start_scan_cycle();
@@ -571,6 +643,7 @@ static void spi_adc_init_buses(void) {
   crm_periph_clock_enable(CRM_DMA2_PERIPH_CLOCK, TRUE);
   dmamux_enable(DMA2, TRUE);
   spi_bus_init();
+  SPI_ADC_DEBUG_INIT();
   spi_adc_prepare_tx_frames();
 
   for (uint32_t i = 0; i < SPI_ADC_NUM_DEVICES; i++) {

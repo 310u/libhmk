@@ -69,6 +69,14 @@
 #define TRACKBALL_POLL_INTERVAL_MS 1u
 #endif
 
+#ifndef TRACKBALL_RECOVERY_RETRY_MS
+#define TRACKBALL_RECOVERY_RETRY_MS 250u
+#endif
+
+#ifndef TRACKBALL_MAX_CONSECUTIVE_ERRORS
+#define TRACKBALL_MAX_CONSECUTIVE_ERRORS 3u
+#endif
+
 #ifndef TRACKBALL_CPI_DEFAULT
 #define TRACKBALL_CPI_DEFAULT 1600u
 #endif
@@ -187,7 +195,9 @@ typedef struct {
   spi_chip_select_t chip_select;
   bool enabled;
   bool burst_mode_started;
+  uint8_t consecutive_errors;
   uint32_t last_poll_ms;
+  uint32_t last_recovery_attempt_ms;
   uint16_t current_cpi;
   int16_t last_dx;
   int16_t last_dy;
@@ -209,7 +219,9 @@ static trackball_state_t trackball_state = {
         },
     .enabled = false,
     .burst_mode_started = false,
+    .consecutive_errors = 0,
     .last_poll_ms = 0,
+    .last_recovery_attempt_ms = 0,
     .current_cpi = TRACKBALL_CPI_DEFAULT,
     .last_dx = 0,
     .last_dy = 0,
@@ -636,32 +648,32 @@ static bool paw3395_verify_identity(void) {
 
 static bool paw3395_finish_boot_sequence(void) {
   uint8_t boot_status = 0;
-  bool ready = false;
 
   timer_delay(1u);
-  for (uint8_t i = 0; i < 60u; i++) {
-    if (!trackball_read_reg(PAW3395_REG_BOOT_STATUS, &boot_status)) {
+  for (uint8_t attempt = 0; attempt < 2u; attempt++) {
+    for (uint8_t i = 0; i < 60u; i++) {
+      if (!trackball_read_reg(PAW3395_REG_BOOT_STATUS, &boot_status)) {
+        return false;
+      }
+      if (boot_status == PAW3395_BOOT_STATUS_READY) {
+        return trackball_write_reg(0x22u, 0x00u) &&
+               trackball_write_reg(0x55u, 0x00u) &&
+               trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x07u) &&
+               trackball_write_reg(0x40u, 0x40u) &&
+               trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x00u);
+      }
+      timer_delay(1u);
+    }
+
+    if (attempt == 0u &&
+        (!trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x14u) ||
+         !trackball_write_reg(PAW3395_REG_BOOT_STATUS, 0x00u) ||
+         !trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x00u))) {
       return false;
     }
-    if (boot_status == PAW3395_BOOT_STATUS_READY) {
-      ready = true;
-      break;
-    }
-    timer_delay(1u);
   }
 
-  if (!ready &&
-      (!trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x14u) ||
-       !trackball_write_reg(PAW3395_REG_BOOT_STATUS, 0x00u) ||
-       !trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x00u))) {
-    return false;
-  }
-
-  return trackball_write_reg(0x22u, 0x00u) &&
-         trackball_write_reg(0x55u, 0x00u) &&
-         trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x07u) &&
-         trackball_write_reg(0x40u, 0x40u) &&
-         trackball_write_reg(PAW3395_REG_PAGE_SELECT, 0x00u);
+  return false;
 }
 
 static bool paw3395_load_power_up_initialization(void) {
@@ -774,6 +786,57 @@ static const trackball_sensor_api_t trackball_sensor_api = {
 };
 #endif
 
+static bool trackball_restore_cpi(void) {
+  if (trackball_sensor_api.set_cpi == NULL) {
+    return true;
+  }
+
+  return trackball_sensor_api.set_cpi(trackball_state.current_cpi);
+}
+
+static void trackball_mark_unavailable(uint32_t now) {
+  trackball_state.enabled = false;
+  trackball_state.burst_mode_started = false;
+  trackball_state.consecutive_errors = 0;
+  trackball_state.last_recovery_attempt_ms = now;
+}
+
+static bool trackball_try_enable(uint32_t now) {
+  if (!trackball_sensor_api.init() || !trackball_restore_cpi()) {
+    trackball_mark_unavailable(now);
+    return false;
+  }
+
+  trackball_state.enabled = true;
+  trackball_state.burst_mode_started = false;
+  trackball_state.consecutive_errors = 0;
+  trackball_state.last_poll_ms = now;
+  return true;
+}
+
+static void trackball_handle_comm_error(uint32_t now) {
+  trackball_state.burst_mode_started = false;
+
+  if (trackball_state.consecutive_errors < UINT8_MAX) {
+    trackball_state.consecutive_errors++;
+  }
+
+  if (trackball_state.consecutive_errors >= TRACKBALL_MAX_CONSECUTIVE_ERRORS) {
+    trackball_mark_unavailable(now);
+  }
+}
+
+static void trackball_try_recover(uint32_t now) {
+  if (trackball_state.enabled ||
+      timer_elapsed(trackball_state.last_recovery_attempt_ms) <
+          TRACKBALL_RECOVERY_RETRY_MS) {
+    return;
+  }
+
+  trackball_state.last_recovery_attempt_ms = now;
+  (void)trackball_try_enable(now);
+}
+
 static void trackball_emit_motion(int16_t dx, int16_t dy) {
 #if TRACKBALL_SWAP_XY
   const int16_t swapped_dx = dy;
@@ -810,20 +873,13 @@ static void trackball_emit_motion(int16_t dx, int16_t dy) {
 }
 
 void trackball_init(void) {
+  const uint32_t now = timer_read();
+
   trackball_state.bus_config.mode = trackball_sensor_api.spi_mode;
   spi_cs_init(&trackball_state.chip_select);
   trackball_init_motion_pin();
-
-  if (!trackball_sensor_api.init()) {
-    return;
-  }
-  if (trackball_sensor_api.set_cpi != NULL) {
-    (void)trackball_sensor_api.set_cpi(TRACKBALL_CPI_DEFAULT);
-  }
-
-  trackball_state.enabled = true;
-  trackball_state.burst_mode_started = false;
-  trackball_state.last_poll_ms = timer_read();
+  trackball_state.last_recovery_attempt_ms = now;
+  (void)trackball_try_enable(now);
 }
 
 void trackball_task(void) {
@@ -831,6 +887,7 @@ void trackball_task(void) {
   const uint32_t now = timer_read();
 
   if (!trackball_state.enabled) {
+    trackball_try_recover(now);
     return;
   }
 
@@ -845,16 +902,18 @@ void trackball_task(void) {
 
   if (!trackball_state.burst_mode_started) {
     if (!trackball_sensor_api.start_burst()) {
-      trackball_state.enabled = false;
+      trackball_handle_comm_error(now);
       return;
     }
     trackball_state.burst_mode_started = true;
   }
 
   if (!trackball_sensor_api.read_motion(&sample)) {
-    trackball_state.enabled = false;
+    trackball_handle_comm_error(now);
     return;
   }
+
+  trackball_state.consecutive_errors = 0;
 
   if (sample.restart_burst) {
     trackball_state.burst_mode_started = false;
@@ -880,6 +939,8 @@ void trackball_get_state(trackball_diagnostic_state_t *state) {
 }
 
 static void trackball_set_cpi(uint16_t cpi) {
+  const uint32_t now = timer_read();
+
   if (!trackball_state.enabled) {
     return;
   }
@@ -889,6 +950,8 @@ static void trackball_set_cpi(uint16_t cpi) {
 #if defined(RGB_ENABLED)
       rgb_flash_cpi(cpi);
 #endif
+    } else {
+      trackball_handle_comm_error(now);
     }
   }
 }

@@ -530,6 +530,13 @@ void command_process(const uint8_t *buf) {
     out->analog_scan_diagnostics.active_device_count =
         diag->active_device_count;
     out->analog_scan_diagnostics.reserved = diag->reserved;
+    out->analog_scan_diagnostics.bad_channel_id_count =
+        diag->bad_channel_id_count;
+    out->analog_scan_diagnostics.dma_overrun_count =
+        diag->dma_overrun_count;
+    out->analog_scan_diagnostics.spi_error_count = diag->spi_error_count;
+    out->analog_scan_diagnostics.missed_scan_count =
+        diag->missed_scan_count;
     break;
   }
   case COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS: {

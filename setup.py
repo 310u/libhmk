@@ -26,7 +26,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     keyboard: str = args.keyboard
+    kb_json = utils.get_kb_json(keyboard)
     driver = utils.get_driver(keyboard)
+    cpu_hz = kb_json["hardware"].get("cpu_hz")
     native_sanitizers_enabled = env_flag_enabled("LIBHMK_NATIVE_SANITIZERS")
     stack_usage_enabled = env_flag_enabled("LIBHMK_STACK_USAGE")
 
@@ -81,6 +83,9 @@ if __name__ == "__main__":
         "test_ignore": "*",
         "upload_protocol": "dfu",
     }
+    if cpu_hz is not None:
+        for env_name in (f"env:{keyboard}", f"env:{keyboard}_recovery"):
+            pio_config[env_name]["board_build.f_cpu"] = f"{cpu_hz}L"
 
     def native_test_env(test_filter, build_src_filter, extra_flags=None):
         flags = [common_test_flags]
