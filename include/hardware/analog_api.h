@@ -63,8 +63,11 @@
 #define ADC_SAMPLE_DELAY 20
 #endif
 
-_Static_assert((F_CPU / 1000000) * ADC_SAMPLE_DELAY < 65536,
-               "ADC_SAMPLE_DELAY exceeds maximum timer period");
+#define ANALOG_MUX_SAMPLE_DELAY_MIN_US 1u
+#define ANALOG_MUX_SAMPLE_DELAY_MAX_US 50u
+
+_Static_assert((F_CPU / 1000000) * ANALOG_MUX_SAMPLE_DELAY_MAX_US < 65536,
+               "MUX sample delay exceeds maximum timer period");
 #endif
 
 #if !defined(ADC_NUM_RAW_INPUTS)
@@ -136,15 +139,20 @@ typedef struct {
   uint32_t max_scan_cycles;
   uint32_t last_scan_us;
   uint32_t max_scan_us;
+  uint32_t estimated_scan_hz;
   uint32_t last_bus_completion_skew_cycles;
   uint32_t max_bus_completion_skew_cycles;
-  uint8_t active_bus_count;
-  uint8_t active_device_count;
-  uint16_t reserved;
   uint32_t bad_channel_id_count;
   uint32_t dma_overrun_count;
+  uint32_t overrun_count;
   uint32_t spi_error_count;
   uint32_t missed_scan_count;
+  uint16_t mux_sample_delay_us;
+  uint16_t reserved;
+  uint8_t mux_step_count;
+  uint8_t active_bus_count;
+  uint8_t active_device_count;
+  uint8_t reserved2;
 } analog_scan_diagnostics_t;
 
 /**
@@ -193,8 +201,8 @@ uint16_t analog_read_raw(uint8_t index);
 /**
  * @brief Get backend-specific analog scan diagnostics
  *
- * For SPI ADC backends, this reports full scan-round timing. For simpler MCU
- * ADC backends, the counters may remain zeroed.
+ * For mux-based scan backends, the timing fields report full-scan timing after
+ * every mux select state has been sampled once.
  *
  * @return Pointer to the current diagnostics snapshot
  */
@@ -209,3 +217,47 @@ const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void);
  * @return None
  */
 void analog_reset_scan_diagnostics(void);
+
+/**
+ * @brief Read the active runtime multiplexer settle delay
+ *
+ * Backends without a mux-based scan pipeline should return `0`.
+ *
+ * @return Active settle delay in microseconds
+ */
+uint16_t analog_get_mux_sample_delay_us(void);
+
+/**
+ * @brief Update the runtime multiplexer settle delay
+ *
+ * Implementations should validate the value and apply it safely at a scan-step
+ * boundary when the scan engine is already active.
+ *
+ * @param delay_us Requested delay in microseconds
+ *
+ * @return `true` if the new value was accepted
+ */
+bool analog_set_mux_sample_delay_us(uint16_t delay_us);
+
+/**
+ * @brief Return the number of backend-specific debug frames available
+ *
+ * Backends that do not expose frame-level transport diagnostics should return
+ * `0`.
+ *
+ * @return Number of readable debug frames
+ */
+uint16_t analog_debug_frame_count(void);
+
+/**
+ * @brief Read one backend-specific debug frame
+ *
+ * For the ADS7953 backend, this returns the raw 16-bit word most recently read
+ * from the converter transport stream. Backends that do not support this
+ * should return `0`.
+ *
+ * @param index Flattened debug frame index
+ *
+ * @return Raw backend-specific frame data
+ */
+uint16_t analog_read_debug_frame(uint8_t index);

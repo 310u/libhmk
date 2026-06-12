@@ -80,6 +80,7 @@ static const uint8_t desc_keyboard_report[] = {
 };
 
 // HID report descriptor for mouse interface
+#if !defined(USB_ENUM_DIAGNOSTIC)
 static const uint8_t desc_mouse_report[] = {
     HID_USAGE_PAGE(HID_USAGE_PAGE_DESKTOP),
     HID_USAGE(HID_USAGE_DESKTOP_MOUSE),
@@ -236,7 +237,18 @@ static const uint8_t desc_raw_hid_report[] = {
     HID_COLLECTION_END
 
 };
+#endif
 
+#if defined(USB_ENUM_DIAGNOSTIC)
+#define DIAG_CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
+
+static const uint8_t desc_configuration_diag[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 1, 0, DIAG_CONFIG_TOTAL_LEN, 0x00, 100),
+    TUD_HID_DESCRIPTOR(USB_ITF_KEYBOARD, 0, HID_ITF_PROTOCOL_KEYBOARD,
+                       sizeof(desc_keyboard_report), EP_IN_ADDR_KEYBOARD,
+                       CFG_TUD_HID_EP_BUFSIZE, 1),
+};
+#else
 // Maximum possible configuration descriptor length (with both gamepad and
 // XInput). The actual length may be smaller depending on the configuration.
 #define CONFIG_TOTAL_LEN                                                       \
@@ -245,6 +257,7 @@ static const uint8_t desc_raw_hid_report[] = {
 
 // Configuration descriptor
 static uint8_t desc_configuration[CONFIG_TOTAL_LEN];
+#endif
 
 #if defined(BOARD_USB_HS)
 // Device qualifier descriptor for USB HS
@@ -264,7 +277,9 @@ static const tusb_desc_device_qualifier_t desc_device_qualifier = {
 
 // Other speed configuration descriptor for USB HS. Same as the main
 // configuration descriptor
+#if !defined(USB_ENUM_DIAGNOSTIC)
 static uint8_t desc_other_speed_config[CONFIG_TOTAL_LEN];
+#endif
 #endif
 
 // String descriptor
@@ -372,6 +387,7 @@ _Static_assert(M_ARRAY_SIZE(desc_ms_os_20) == MS_OS_20_DESC_LEN,
  *
  * @return None
  */
+#if !defined(USB_ENUM_DIAGNOSTIC)
 static void generate_desc_configuration(uint8_t *dst) {
   uint8_t num_interfaces = USB_ITF_COUNT;
   uint16_t total_length = CONFIG_TOTAL_LEN;
@@ -432,12 +448,17 @@ static void generate_desc_configuration(uint8_t *dst) {
   // when XInput is disabled)
   memcpy(dst, src, total_length);
 }
+#endif
 
 const uint8_t *tud_descriptor_device_cb(void) {
   return (const uint8_t *)&desc_device;
 }
 
 const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance) {
+#if defined(USB_ENUM_DIAGNOSTIC)
+  (void)instance;
+  return desc_keyboard_report;
+#else
   switch (instance) {
   case USB_ITF_KEYBOARD:
     return desc_keyboard_report;
@@ -459,12 +480,19 @@ const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance) {
     // Invalid interface, should be unreachable
     return NULL;
   }
+#endif
 }
 
 const uint8_t *tud_descriptor_configuration_cb(uint8_t index) {
   // We only have one configuration so we don't need to check the index
+#if defined(USB_ENUM_DIAGNOSTIC)
+  (void)index;
+  return desc_configuration_diag;
+#else
+  (void)index;
   generate_desc_configuration(desc_configuration);
   return desc_configuration;
+#endif
 }
 
 #if defined(BOARD_USB_HS)
@@ -473,10 +501,16 @@ const uint8_t *tud_descriptor_device_qualifier_cb(void) {
 }
 
 const uint8_t *tud_descriptor_other_speed_configuration_cb(uint8_t index) {
+#if defined(USB_ENUM_DIAGNOSTIC)
+  (void)index;
+  return NULL;
+#else
+  (void)index;
   generate_desc_configuration(desc_other_speed_config);
   desc_other_speed_config[1] = TUSB_DESC_OTHER_SPEED_CONFIG;
 
   return desc_other_speed_config;
+#endif
 }
 #endif
 

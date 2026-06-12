@@ -14,11 +14,20 @@
  */
 
 #include "hardware/hardware.h"
+#include "usb_bootstrap.h"
 
 #include "at32f402_405.h"
 #include "analog_scan.h"
 
 #if defined(ANALOG_BACKEND_MCU_ADC)
+
+#ifndef ANALOG_IRQ_PREEMPT_PRIORITY
+#define ANALOG_IRQ_PREEMPT_PRIORITY 1
+#endif
+
+#ifndef ANALOG_IRQ_SUBPRIORITY
+#define ANALOG_IRQ_SUBPRIORITY 0
+#endif
 
 // GPIO ports for each ADC channel
 static gpio_type *channel_ports[] = {
@@ -185,6 +194,95 @@ static volatile bool adc_initialized = false;
 __attribute__((aligned(8))) static volatile uint16_t
     adc_buffer[ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS];
 static analog_scan_diagnostics_t analog_scan_diagnostics;
+static volatile uint16_t analog_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
+
+#if ADC_NUM_MUX_INPUTS > 0
+static volatile bool analog_mux_delay_reconfigure_pending = false;
+static uint32_t analog_mux_last_full_scan_cycle = 0u;
+static bool analog_mux_last_full_scan_cycle_valid = false;
+
+static uint32_t analog_mux_cycles_to_us(uint32_t cycles) {
+#if defined(F_CPU) && F_CPU > 0
+  return (uint32_t)(((uint64_t)cycles * 1000000ull) / (uint64_t)F_CPU);
+#else
+  (void)cycles;
+  return 0u;
+#endif
+}
+
+static uint32_t analog_mux_cycles_to_hz(uint32_t cycles) {
+#if defined(F_CPU) && F_CPU > 0
+  if (cycles == 0u) {
+    return 0u;
+  }
+
+  return (uint32_t)(((uint64_t)F_CPU + ((uint64_t)cycles / 2ull)) /
+                    (uint64_t)cycles);
+#else
+  (void)cycles;
+  return 0u;
+#endif
+}
+
+static uint8_t analog_mux_step_count(void) {
+  return (uint8_t)(1u << ADC_NUM_MUX_SELECT_PINS);
+}
+
+static uint16_t analog_mux_timer_period(uint16_t delay_us) {
+  return (uint16_t)(((F_CPU / 1000000u) * (uint32_t)delay_us) - 1u);
+}
+
+static void analog_update_mux_scan_delay_in_diagnostics(void) {
+  analog_scan_diagnostics.mux_sample_delay_us = analog_mux_sample_delay_us;
+  analog_scan_diagnostics.mux_step_count = analog_mux_step_count();
+}
+
+static void analog_program_mux_delay_timer(void) {
+  tmr_period_value_set(TMR6, analog_mux_timer_period(analog_mux_sample_delay_us));
+  tmr_counter_value_set(TMR6, 0u);
+}
+
+static void analog_apply_pending_mux_delay(void) {
+  if (!analog_mux_delay_reconfigure_pending) {
+    return;
+  }
+
+  analog_program_mux_delay_timer();
+  analog_mux_delay_reconfigure_pending = false;
+}
+
+static void analog_record_full_scan_cycle(uint32_t end_cycle) {
+  if (!analog_mux_last_full_scan_cycle_valid) {
+    analog_mux_last_full_scan_cycle = end_cycle;
+    analog_mux_last_full_scan_cycle_valid = true;
+    return;
+  }
+
+  const uint32_t elapsed_cycles = end_cycle - analog_mux_last_full_scan_cycle;
+  analog_mux_last_full_scan_cycle = end_cycle;
+
+  analog_scan_diagnostics.scan_count++;
+  analog_scan_diagnostics.last_scan_cycles = elapsed_cycles;
+  analog_scan_diagnostics.last_scan_us = analog_mux_cycles_to_us(elapsed_cycles);
+  analog_scan_diagnostics.estimated_scan_hz =
+      analog_mux_cycles_to_hz(elapsed_cycles);
+  if (elapsed_cycles > analog_scan_diagnostics.max_scan_cycles) {
+    analog_scan_diagnostics.max_scan_cycles = elapsed_cycles;
+    analog_scan_diagnostics.max_scan_us = analog_scan_diagnostics.last_scan_us;
+  }
+}
+
+static void analog_reset_mux_full_scan_timing(void) {
+  analog_mux_last_full_scan_cycle = 0u;
+  analog_mux_last_full_scan_cycle_valid = false;
+}
+#else
+static void analog_update_mux_scan_delay_in_diagnostics(void) {
+  analog_scan_diagnostics.mux_sample_delay_us = 0u;
+  analog_scan_diagnostics.mux_step_count = 0u;
+}
+#endif
+
 void analog_init(void) {
   // Enable peripheral clocks
   crm_periph_clock_enable(CRM_ADC1_PERIPH_CLOCK, TRUE);
@@ -201,6 +299,12 @@ void analog_init(void) {
 #endif
   analog_scan_reset();
   memset(&analog_scan_diagnostics, 0, sizeof(analog_scan_diagnostics));
+  analog_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
+  analog_update_mux_scan_delay_in_diagnostics();
+#if ADC_NUM_MUX_INPUTS > 0
+  analog_mux_delay_reconfigure_pending = false;
+  analog_reset_mux_full_scan_timing();
+#endif
 
   // Initialize the ADC peripheral
   adc_clock_div_set(ADC_DIV_8);
@@ -283,16 +387,19 @@ void analog_init(void) {
 
 #if ADC_NUM_MUX_INPUTS > 0
   // Initialize the timer peripheral
-  tmr_base_init(TMR6, (F_CPU / 1000000) * ADC_SAMPLE_DELAY - 1, 0);
+  tmr_base_init(TMR6, analog_mux_timer_period(analog_mux_sample_delay_us), 0);
   tmr_cnt_dir_set(TMR6, TMR_COUNT_UP);
   tmr_interrupt_enable(TMR6, TMR_OVF_INT, TRUE);
 #endif
 
   // Enable interrupts
-  nvic_irq_enable(ADC1_IRQn, 0, 0);
-  nvic_irq_enable(DMA1_Channel1_IRQn, 0, 0);
+  nvic_irq_enable(ADC1_IRQn, ANALOG_IRQ_PREEMPT_PRIORITY,
+                  ANALOG_IRQ_SUBPRIORITY);
+  nvic_irq_enable(DMA1_Channel1_IRQn, ANALOG_IRQ_PREEMPT_PRIORITY,
+                  ANALOG_IRQ_SUBPRIORITY);
 #if ADC_NUM_MUX_INPUTS > 0
-  nvic_irq_enable(TMR6_GLOBAL_IRQn, 0, 0);
+  nvic_irq_enable(TMR6_GLOBAL_IRQn, ANALOG_IRQ_PREEMPT_PRIORITY,
+                  ANALOG_IRQ_SUBPRIORITY);
 #endif
 
   // Enable the ADC peripheral
@@ -300,11 +407,14 @@ void analog_init(void) {
 
   // Calibrate the ADC
   adc_calibration_init(ADC1);
-  while (adc_calibration_init_status_get(ADC1) == SET)
-    ;
+  while (adc_calibration_init_status_get(ADC1) == SET) {
+    usb_bootstrap_pump();
+  }
+
   adc_calibration_start(ADC1);
-  while (adc_calibration_status_get(ADC1) == SET)
-    ;
+  while (adc_calibration_status_get(ADC1) == SET) {
+    usb_bootstrap_pump();
+  }
 
   // Enable DMA after ADC initialization
   dma_channel_enable(DMA1_CHANNEL1, TRUE);
@@ -312,8 +422,9 @@ void analog_init(void) {
   adc_ordinary_software_trigger_enable(ADC1, TRUE);
 
   // Wait for the ADC values to be initialized
-  while (!adc_initialized)
-    ;
+  while (!adc_initialized) {
+    usb_bootstrap_pump();
+  }
 }
 
 void analog_task(void) {}
@@ -345,6 +456,42 @@ const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
 
 void analog_reset_scan_diagnostics(void) {
   memset(&analog_scan_diagnostics, 0, sizeof(analog_scan_diagnostics));
+  analog_update_mux_scan_delay_in_diagnostics();
+#if ADC_NUM_MUX_INPUTS > 0
+  analog_reset_mux_full_scan_timing();
+#endif
+}
+
+uint16_t analog_get_mux_sample_delay_us(void) {
+#if ADC_NUM_MUX_INPUTS > 0
+  return analog_mux_sample_delay_us;
+#else
+  return 0u;
+#endif
+}
+
+bool analog_set_mux_sample_delay_us(uint16_t delay_us) {
+#if ADC_NUM_MUX_INPUTS > 0
+  if (delay_us < ANALOG_MUX_SAMPLE_DELAY_MIN_US ||
+      delay_us > ANALOG_MUX_SAMPLE_DELAY_MAX_US) {
+    return false;
+  }
+
+  analog_mux_sample_delay_us = delay_us;
+  analog_mux_delay_reconfigure_pending = true;
+  analog_update_mux_scan_delay_in_diagnostics();
+  return true;
+#else
+  (void)delay_us;
+  return false;
+#endif
+}
+
+uint16_t analog_debug_frame_count(void) { return 0u; }
+
+uint16_t analog_read_debug_frame(uint8_t index) {
+  (void)index;
+  return 0u;
 }
 
 //--------------------------------------------------------------------+
@@ -372,6 +519,9 @@ void DMA1_Channel1_IRQHandler(void) {
     // We initialize all the ADC values when we have gone through all the
     // multiplexer input channels.
     adc_initialized |= (current_mux_channel == 0);
+    if (current_mux_channel == 0u) {
+      analog_record_full_scan_cycle(board_cycle_count());
+    }
 
     // Set the multiplexer select pins
     for (uint32_t i = 0; i < ADC_NUM_MUX_SELECT_PINS; i++)
@@ -379,6 +529,7 @@ void DMA1_Channel1_IRQHandler(void) {
                       (confirm_state)((current_mux_channel >> i) & 1));
 
     // Delay to allow the multiplexer outputs to settle
+    analog_apply_pending_mux_delay();
     tmr_counter_enable(TMR6, TRUE);
 #else
     // We initialize all the ADC values when we have read all the raw input.

@@ -457,6 +457,8 @@ void test_migration_v1_0_reaches_current_and_preserves_profile_data(void) {
   TEST_ASSERT_EQUAL_UINT8(1, written_config.current_profile);
   TEST_ASSERT_EQUAL_UINT8(2, written_config.last_non_default_profile);
   TEST_ASSERT_FALSE(written_config.options.save_bottom_out_threshold);
+  TEST_ASSERT_EQUAL_UINT16(ADC_SAMPLE_DELAY_DEFAULT,
+                           written_config.mux_sample_delay_us);
 
   TEST_ASSERT_EQUAL_UINT8(0x76, written_config.profiles[0].keymap[0][0]);
   TEST_ASSERT_EQUAL_UINT8(0x7B, written_config.profiles[0].keymap[0][1]);
@@ -587,6 +589,8 @@ void test_migration_v1_10_appends_trigger_state_colors_without_clobbering_profil
   TEST_ASSERT_TRUE(migration_try_migrate());
   TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
   TEST_ASSERT_EQUAL_HEX32(0x12345678u, written_config.options.raw);
+  TEST_ASSERT_EQUAL_UINT16(ADC_SAMPLE_DELAY_DEFAULT,
+                           written_config.mux_sample_delay_us);
 
   const eeconfig_profile_t *profile = &written_config.profiles[1];
   TEST_ASSERT_EQUAL_UINT8(91, profile->rgb_config.secondary_color.r);

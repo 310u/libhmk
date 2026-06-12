@@ -65,6 +65,15 @@ be dropped.
 | `145` | `COMMAND_GET_JOYSTICK_CONFIG` | Reads the current profile's joystick configuration. |
 | `146` | `COMMAND_SET_JOYSTICK_CONFIG` | Writes the current profile's joystick configuration. |
 | `147` | `COMMAND_SET_HOST_TIME` | Pushes host wall-clock time into runtime-only firmware features such as the binary clock effect. |
+| `148` | `COMMAND_GET_TRACKBALL_STATE` | Returns the live trackball diagnostic state. |
+| `149` | `COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS` | Returns matrix scan timing diagnostics. |
+| `150` | `COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS` | Clears accumulated matrix scan diagnostics. |
+| `151` | `COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS` | Returns analog full-scan diagnostics. |
+| `152` | `COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS` | Clears accumulated analog scan diagnostics counters. |
+| `153` | `COMMAND_GET_ANALOG_RAW_CHANNELS` | Reads raw direct ADC channels, if present. |
+| `154` | `COMMAND_GET_ANALOG_DEBUG_FRAMES` | Reads backend-specific debug frames, if available. |
+| `155` | `COMMAND_GET_ANALOG_SCAN_CONFIG` | Reads the active runtime MUX scan configuration. |
+| `156` | `COMMAND_SET_ANALOG_SCAN_CONFIG` | Updates and persists the runtime MUX scan configuration. |
 
 ## Paging and Offsets
 Because the HID reports are limited to 64 bytes, bulk data (such as Keymaps, Actuation arrays, Macros, and Metadata) is split into chunks.
@@ -74,5 +83,46 @@ Commands like `COMMAND_GET_KEYMAP` take an `offset` (the starting index) in the 
 Write commands (`COMMAND_SET_*`) directly modify the in-memory cache and write to the internal flash using the `wear_leveling_write` mechanism. Changes take effect immediately.
 
 `COMMAND_SET_HOST_TIME` is a runtime-only update and does not write to flash.
+
+## Analog Scan Runtime Config
+
+`COMMAND_GET_ANALOG_SCAN_CONFIG` and `COMMAND_SET_ANALOG_SCAN_CONFIG` use this
+packed payload:
+
+```c
+struct analog_scan_config {
+  uint16_t mux_sample_delay_us;
+};
+```
+
+The firmware validates `mux_sample_delay_us` in the inclusive range `1..50`.
+For boards without a mux-scanned ADC pipeline, `GET` returns `0` and `SET`
+fails with `COMMAND_UNKNOWN`.
+
+## Analog Scan Diagnostics
+
+`COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS` returns this packed payload:
+
+```c
+struct analog_scan_diagnostics_report {
+  uint16_t mux_sample_delay_us;
+  uint16_t mux_step_count;
+  uint32_t scan_count;
+  uint32_t last_scan_cycles;
+  uint32_t max_scan_cycles;
+  uint32_t last_scan_us;
+  uint32_t max_scan_us;
+  uint32_t estimated_scan_hz;
+  uint32_t bad_channel_id_count;
+  uint32_t dma_overrun_count;
+  uint32_t overrun_count;
+  uint32_t spi_error_count;
+  uint32_t missed_scan_count;
+};
+```
+
+For mux-based MCU ADC backends, `scan_count`, `last_scan_*`, `max_scan_*`, and
+`estimated_scan_hz` refer to a full mux sweep across every select state, not an
+individual mux step.
 
 *All structs are packed (`__attribute__((packed))`). The byte order is little-endian.*

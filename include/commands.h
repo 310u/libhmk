@@ -68,6 +68,10 @@ typedef enum {
   COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS,
   COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS,
   COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS,
+  COMMAND_GET_ANALOG_RAW_CHANNELS,
+  COMMAND_GET_ANALOG_DEBUG_FRAMES,
+  COMMAND_GET_ANALOG_SCAN_CONFIG,
+  COMMAND_SET_ANALOG_SCAN_CONFIG,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -161,6 +165,10 @@ typedef struct __attribute__((packed)) {
   uint8_t seconds;
 } command_in_host_time_t;
 
+typedef struct __attribute__((packed)) {
+  uint16_t mux_sample_delay_us;
+} command_analog_scan_config_t;
+
 // Command input buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -182,6 +190,7 @@ typedef struct __attribute__((packed)) {
     command_in_rgb_config_t rgb_config;
     command_in_joystick_config_t joystick_config;
     command_in_host_time_t host_time;
+    command_analog_scan_config_t analog_scan_config;
   };
 } command_in_buffer_t;
 
@@ -238,18 +247,17 @@ typedef struct __attribute__((packed)) {
 } command_out_matrix_scan_diagnostics_t;
 
 typedef struct __attribute__((packed)) {
+  uint16_t mux_sample_delay_us;
+  uint16_t mux_step_count;
   uint32_t scan_count;
   uint32_t last_scan_cycles;
   uint32_t max_scan_cycles;
   uint32_t last_scan_us;
   uint32_t max_scan_us;
-  uint32_t last_bus_completion_skew_cycles;
-  uint32_t max_bus_completion_skew_cycles;
-  uint8_t active_bus_count;
-  uint8_t active_device_count;
-  uint16_t reserved;
+  uint32_t estimated_scan_hz;
   uint32_t bad_channel_id_count;
   uint32_t dma_overrun_count;
+  uint32_t overrun_count;
   uint32_t spi_error_count;
   uint32_t missed_scan_count;
 } command_out_analog_scan_diagnostics_t;
@@ -295,6 +303,8 @@ typedef struct __attribute__((packed)) {
     command_out_joystick_config_t joystick_config;
     // For `COMMAND_GET_TRACKBALL_STATE`
     command_out_trackball_state_t trackball_state;
+    // For `COMMAND_GET_ANALOG_SCAN_CONFIG`
+    command_analog_scan_config_t analog_scan_config;
     // For `COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS`
     command_out_matrix_scan_diagnostics_t matrix_scan_diagnostics;
     // For `COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS`

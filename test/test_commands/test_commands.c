@@ -20,6 +20,10 @@ static bool raw_hid_ready;
 static uint32_t raw_hid_report_count;
 static uint8_t raw_hid_reports[4][RAW_HID_EP_SIZE];
 static uint32_t wear_leveling_write_count;
+static bool wear_leveling_write_result;
+static uint32_t wear_leveling_last_addr;
+static uint32_t wear_leveling_last_len;
+static uint8_t wear_leveling_last_data[8];
 static uint32_t layout_reset_count;
 static uint32_t profile_reload_count;
 static uint32_t recalibrate_count;
@@ -34,17 +38,22 @@ static uint8_t host_time_minutes;
 static uint8_t host_time_seconds;
 static matrix_scan_diagnostics_t mock_matrix_diag;
 static analog_scan_diagnostics_t mock_analog_diag;
+static uint16_t mock_analog_mux_sample_delay_us;
+static bool analog_set_mux_sample_delay_result;
+static uint32_t analog_set_mux_sample_delay_count;
 
 #if defined(RGB_ENABLED)
 static rgb_config_t mock_rgb_config;
 #endif
 
 bool wear_leveling_write(uint32_t addr, const void *buf, uint32_t len) {
-  (void)addr;
-  (void)buf;
-  (void)len;
   wear_leveling_write_count++;
-  return true;
+  wear_leveling_last_addr = addr;
+  wear_leveling_last_len = len;
+  memset(wear_leveling_last_data, 0, sizeof(wear_leveling_last_data));
+  memcpy(wear_leveling_last_data, buf,
+         M_MIN(len, (uint32_t)sizeof(wear_leveling_last_data)));
+  return wear_leveling_write_result;
 }
 
 bool eeconfig_reset(void) { return true; }
@@ -77,8 +86,43 @@ const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
 }
 
 void analog_reset_scan_diagnostics(void) {
+  const uint16_t mux_sample_delay_us = mock_analog_diag.mux_sample_delay_us;
+  const uint8_t mux_step_count = mock_analog_diag.mux_step_count;
+  const uint8_t active_bus_count = mock_analog_diag.active_bus_count;
+  const uint8_t active_device_count = mock_analog_diag.active_device_count;
   memset(&mock_analog_diag, 0, sizeof(mock_analog_diag));
+  mock_analog_diag.mux_sample_delay_us = mux_sample_delay_us;
+  mock_analog_diag.mux_step_count = mux_step_count;
+  mock_analog_diag.active_bus_count = active_bus_count;
+  mock_analog_diag.active_device_count = active_device_count;
   analog_diag_reset_count++;
+}
+
+uint16_t analog_get_mux_sample_delay_us(void) {
+  return mock_analog_mux_sample_delay_us;
+}
+
+bool analog_set_mux_sample_delay_us(uint16_t delay_us) {
+  analog_set_mux_sample_delay_count++;
+  if (delay_us < 1u || delay_us > 50u || !analog_set_mux_sample_delay_result) {
+    return false;
+  }
+
+  mock_analog_mux_sample_delay_us = delay_us;
+  mock_analog_diag.mux_sample_delay_us = delay_us;
+  return true;
+}
+
+uint16_t analog_read_raw(uint8_t index) {
+  (void)index;
+  return 0u;
+}
+
+uint16_t analog_debug_frame_count(void) { return 0u; }
+
+uint16_t analog_read_debug_frame(uint8_t index) {
+  (void)index;
+  return 0u;
 }
 
 void trackball_get_state(trackball_diagnostic_state_t *state) {
@@ -142,6 +186,10 @@ void setUp(void) {
   raw_hid_report_count = 0;
   memset(raw_hid_reports, 0, sizeof(raw_hid_reports));
   wear_leveling_write_count = 0;
+  wear_leveling_write_result = true;
+  wear_leveling_last_addr = 0;
+  wear_leveling_last_len = 0;
+  memset(wear_leveling_last_data, 0, sizeof(wear_leveling_last_data));
   layout_reset_count = 0;
   profile_reload_count = 0;
   recalibrate_count = 0;
@@ -156,6 +204,9 @@ void setUp(void) {
   host_time_seconds = 0;
   memset(&mock_matrix_diag, 0, sizeof(mock_matrix_diag));
   memset(&mock_analog_diag, 0, sizeof(mock_analog_diag));
+  mock_analog_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
+  analog_set_mux_sample_delay_result = true;
+  analog_set_mux_sample_delay_count = 0;
 #if defined(RGB_ENABLED)
   memset(&mock_rgb_config, 0, sizeof(mock_rgb_config));
 #endif
@@ -342,17 +393,17 @@ void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
       .command_id = COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS,
   };
 
+  mock_analog_diag.mux_sample_delay_us = 10u;
+  mock_analog_diag.mux_step_count = 8u;
   mock_analog_diag.scan_count = 123u;
   mock_analog_diag.last_scan_cycles = 8200u;
   mock_analog_diag.max_scan_cycles = 9100u;
   mock_analog_diag.last_scan_us = 38u;
   mock_analog_diag.max_scan_us = 42u;
-  mock_analog_diag.last_bus_completion_skew_cycles = 120u;
-  mock_analog_diag.max_bus_completion_skew_cycles = 180u;
-  mock_analog_diag.active_bus_count = 2u;
-  mock_analog_diag.active_device_count = 4u;
+  mock_analog_diag.estimated_scan_hz = 12345u;
   mock_analog_diag.bad_channel_id_count = 3u;
   mock_analog_diag.dma_overrun_count = 4u;
+  mock_analog_diag.overrun_count = 7u;
   mock_analog_diag.spi_error_count = 5u;
   mock_analog_diag.missed_scan_count = 6u;
 
@@ -364,6 +415,8 @@ void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
 
   command_out_buffer_t out = {0};
   memcpy(&out, raw_hid_reports[0], sizeof(out));
+  TEST_ASSERT_EQUAL_UINT16(10u, out.analog_scan_diagnostics.mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_UINT16(8u, out.analog_scan_diagnostics.mux_step_count);
   TEST_ASSERT_EQUAL_UINT32(123u, out.analog_scan_diagnostics.scan_count);
   TEST_ASSERT_EQUAL_UINT32(8200u,
                            out.analog_scan_diagnostics.last_scan_cycles);
@@ -371,14 +424,11 @@ void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
                            out.analog_scan_diagnostics.max_scan_cycles);
   TEST_ASSERT_EQUAL_UINT32(38u, out.analog_scan_diagnostics.last_scan_us);
   TEST_ASSERT_EQUAL_UINT32(42u, out.analog_scan_diagnostics.max_scan_us);
-  TEST_ASSERT_EQUAL_UINT32(
-      120u, out.analog_scan_diagnostics.last_bus_completion_skew_cycles);
-  TEST_ASSERT_EQUAL_UINT32(
-      180u, out.analog_scan_diagnostics.max_bus_completion_skew_cycles);
-  TEST_ASSERT_EQUAL_UINT8(2u, out.analog_scan_diagnostics.active_bus_count);
-  TEST_ASSERT_EQUAL_UINT8(4u, out.analog_scan_diagnostics.active_device_count);
+  TEST_ASSERT_EQUAL_UINT32(12345u,
+                           out.analog_scan_diagnostics.estimated_scan_hz);
   TEST_ASSERT_EQUAL_UINT32(3u, out.analog_scan_diagnostics.bad_channel_id_count);
   TEST_ASSERT_EQUAL_UINT32(4u, out.analog_scan_diagnostics.dma_overrun_count);
+  TEST_ASSERT_EQUAL_UINT32(7u, out.analog_scan_diagnostics.overrun_count);
   TEST_ASSERT_EQUAL_UINT32(5u, out.analog_scan_diagnostics.spi_error_count);
   TEST_ASSERT_EQUAL_UINT32(6u, out.analog_scan_diagnostics.missed_scan_count);
 }
@@ -390,7 +440,8 @@ void test_command_reset_analog_scan_diagnostics_clears_snapshot(void) {
 
   mock_analog_diag.scan_count = 1u;
   mock_analog_diag.max_scan_cycles = 2u;
-  mock_analog_diag.active_bus_count = 2u;
+  mock_analog_diag.mux_sample_delay_us = 12u;
+  mock_analog_diag.mux_step_count = 8u;
 
   command_send_and_flush(&reset_diag);
 
@@ -400,7 +451,69 @@ void test_command_reset_analog_scan_diagnostics_clears_snapshot(void) {
   TEST_ASSERT_EQUAL_UINT32(1, analog_diag_reset_count);
   TEST_ASSERT_EQUAL_UINT32(0, mock_analog_diag.scan_count);
   TEST_ASSERT_EQUAL_UINT32(0, mock_analog_diag.max_scan_cycles);
-  TEST_ASSERT_EQUAL_UINT8(0, mock_analog_diag.active_bus_count);
+  TEST_ASSERT_EQUAL_UINT16(12u, mock_analog_diag.mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_UINT8(8u, mock_analog_diag.mux_step_count);
+}
+
+void test_command_get_analog_scan_config_returns_current_value(void) {
+  command_in_buffer_t get_config = {
+      .command_id = COMMAND_GET_ANALOG_SCAN_CONFIG,
+  };
+
+  mock_analog_mux_sample_delay_us = 15u;
+
+  command_send_and_flush(&get_config);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_ANALOG_SCAN_CONFIG,
+                          raw_hid_reports[0][0]);
+
+  command_out_buffer_t out = {0};
+  memcpy(&out, raw_hid_reports[0], sizeof(out));
+  TEST_ASSERT_EQUAL_UINT16(15u, out.analog_scan_config.mux_sample_delay_us);
+}
+
+void test_command_set_analog_scan_config_updates_runtime_and_persists(void) {
+  command_in_buffer_t set_config = {
+      .command_id = COMMAND_SET_ANALOG_SCAN_CONFIG,
+      .analog_scan_config = {.mux_sample_delay_us = 12u},
+  };
+
+  mock_analog_mux_sample_delay_us = 20u;
+
+  command_send_and_flush(&set_config);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_ANALOG_SCAN_CONFIG,
+                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT16(12u, mock_analog_mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_UINT32(1u, analog_set_mux_sample_delay_count);
+  TEST_ASSERT_EQUAL_UINT32(1u, wear_leveling_write_count);
+  TEST_ASSERT_EQUAL_UINT32(offsetof(eeconfig_t, mux_sample_delay_us),
+                           wear_leveling_last_addr);
+  TEST_ASSERT_EQUAL_UINT32(sizeof(mock_eeconfig.mux_sample_delay_us),
+                           wear_leveling_last_len);
+
+  uint16_t written_delay_us = 0u;
+  memcpy(&written_delay_us, wear_leveling_last_data, sizeof(written_delay_us));
+  TEST_ASSERT_EQUAL_UINT16(12u, written_delay_us);
+}
+
+void test_command_set_analog_scan_config_rejects_invalid_value_without_write(void) {
+  command_in_buffer_t set_config = {
+      .command_id = COMMAND_SET_ANALOG_SCAN_CONFIG,
+      .analog_scan_config = {.mux_sample_delay_us = 0u},
+  };
+
+  mock_analog_mux_sample_delay_us = 20u;
+
+  command_send_and_flush(&set_config);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT16(20u, mock_analog_mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_UINT32(1u, analog_set_mux_sample_delay_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, wear_leveling_write_count);
 }
 
 #if defined(RGB_ENABLED)
@@ -439,6 +552,9 @@ int main(void) {
   RUN_TEST(test_command_reset_matrix_scan_diagnostics_clears_snapshot);
   RUN_TEST(test_command_get_analog_scan_diagnostics_returns_current_snapshot);
   RUN_TEST(test_command_reset_analog_scan_diagnostics_clears_snapshot);
+  RUN_TEST(test_command_get_analog_scan_config_returns_current_value);
+  RUN_TEST(test_command_set_analog_scan_config_updates_runtime_and_persists);
+  RUN_TEST(test_command_set_analog_scan_config_rejects_invalid_value_without_write);
 #if defined(RGB_ENABLED)
   RUN_TEST(test_command_set_host_time_updates_runtime_clock_without_flash_write);
 #endif

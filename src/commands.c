@@ -73,6 +73,12 @@ static void command_reload_if_current_profile(uint8_t profile) {
     profile_runtime_reload_current();
 }
 
+static void command_apply_analog_scan_runtime_config(void) {
+  if (!analog_set_mux_sample_delay_us(eeconfig->mux_sample_delay_us)) {
+    (void)analog_set_mux_sample_delay_us(ADC_SAMPLE_DELAY_DEFAULT);
+  }
+}
+
 void command_init(void) {
   command_request_pending = false;
   has_pending_response = false;
@@ -109,8 +115,10 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_FACTORY_RESET: {
     success = eeconfig_reset();
-    if (success)
+    if (success) {
+      command_apply_analog_scan_runtime_config();
       profile_runtime_reload_current();
+    }
     break;
   }
   case COMMAND_RECALIBRATE: {
@@ -140,6 +148,41 @@ void command_process(const uint8_t *buf) {
          i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
       o[i].adc_value = key_matrix[i + p->offset].adc_raw;
       o[i].distance = key_matrix[i + p->offset].distance;
+    }
+    break;
+  }
+  case COMMAND_GET_ANALOG_RAW_CHANNELS: {
+#if ADC_NUM_RAW_INPUTS > 0
+    const command_in_analog_info_t *p = &in->analog_info;
+    command_out_analog_info_t *o = out->analog_info;
+
+    COMMAND_VERIFY(p->offset < ADC_NUM_RAW_INPUTS);
+
+    for (uint32_t i = 0;
+         i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < ADC_NUM_RAW_INPUTS;
+         i++) {
+      o[i].adc_value = analog_read_raw((uint8_t)(i + p->offset));
+      o[i].distance = 0u;
+    }
+    break;
+#else
+    success = false;
+    break;
+#endif
+  }
+  case COMMAND_GET_ANALOG_DEBUG_FRAMES: {
+    const command_in_analog_info_t *p = &in->analog_info;
+    command_out_analog_info_t *o = out->analog_info;
+    const uint16_t debug_frame_count = analog_debug_frame_count();
+
+    COMMAND_VERIFY(p->offset < debug_frame_count);
+
+    for (uint32_t i = 0;
+         i < M_ARRAY_SIZE(out->analog_info) &&
+         i + p->offset < debug_frame_count;
+         i++) {
+      o[i].adc_value = analog_read_debug_frame((uint8_t)(i + p->offset));
+      o[i].distance = 0u;
     }
     break;
   }
@@ -496,6 +539,24 @@ void command_process(const uint8_t *buf) {
     out->trackball_state.last_dy = state.last_dy;
     break;
   }
+  case COMMAND_GET_ANALOG_SCAN_CONFIG: {
+    out->analog_scan_config.mux_sample_delay_us =
+        analog_get_mux_sample_delay_us();
+    break;
+  }
+  case COMMAND_SET_ANALOG_SCAN_CONFIG: {
+    const uint16_t previous_delay_us = analog_get_mux_sample_delay_us();
+
+    COMMAND_VERIFY(analog_set_mux_sample_delay_us(
+        in->analog_scan_config.mux_sample_delay_us));
+
+    success = EECONFIG_WRITE(mux_sample_delay_us,
+                             &in->analog_scan_config.mux_sample_delay_us);
+    if (!success) {
+      (void)analog_set_mux_sample_delay_us(previous_delay_us);
+    }
+    break;
+  }
   case COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS: {
     const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
     out->matrix_scan_diagnostics.scan_count = diag->scan_count;
@@ -517,23 +578,21 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS: {
     const analog_scan_diagnostics_t *diag = analog_get_scan_diagnostics();
+    out->analog_scan_diagnostics.mux_sample_delay_us =
+        diag->mux_sample_delay_us;
+    out->analog_scan_diagnostics.mux_step_count = diag->mux_step_count;
     out->analog_scan_diagnostics.scan_count = diag->scan_count;
     out->analog_scan_diagnostics.last_scan_cycles = diag->last_scan_cycles;
     out->analog_scan_diagnostics.max_scan_cycles = diag->max_scan_cycles;
     out->analog_scan_diagnostics.last_scan_us = diag->last_scan_us;
     out->analog_scan_diagnostics.max_scan_us = diag->max_scan_us;
-    out->analog_scan_diagnostics.last_bus_completion_skew_cycles =
-        diag->last_bus_completion_skew_cycles;
-    out->analog_scan_diagnostics.max_bus_completion_skew_cycles =
-        diag->max_bus_completion_skew_cycles;
-    out->analog_scan_diagnostics.active_bus_count = diag->active_bus_count;
-    out->analog_scan_diagnostics.active_device_count =
-        diag->active_device_count;
-    out->analog_scan_diagnostics.reserved = diag->reserved;
+    out->analog_scan_diagnostics.estimated_scan_hz =
+        diag->estimated_scan_hz;
     out->analog_scan_diagnostics.bad_channel_id_count =
         diag->bad_channel_id_count;
     out->analog_scan_diagnostics.dma_overrun_count =
         diag->dma_overrun_count;
+    out->analog_scan_diagnostics.overrun_count = diag->overrun_count;
     out->analog_scan_diagnostics.spi_error_count = diag->spi_error_count;
     out->analog_scan_diagnostics.missed_scan_count =
         diag->missed_scan_count;

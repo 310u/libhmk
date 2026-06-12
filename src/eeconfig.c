@@ -72,6 +72,7 @@ void eeconfig_init(void) {
 
 bool eeconfig_reset(void) {
   uint16_t bottom_out_threshold[NUM_KEYS] = {0};
+  const uint16_t default_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
 
   // We must not perform any action here that requires reading from
   // the configuration as it may be in an invalid state.
@@ -81,6 +82,7 @@ bool eeconfig_reset(void) {
   status &= EECONFIG_WRITE(calibration, &default_calibration);
   status &= EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
   status &= EECONFIG_WRITE(options, &default_options);
+  EECONFIG_WRITE_LOCAL(mux_sample_delay_us, default_mux_sample_delay_us);
   EECONFIG_WRITE_LOCAL(current_profile, 0);
   EECONFIG_WRITE_LOCAL(last_non_default_profile, M_MIN(1, NUM_PROFILES - 1));
   for (uint32_t i = 0; i < NUM_PROFILES; i++)

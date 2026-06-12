@@ -24,6 +24,8 @@
   (MIGRATION_GLOBAL_CONFIG_SIZE_V1_1 + NUM_KEYS * 2)
 #define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32                             \
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_BOTTOM_OUT + 2)
+#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY               \
+  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32 + 2)
 
 #define MIGRATION_PROFILE_BASE_SIZE(advanced_key_size)                          \
   (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                       \
@@ -161,6 +163,9 @@ static bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 static bool v1_12_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+static bool v1_13_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_13_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
                                      uint32_t old_size, uint32_t new_size);
@@ -305,6 +310,13 @@ static const migration_t migrations[] = {
         .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
         .global_config_func = v1_12_global_config_func,
         .profile_config_func = v1_12_profile_config_func,
+    },
+    {
+        .version = 0x0113,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
+        .global_config_func = v1_13_global_config_func,
+        .profile_config_func = v1_13_profile_config_func,
     },
 };
 
@@ -963,5 +975,27 @@ bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT);
 #endif
 
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.12 -> v1.13 Migration
+//--------------------------------------------------------------------+
+
+bool v1_13_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0112)
+    return false;
+
+  migration_memcpy(&dst, &src, MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32 - 2);
+  migration_assign_uint16_t(&dst, ADC_SAMPLE_DELAY_DEFAULT);
+  migration_memcpy(&dst, &src, 2);
+  return true;
+}
+
+bool v1_13_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
   return true;
 }

@@ -109,53 +109,11 @@ static void board_clock_init(void) {
   system_core_clock_update();
 }
 
-#if defined(BOARD_USB_FS)
-/**
- * @brief Reduce power consumption of USB HS PHY when not initialized (FAQ0148)
- *
- * @return None
- */
-static void board_reduce_power_consumption(void) {
-  volatile uint32_t delay = F_CPU / 1000;
-
-  // Wait for HSE to stabilize
-  while (crm_hext_stable_wait() == ERROR)
-    ;
-
-  // Configure HS PHY clock source to HSE to support power down
-  crm_usb_phy12_clock_select(CRM_USB_PHY12_CLOCK_HEXT_DIV_1);
-  crm_periph_clock_enable(CRM_OTGHS_PERIPH_CLOCK, TRUE);
-
-  // Enable power down mode
-  OTG2_GLOBAL->gccfg_bit.pwrdown = TRUE;
+static void board_usb_ignore_vbus(void) {
+  // Match the AT32 TinyUSB BSP and force both OTG blocks to ignore VBUS.
+  OTG1_GLOBAL->gccfg_bit.vbusig = TRUE;
   OTG2_GLOBAL->gccfg_bit.vbusig = TRUE;
-
-  // Set USB mode to device
-  usb_global_set_mode(OTG2_GLOBAL, OTG_DEVICE_MODE);
-  usb_connect(OTG2_GLOBAL);
-
-  // Roughly 1ms delay to enter suspend mode
-  while (delay--) {
-    if (usb_suspend_status_get(OTG2_GLOBAL) == SET)
-      break;
-  }
-
-  // Wait for HS PHY clock source to stabilize
-  OTG2_GLOBAL->gccfg_bit.wait_clk_rcv = TRUE;
-  // Stop USB PHY clock to reduce power consumption
-  usb_stop_phy_clk(OTG2_GLOBAL);
-  // Disable power down mode
-  OTG2_GLOBAL->gccfg_bit.pwrdown = FALSE;
 }
-#endif
-
-#if defined(BOARD_USB_FS)
-static otg_global_type *otg_global = OTG1_GLOBAL;
-#elif defined(BOARD_USB_HS)
-static otg_global_type *otg_global = OTG2_GLOBAL;
-#else
-#error "USB peripheral not defined"
-#endif
 
 /**
  * @brief Initialize the USB
@@ -164,16 +122,15 @@ static otg_global_type *otg_global = OTG2_GLOBAL;
  */
 static void board_usb_init(void) {
 #if defined(BOARD_USB_FS)
-  board_reduce_power_consumption();
-
-  // Configure USB FS clock
   crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE);
-  crm_periph_clock_enable(CRM_OTGFS1_PERIPH_CLOCK, TRUE);
 #elif defined(BOARD_USB_HS)
-  // Configure USB HS clock
   crm_periph_clock_enable(CRM_GPIOB_PERIPH_CLOCK, TRUE);
-  crm_periph_clock_enable(CRM_OTGHS_PERIPH_CLOCK, TRUE);
 #endif
+
+  // Keep both OTG blocks clocked so VBUS override and wakeup handling match
+  // the known-good TinyUSB AT32 BSP behavior.
+  crm_periph_clock_enable(CRM_OTGFS1_PERIPH_CLOCK, TRUE);
+  crm_periph_clock_enable(CRM_OTGHS_PERIPH_CLOCK, TRUE);
 
   // Configure PLLU for USB
   crm_pllu_output_set(TRUE);
@@ -185,8 +142,7 @@ static void board_usb_init(void) {
   // Configure USB clock source to PLLU
   crm_usb_clock_source_select(CRM_USB_CLOCK_SOURCE_PLLU);
 
-  // Ignore USB FS VBUS sensing
-  otg_global->gccfg_bit.vbusig = TRUE;
+  board_usb_ignore_vbus();
 #if defined(BOARD_USB_FS)
   // Set NVIC priority for USB FS interrupt
   NVIC_SetPriority(OTGFS1_IRQn, 0);

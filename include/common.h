@@ -19,7 +19,7 @@
 // Firmware Version
 //--------------------------------------------------------------------+
 
-#define FIRMWARE_VERSION 0x010E
+#define FIRMWARE_VERSION 0x010F
 
 //--------------------------------------------------------------------+
 // Common Headers
@@ -51,6 +51,14 @@
 #if defined(KEYBOARD_BOARD_DEF_HEADER)
 // Include keyboard-specific board definitions after driver defaults.
 #include KEYBOARD_BOARD_DEF_HEADER
+#endif
+
+#if !defined(ADC_SAMPLE_DELAY_DEFAULT)
+#if defined(ADC_SAMPLE_DELAY)
+#define ADC_SAMPLE_DELAY_DEFAULT ADC_SAMPLE_DELAY
+#else
+#define ADC_SAMPLE_DELAY_DEFAULT 20
+#endif
 #endif
 
 //--------------------------------------------------------------------+

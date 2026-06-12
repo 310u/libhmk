@@ -17,6 +17,10 @@
 
 #include "at32f402_405.h"
 
+#ifndef SPI_TRANSFER_TIMEOUT_US
+#define SPI_TRANSFER_TIMEOUT_US 1000u
+#endif
+
 #if SPI_NUM_BUSES > 4
 #error "SPI_NUM_BUSES > 4 is not supported"
 #endif
@@ -195,6 +199,27 @@ static spi_bus_state_t spi_buses[] = {
 };
 
 static bool spi_driver_initialized = false;
+
+static uint32_t spi_transfer_timeout_cycles(void) {
+  uint64_t cycles = ((uint64_t)F_CPU * SPI_TRANSFER_TIMEOUT_US) / 1000000ull;
+  if (cycles == 0u) {
+    cycles = 1u;
+  }
+  return (uint32_t)cycles;
+}
+
+static bool spi_wait_for_flag(spi_type *instance, uint32_t flag) {
+  const uint32_t start = board_cycle_count();
+  const uint32_t timeout = spi_transfer_timeout_cycles();
+
+  while (spi_i2s_flag_get(instance, flag) == RESET) {
+    if ((uint32_t)(board_cycle_count() - start) > timeout) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 static void spi_enable_bus_clock(uint8_t bus) {
   switch (bus) {
@@ -377,10 +402,12 @@ bool spi_bus_transfer(const spi_bus_config_t *config, const uint8_t *tx,
   instance = spi_buses[config->bus].instance;
   for (size_t i = 0; i < len; i++) {
     uint16_t tx_word = tx != NULL ? tx[i] : 0xFFu;
-    while (spi_i2s_flag_get(instance, SPI_I2S_TDBE_FLAG) == RESET) {
+    if (!spi_wait_for_flag(instance, SPI_I2S_TDBE_FLAG)) {
+      return false;
     }
     spi_i2s_data_transmit(instance, tx_word);
-    while (spi_i2s_flag_get(instance, SPI_I2S_RDBF_FLAG) == RESET) {
+    if (!spi_wait_for_flag(instance, SPI_I2S_RDBF_FLAG)) {
+      return false;
     }
     if (rx != NULL) {
       rx[i] = (uint8_t)spi_i2s_data_receive(instance);

@@ -25,6 +25,13 @@ kb_json = utils.get_kb_json(keyboard)
 driver = utils.get_driver(keyboard)
 driver_name = kb_json["hardware"]["driver"]
 
+try:
+    usb_port_override = env.GetProjectOption("custom_usb_port")
+except Exception:
+    usb_port_override = None
+
+usb_port = usb_port_override or kb_json["usb"]["port"]
+
 if kb_json.get("features", {}).get("rgb", False):
     gen_rgb_coords(os.path.join("keyboards", keyboard))
 
@@ -69,7 +76,7 @@ build_flags.define("BOARD_HSE_VALUE", kb_json["hardware"]["hse_value"])
 build_flags.define("HSE_VALUE", kb_json["hardware"]["hse_value"])
 
 # USB Configuration
-if kb_json["usb"]["port"] == "fs":
+if usb_port == "fs":
     build_flags.define("BOARD_USB_FS")
 else:
     build_flags.define("BOARD_USB_HS")

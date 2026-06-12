@@ -21,6 +21,7 @@
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
 #include "rgb.h"
+#include "usb_bootstrap.h"
 
 #define MATRIX_BOTTOM_OUT_SAVE_IDLE_MS 3000u
 
@@ -208,9 +209,8 @@ matrix_cycles_to_us(uint32_t cycles) {
 #endif
 }
 
-void matrix_init(void) { matrix_recalibrate(false); }
-
-void matrix_recalibrate(bool reset_bottom_out_threshold) {
+static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
+                                        bool service_usb_during_calibration) {
   if (reset_bottom_out_threshold) {
     memset(matrix_bottom_out_threshold_buf, 0,
            sizeof(matrix_bottom_out_threshold_buf));
@@ -242,6 +242,9 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   // during the scan process.
   const uint32_t calibration_start = timer_read();
   while (timer_elapsed(calibration_start) < MATRIX_CALIBRATION_DURATION) {
+    if (service_usb_during_calibration)
+      usb_bootstrap_pump();
+
     // Run the analog task to possibly update the ADC values
     analog_task();
 
@@ -266,6 +269,12 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
           matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
     }
   }
+}
+
+void matrix_init(void) { matrix_recalibrate_internal(false, true); }
+
+void matrix_recalibrate(bool reset_bottom_out_threshold) {
+  matrix_recalibrate_internal(reset_bottom_out_threshold, false);
 }
 
 void matrix_scan(void) {

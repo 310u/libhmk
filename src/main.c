@@ -32,7 +32,46 @@
 #include "slider.h"
 #include "trackball.h"
 
+static void main_apply_analog_scan_runtime_config(void) {
+  if (!analog_set_mux_sample_delay_us(eeconfig->mux_sample_delay_us)) {
+    (void)analog_set_mux_sample_delay_us(ADC_SAMPLE_DELAY_DEFAULT);
+  }
+}
+
 int main(void) {
+#if defined(USB_ENUM_DIAGNOSTIC)
+  board_init();
+  timer_init();
+  tud_init(BOARD_TUD_RHPORT);
+
+  while (1) {
+    tud_task();
+#if defined(__arm__)
+    __asm__ volatile ("wfi");
+#endif
+  }
+
+  return 0;
+#elif defined(USB_BOOT_DIAGNOSTIC_EECONFIG)
+  board_init();
+  timer_init();
+  usb_runtime_init();
+  crc32_init();
+  flash_init();
+  wear_leveling_init();
+  eeconfig_init();
+  tud_init(BOARD_TUD_RHPORT);
+
+  while (1) {
+    tud_task();
+    usb_runtime_task();
+#if defined(__arm__)
+    __asm__ volatile ("wfi");
+#endif
+  }
+
+  return 0;
+#else
   // Initialize the hardware
   board_init();
   timer_init();
@@ -47,8 +86,13 @@ int main(void) {
   (void)eeconfig_reset_profile_rgb(eeconfig->current_profile);
 #endif
 
+  // Start USB before optional peripherals so the device can still enumerate
+  // even if a later hardware block fails to initialize.
+  tud_init(BOARD_TUD_RHPORT);
+
   // Initialize the core modules
   analog_init();
+  main_apply_analog_scan_runtime_config();
   matrix_init();
 #if defined(RGB_ENABLED)
   rgb_init();
@@ -65,8 +109,6 @@ int main(void) {
   trackball_init();
   slider_init();
   command_init();
-
-  tud_init(BOARD_TUD_RHPORT);
 
   while (1) {
     tud_task();
@@ -92,4 +134,5 @@ int main(void) {
   }
 
   return 0;
+#endif
 }
