@@ -236,14 +236,20 @@ typedef struct __attribute__((packed)) {
 } command_out_trackball_state_t;
 
 typedef struct __attribute__((packed)) {
-  uint32_t scan_count;
-  uint32_t last_scan_cycles;
-  uint32_t max_scan_cycles;
-  uint32_t last_scan_us;
-  uint32_t max_scan_us;
-  uint16_t max_sample_delta;
-  uint16_t max_sample_velocity;
-  uint16_t last_mode_counts[4];
+  uint32_t matrix_scan_count;
+  uint32_t matrix_scan_hz;
+  uint32_t last_matrix_scan_us;
+  uint32_t max_matrix_scan_us;
+  uint32_t raw_scan_hz;
+  uint32_t last_raw_scan_us;
+  uint32_t max_raw_scan_us;
+  uint32_t full_scan_generation;
+  uint32_t missed_generation_count;
+  uint32_t matrix_processing_divider;
+  uint32_t intentional_skip_count;
+  uint32_t overload_missed_generation_count;
+  uint32_t scheduler_budget_exhausted_count;
+  uint32_t matrix_catchup_scan_count;
 } command_out_matrix_scan_diagnostics_t;
 
 typedef struct __attribute__((packed)) {

@@ -181,7 +181,7 @@ static bool last_transport_xinput_enabled;
 
 static void xinput_sync_key_press_states(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++)
-    bitmap_set(key_press_states, i, key_matrix[i].is_pressed);
+    bitmap_set(key_press_states, i, matrix_snapshot_key_pressed((uint8_t)i));
 }
 
 static void xinput_queue_report(const xinput_report_t *report) {
@@ -314,7 +314,7 @@ void xinput_reset_runtime_state(void) {
   xinput_sync_key_press_states();
 }
 
-void xinput_process(uint8_t key) {
+void xinput_process(uint8_t key, bool pressed) {
   const key_state_t *k = &key_matrix[key];
   const uint8_t keycode = CURRENT_PROFILE.gamepad_buttons[key];
 
@@ -325,17 +325,17 @@ void xinput_process(uint8_t key) {
   case GP_BUTTON_A ... GP_BUTTON_RB: {
     const bool last_key_press = bitmap_get(key_press_states, key);
 
-    if (k->is_pressed && !last_key_press) {
+    if (pressed && !last_key_press) {
       // Key press event
       button_report |= keycode_to_bm[keycode];
       button_press_times[keycode] = k->event_time;
-    } else if (!k->is_pressed && last_key_press) {
+    } else if (!pressed && last_key_press) {
       // Key release event
       button_report &= (uint16_t)~keycode_to_bm[keycode];
     }
 
     // Finally, update the key state
-    bitmap_set(key_press_states, key, k->is_pressed);
+    bitmap_set(key_press_states, key, pressed);
     break;
   }
   case GP_BUTTON_LS_UP ... GP_BUTTON_RT: {

@@ -669,6 +669,7 @@ static void spi_adc_run_scan_cycle(void) {
   }
 
   analog_scan_store_samples(spi_adc_scan_buffer, 0);
+  analog_scan_record_full_scan_generation();
 
   const uint32_t elapsed_cycles = board_cycle_count() - start_cycles;
   analog_scan_diagnostics.scan_count++;

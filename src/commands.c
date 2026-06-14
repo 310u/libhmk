@@ -559,17 +559,27 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS: {
     const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
-    out->matrix_scan_diagnostics.scan_count = diag->scan_count;
-    out->matrix_scan_diagnostics.last_scan_cycles = diag->last_scan_cycles;
-    out->matrix_scan_diagnostics.max_scan_cycles = diag->max_scan_cycles;
-    out->matrix_scan_diagnostics.last_scan_us = diag->last_scan_us;
-    out->matrix_scan_diagnostics.max_scan_us = diag->max_scan_us;
-    out->matrix_scan_diagnostics.max_sample_delta = diag->max_sample_delta;
-    out->matrix_scan_diagnostics.max_sample_velocity =
-        diag->max_sample_velocity;
-    memcpy(out->matrix_scan_diagnostics.last_mode_counts,
-           diag->last_mode_counts,
-           sizeof(out->matrix_scan_diagnostics.last_mode_counts));
+    out->matrix_scan_diagnostics.matrix_scan_count = diag->scan_count;
+    out->matrix_scan_diagnostics.matrix_scan_hz = diag->matrix_scan_hz;
+    out->matrix_scan_diagnostics.last_matrix_scan_us = diag->last_scan_us;
+    out->matrix_scan_diagnostics.max_matrix_scan_us = diag->max_scan_us;
+    out->matrix_scan_diagnostics.raw_scan_hz = diag->raw_scan_hz;
+    out->matrix_scan_diagnostics.last_raw_scan_us = diag->last_raw_scan_us;
+    out->matrix_scan_diagnostics.max_raw_scan_us = diag->max_raw_scan_us;
+    out->matrix_scan_diagnostics.full_scan_generation =
+        diag->full_scan_generation;
+    out->matrix_scan_diagnostics.missed_generation_count =
+        diag->missed_generation_count;
+    out->matrix_scan_diagnostics.matrix_processing_divider =
+        diag->matrix_processing_divider;
+    out->matrix_scan_diagnostics.intentional_skip_count =
+        diag->intentional_skip_count;
+    out->matrix_scan_diagnostics.overload_missed_generation_count =
+        diag->overload_missed_generation_count;
+    out->matrix_scan_diagnostics.scheduler_budget_exhausted_count =
+        diag->scheduler_budget_exhausted_count;
+    out->matrix_scan_diagnostics.matrix_catchup_scan_count =
+        diag->matrix_catchup_scan_count;
     break;
   }
   case COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS: {

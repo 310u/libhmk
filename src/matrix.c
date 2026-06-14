@@ -15,9 +15,9 @@
 
 #include "matrix.h"
 
+#include "analog_scan.h"
 #include "distance.h"
 #include "eeconfig.h"
-#include "event_trace.h"
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
 #include "rgb.h"
@@ -61,16 +61,16 @@ matrix_filter_target_mode(const key_state_t *state, uint16_t sample,
                           uint16_t *sample_velocity_out) {
   const uint16_t sample_delta = matrix_abs_diff_u16(sample, state->adc_filtered);
   const uint16_t sample_velocity = matrix_abs_diff_u16(sample, state->adc_raw);
-  const uint8_t actuation_distance =
-      state->distance > actuation->actuation_point
-          ? (uint8_t)(state->distance - actuation->actuation_point)
-          : (uint8_t)(actuation->actuation_point - state->distance);
-  const bool near_transition =
-      (state->distance != 0u && state->distance <= MATRIX_EMA_REST_WINDOW) ||
-      actuation_distance <= MATRIX_EMA_ACTUATION_WINDOW;
 
   *sample_delta_out = sample_delta;
   *sample_velocity_out = sample_velocity;
+
+  if (sample_delta < MATRIX_EMA_TRACK_DELTA &&
+      sample_velocity < MATRIX_EMA_TRACK_VELOCITY &&
+      state->distance == 0u && !state->is_pressed &&
+      state->key_dir == KEY_DIR_INACTIVE &&
+      actuation->actuation_point > MATRIX_EMA_ACTUATION_WINDOW)
+    return MATRIX_FILTER_MODE_IDLE;
 
   if (sample_delta >= MATRIX_EMA_BURST_DELTA ||
       sample_velocity >= MATRIX_EMA_BURST_VELOCITY)
@@ -79,6 +79,14 @@ matrix_filter_target_mode(const key_state_t *state, uint16_t sample,
   if (sample_delta >= MATRIX_EMA_FAST_DELTA ||
       sample_velocity >= MATRIX_EMA_FAST_VELOCITY)
     return MATRIX_FILTER_MODE_FAST;
+
+  const uint8_t actuation_distance =
+      state->distance > actuation->actuation_point
+          ? (uint8_t)(state->distance - actuation->actuation_point)
+          : (uint8_t)(actuation->actuation_point - state->distance);
+  const bool near_transition =
+      (state->distance != 0u && state->distance <= MATRIX_EMA_REST_WINDOW) ||
+      actuation_distance <= MATRIX_EMA_ACTUATION_WINDOW;
 
   if (sample_delta >= MATRIX_EMA_TRACK_DELTA ||
       sample_velocity >= MATRIX_EMA_TRACK_VELOCITY ||
@@ -131,10 +139,24 @@ matrix_filter_adc(uint8_t key, uint16_t sample, const actuation_t *actuation,
 
 __attribute__((always_inline)) static inline uint16_t
 matrix_analog_read(uint8_t key) {
-#if defined(MATRIX_INVERT_ADC_VALUES)
-  return ADC_MAX_VALUE - analog_read(key);
+  uint16_t value = 0u;
+
+#if DIGITAL_NUM_INPUTS == 0
+#if defined(JOYSTICK_SW_KEY_INDEX) && defined(JOYSTICK_SW_PIN) &&               \
+    defined(JOYSTICK_SW_PORT)
+  value = key == JOYSTICK_SW_KEY_INDEX ? analog_read(key)
+                                       : analog_scan_peek_key(key);
 #else
-  return analog_read(key);
+  value = analog_scan_peek_key(key);
+#endif
+#else
+  value = analog_read(key);
+#endif
+
+#if defined(MATRIX_INVERT_ADC_VALUES)
+  return ADC_MAX_VALUE - value;
+#else
+  return value;
 #endif
 }
 
@@ -185,16 +207,32 @@ key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
 static bitmap_t rapid_trigger_disabled[BITMAP_SIZE(NUM_KEYS)] = {0};
+static bitmap_t matrix_pending_rgb_keypresses[BITMAP_SIZE(NUM_KEYS)] = {0};
 static uint16_t matrix_bottom_out_threshold_buf[NUM_KEYS];
+static uint16_t matrix_rapid_trigger_disabled_count = 0u;
+static uint8_t matrix_last_sample_versions[NUM_KEYS];
 
 // Tracks the last time any key state changed
 static uint32_t matrix_last_activity_time = 0;
 static bool matrix_bottom_out_threshold_dirty = false;
 static matrix_scan_diagnostics_t matrix_scan_diagnostics;
+static uint32_t matrix_last_scan_start_cycle = 0u;
+static bool matrix_last_scan_start_cycle_valid = false;
+static uint64_t matrix_scan_interval_cycles_accum = 0u;
+static uint32_t matrix_scan_interval_count = 0u;
+static uint32_t matrix_last_seen_generation = 0u;
+static uint32_t matrix_next_processing_generation = 0u;
+static uint32_t matrix_last_housekeeping_tick = 0u;
+static bool matrix_last_housekeeping_tick_valid = false;
+static uint32_t matrix_last_housekeeping_start_cycle = 0u;
+static bool matrix_last_housekeeping_start_cycle_valid = false;
 
 __attribute__((always_inline)) static inline uint32_t
 matrix_cycles_to_us(uint32_t cycles) {
 #if defined(F_CPU) && F_CPU > 0
+#if (F_CPU % 1000000u) == 0
+  return cycles / (uint32_t)(F_CPU / 1000000u);
+#else
   const uint64_t cpu_hz = (uint64_t)F_CPU;
   const uint64_t whole_seconds = (uint64_t)cycles / cpu_hz;
   const uint64_t remaining_cycles = (uint64_t)cycles % cpu_hz;
@@ -203,10 +241,134 @@ matrix_cycles_to_us(uint32_t cycles) {
   const uint64_t micros = whole_seconds * 1000000ull +
                           (remaining_cycles * 1000000ull) / cpu_hz;
   return micros > UINT32_MAX ? UINT32_MAX : (uint32_t)micros;
+#endif
 #else
   (void)cycles;
   return 0;
 #endif
+}
+
+__attribute__((always_inline)) static inline uint32_t
+matrix_cycles_to_hz(uint32_t cycles) {
+#if defined(F_CPU) && F_CPU > 0
+  if (cycles == 0u)
+    return 0u;
+
+  return (uint32_t)(((uint64_t)F_CPU + ((uint64_t)cycles / 2ull)) /
+                    (uint64_t)cycles);
+#else
+  (void)cycles;
+  return 0u;
+#endif
+}
+
+static void matrix_refresh_raw_scan_diagnostics(void) {
+  const analog_scan_diagnostics_t *analog_diag = analog_get_scan_diagnostics();
+
+  matrix_scan_diagnostics.raw_scan_hz = analog_diag->estimated_scan_hz;
+  matrix_scan_diagnostics.last_raw_scan_us = analog_diag->last_scan_us;
+  matrix_scan_diagnostics.max_raw_scan_us = analog_diag->max_scan_us;
+  matrix_scan_diagnostics.full_scan_generation =
+      analog_scan_get_full_scan_generation();
+  matrix_scan_diagnostics.matrix_processing_divider =
+      MATRIX_PROCESSING_DIVIDER;
+}
+
+__attribute__((always_inline)) static inline uint32_t
+matrix_count_generation_matches(uint32_t start_generation,
+                                uint32_t end_generation) {
+  if (end_generation <= start_generation)
+    return 0u;
+
+  const uint32_t first_generation = start_generation + 1u;
+  return end_generation / MATRIX_PROCESSING_DIVIDER -
+         ((first_generation - 1u) / MATRIX_PROCESSING_DIVIDER);
+}
+
+static uint32_t matrix_next_scheduled_generation_after(uint32_t generation) {
+  const uint32_t next_generation = generation + 1u;
+  const uint32_t remainder = next_generation % MATRIX_PROCESSING_DIVIDER;
+  return remainder == 0u
+             ? next_generation
+             : next_generation + (MATRIX_PROCESSING_DIVIDER - remainder);
+}
+
+#if MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
+static uint32_t matrix_fast_scan_budget_us(void) {
+  if (matrix_scan_diagnostics.last_raw_scan_us != 0u) {
+    return matrix_scan_diagnostics.last_raw_scan_us * MATRIX_PROCESSING_DIVIDER;
+  }
+
+  if (matrix_scan_diagnostics.raw_scan_hz == 0u)
+    return 0u;
+
+  return (uint32_t)(((uint64_t)MATRIX_PROCESSING_DIVIDER * 1000000ull +
+                     ((uint64_t)matrix_scan_diagnostics.raw_scan_hz / 2ull)) /
+                    (uint64_t)matrix_scan_diagnostics.raw_scan_hz);
+}
+#endif
+
+static void matrix_account_generation_progress(uint32_t current_generation) {
+  if (current_generation <= matrix_last_seen_generation)
+    return;
+
+  const uint32_t generation_delta =
+      current_generation - matrix_last_seen_generation;
+  const uint32_t scheduled_generations =
+      matrix_count_generation_matches(matrix_last_seen_generation,
+                                      current_generation);
+
+  matrix_scan_diagnostics.intentional_skip_count +=
+      generation_delta - scheduled_generations;
+  matrix_last_seen_generation = current_generation;
+}
+
+static void matrix_dispatch_pending_rgb_keypresses(void) {
+#if defined(RGB_ENABLED)
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    if (!bitmap_get(matrix_pending_rgb_keypresses, i))
+      continue;
+
+    bitmap_set(matrix_pending_rgb_keypresses, i, false);
+    rgb_matrix_record_keypress((uint8_t)i);
+  }
+#endif
+}
+
+static void matrix_run_continuous_calibration_housekeeping(void) {
+  if (!eeconfig->options.continuous_calibration)
+    return;
+
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    key_state_t *state = &key_matrix[i];
+    if (state->key_dir != KEY_DIR_INACTIVE || state->is_pressed)
+      continue;
+
+    if (timer_elapsed(state->rest_stable_since) <
+        MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS)
+      continue;
+
+    matrix_apply_continuous_calibration((uint8_t)i, state->adc_filtered);
+  }
+}
+
+static void matrix_persist_bottom_out_thresholds(void) {
+  if (!matrix_bottom_out_threshold_dirty ||
+      !eeconfig->options.save_bottom_out_threshold ||
+      matrix_get_idle_time() < MATRIX_BOTTOM_OUT_SAVE_IDLE_MS) {
+    return;
+  }
+
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
+      matrix_bottom_out_threshold_buf[i] = 0;
+    else
+      matrix_bottom_out_threshold_buf[i] =
+          key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
+  }
+
+  if (EECONFIG_WRITE(bottom_out_threshold, matrix_bottom_out_threshold_buf))
+    matrix_bottom_out_threshold_dirty = false;
 }
 
 static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
@@ -218,16 +380,24 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
   }
 
   memset(rapid_trigger_disabled, 0, sizeof(rapid_trigger_disabled));
+  memset(matrix_pending_rgb_keypresses, 0, sizeof(matrix_pending_rgb_keypresses));
   memset(&matrix_scan_diagnostics, 0, sizeof(matrix_scan_diagnostics));
+  matrix_rapid_trigger_disabled_count = 0u;
+  memset(matrix_last_sample_versions, 0, sizeof(matrix_last_sample_versions));
   matrix_last_activity_time = 0;
   matrix_bottom_out_threshold_dirty = false;
+  matrix_last_scan_start_cycle_valid = false;
+  matrix_scan_interval_cycles_accum = 0u;
+  matrix_scan_interval_count = 0u;
+  matrix_last_housekeeping_tick_valid = false;
+  matrix_last_housekeeping_start_cycle_valid = false;
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     key_matrix[i].adc_raw = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_filtered = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
-    key_matrix[i].adc_bottom_out_value =
-        matrix_bottom_out_value(i, eeconfig->calibration.initial_rest_value);
+    key_matrix[i].adc_bottom_out_value = matrix_bottom_out_value(
+        i, eeconfig->calibration.initial_rest_value);
     key_matrix[i].filter_mode = MATRIX_FILTER_MODE_IDLE;
     key_matrix[i].filter_decay = 0;
     key_matrix[i].distance = 0;
@@ -269,6 +439,16 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
           matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
     }
   }
+
+  matrix_last_seen_generation = analog_scan_get_full_scan_generation();
+  matrix_next_processing_generation =
+      matrix_next_scheduled_generation_after(matrix_last_seen_generation);
+#if ANALOG_SCAN_KEY_VERSION_DELTA > 0
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    matrix_last_sample_versions[i] = analog_scan_peek_key_version((uint8_t)i);
+  }
+#endif
+  matrix_refresh_raw_scan_diagnostics();
 }
 
 void matrix_init(void) { matrix_recalibrate_internal(false, true); }
@@ -277,32 +457,92 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   matrix_recalibrate_internal(reset_bottom_out_threshold, false);
 }
 
-void matrix_scan(void) {
+void matrix_scan_fast(void) {
   const uint32_t scan_time = timer_read();
   const uint32_t scan_cycle_start = board_cycle_count();
+  const actuation_t *actuation_map = CURRENT_PROFILE.actuation_map;
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
   uint16_t mode_counts[MATRIX_FILTER_MODE_COUNT] = {0};
   uint16_t max_sample_delta = 0;
   uint16_t max_sample_velocity = 0;
+#endif
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     key_state_t *state = &key_matrix[i];
+#if ANALOG_SCAN_KEY_VERSION_DELTA > 0
+    const uint8_t sample_version = analog_scan_peek_key_version((uint8_t)i);
+    if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
+        state->distance == 0u &&
+        sample_version == matrix_last_sample_versions[i]) {
+      continue;
+    }
+    matrix_last_sample_versions[i] = sample_version;
+#endif
     const uint16_t previous_filtered = state->adc_filtered;
     const uint16_t raw_adc = matrix_analog_read((uint8_t)i);
-    const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
+    const actuation_t *actuation = &actuation_map[i];
     matrix_filter_mode_t filter_mode = MATRIX_FILTER_MODE_IDLE;
     uint16_t sample_delta = 0;
     uint16_t sample_velocity = 0;
-    const uint16_t new_adc_filtered =
-        matrix_filter_adc((uint8_t)i, raw_adc, actuation, &filter_mode,
-                          &sample_delta, &sample_velocity);
+    uint16_t new_adc_filtered = 0u;
+
+#if MATRIX_IDLE_RAW_FAST_PATH_MARGIN > 0
+    const uint16_t idle_fast_path_rest_limit =
+        state->adc_rest_value + MATRIX_IDLE_RAW_FAST_PATH_MARGIN;
+    if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
+        state->distance == 0u && raw_adc <= idle_fast_path_rest_limit) {
+      const uint16_t filtered_delta =
+          raw_adc > previous_filtered ? (uint16_t)(raw_adc - previous_filtered)
+                                      : (uint16_t)(previous_filtered - raw_adc);
+      state->adc_raw = raw_adc;
+      state->adc_filtered = raw_adc;
+      state->filter_mode = MATRIX_FILTER_MODE_IDLE;
+      state->filter_decay = 0u;
+      state->distance = 0u;
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
+      mode_counts[MATRIX_FILTER_MODE_IDLE]++;
+      if (filtered_delta > max_sample_delta)
+        max_sample_delta = filtered_delta;
+      sample_velocity = raw_adc > state->adc_raw
+                            ? (uint16_t)(raw_adc - state->adc_raw)
+                            : (uint16_t)(state->adc_raw - raw_adc);
+      if (sample_velocity > max_sample_velocity)
+        max_sample_velocity = sample_velocity;
+#endif
+      if (filtered_delta >= MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA)
+        state->rest_stable_since = scan_time;
+      continue;
+    }
+#endif
+
+#if MATRIX_IDLE_EMA_FAST_PATH
+    if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
+        state->distance == 0u && raw_adc <= state->adc_rest_value) {
+      state->filter_mode = MATRIX_FILTER_MODE_IDLE;
+      state->filter_decay = 0u;
+      new_adc_filtered =
+          matrix_ema(raw_adc, previous_filtered, MATRIX_EMA_ALPHA_EXPONENT);
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
+      sample_delta = matrix_abs_diff_u16(raw_adc, previous_filtered);
+      sample_velocity = matrix_abs_diff_u16(raw_adc, state->adc_raw);
+#endif
+    } else
+#endif
+    {
+      new_adc_filtered =
+          matrix_filter_adc((uint8_t)i, raw_adc, actuation, &filter_mode,
+                            &sample_delta, &sample_velocity);
+    }
 
     state->adc_raw = raw_adc;
     state->adc_filtered = new_adc_filtered;
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
     mode_counts[filter_mode]++;
     if (sample_delta > max_sample_delta)
       max_sample_delta = sample_delta;
     if (sample_velocity > max_sample_velocity)
       max_sample_velocity = sample_velocity;
+#endif
 
     if (new_adc_filtered >=
         state->adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
@@ -313,12 +553,20 @@ void matrix_scan(void) {
       matrix_bottom_out_threshold_dirty = true;
     }
 
+    const uint16_t filtered_delta =
+        new_adc_filtered > previous_filtered
+            ? (uint16_t)(new_adc_filtered - previous_filtered)
+            : (uint16_t)(previous_filtered - new_adc_filtered);
     state->distance = adc_to_distance(new_adc_filtered, state->adc_rest_value,
                                       state->adc_bottom_out_value);
 
-    bool was_pressed = state->is_pressed;
+    const bool was_pressed = state->is_pressed;
 
-    if (bitmap_get(rapid_trigger_disabled, i) | (actuation->rt_down == 0)) {
+    const bool rt_disabled =
+        matrix_rapid_trigger_disabled_count != 0u &&
+        bitmap_get(rapid_trigger_disabled, i);
+
+    if (rt_disabled || actuation->rt_down == 0u) {
       state->key_dir = KEY_DIR_INACTIVE;
       state->is_pressed = (state->distance >= actuation->actuation_point);
     } else {
@@ -374,17 +622,10 @@ void matrix_scan(void) {
       }
     }
 
-    const uint16_t filtered_delta =
-        new_adc_filtered > previous_filtered
-            ? (uint16_t)(new_adc_filtered - previous_filtered)
-            : (uint16_t)(previous_filtered - new_adc_filtered);
     if (state->key_dir != KEY_DIR_INACTIVE || state->is_pressed ||
-        filtered_delta >= MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA)
+        filtered_delta >= MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA) {
       state->rest_stable_since = scan_time;
-    else if (eeconfig->options.continuous_calibration &&
-             scan_time - state->rest_stable_since >=
-                 MATRIX_CONTINUOUS_CALIBRATION_IDLE_MS)
-      matrix_apply_continuous_calibration((uint8_t)i, new_adc_filtered);
+    }
 
     // Record the time when the key state changes. This is used by
     // layout_task to process key events in chronological order instead of
@@ -392,42 +633,49 @@ void matrix_scan(void) {
     if (state->is_pressed != was_pressed) {
       state->event_time = scan_time;
       matrix_last_activity_time = scan_time;
-      EVENT_TRACE(
-          "[event] matrix key=%u action=%s time=%lu distance=%u raw=%u "
-          "filtered=%u\n",
-          (unsigned int)i, state->is_pressed ? "press" : "release",
-          (unsigned long)scan_time, state->distance, raw_adc, new_adc_filtered);
-#if defined(RGB_ENABLED)
-      if (state->is_pressed) {
-        rgb_matrix_record_keypress(i);
-      }
-#endif
+      if (state->is_pressed)
+        bitmap_set(matrix_pending_rgb_keypresses, i, true);
     }
-  }
-
-  if (matrix_bottom_out_threshold_dirty &&
-      eeconfig->options.save_bottom_out_threshold &&
-      matrix_get_idle_time() >= MATRIX_BOTTOM_OUT_SAVE_IDLE_MS) {
-    for (uint32_t i = 0; i < NUM_KEYS; i++) {
-      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
-        matrix_bottom_out_threshold_buf[i] = 0;
-      else
-        matrix_bottom_out_threshold_buf[i] =
-            key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
-    }
-
-    if (EECONFIG_WRITE(bottom_out_threshold, matrix_bottom_out_threshold_buf))
-      matrix_bottom_out_threshold_dirty = false;
   }
 
   const uint32_t scan_cycles = board_cycle_count() - scan_cycle_start;
   matrix_scan_diagnostics.scan_count++;
   matrix_scan_diagnostics.last_scan_cycles = scan_cycles;
   matrix_scan_diagnostics.last_scan_us = matrix_cycles_to_us(scan_cycles);
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
   matrix_scan_diagnostics.max_sample_delta = max_sample_delta;
   matrix_scan_diagnostics.max_sample_velocity = max_sample_velocity;
   memcpy(matrix_scan_diagnostics.last_mode_counts, mode_counts,
          sizeof(mode_counts));
+#else
+  matrix_scan_diagnostics.max_sample_delta = 0u;
+  matrix_scan_diagnostics.max_sample_velocity = 0u;
+  memset(matrix_scan_diagnostics.last_mode_counts, 0,
+         sizeof(matrix_scan_diagnostics.last_mode_counts));
+#endif
+  if (MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS && matrix_last_scan_start_cycle_valid) {
+    matrix_scan_interval_cycles_accum +=
+        (uint64_t)(scan_cycle_start - matrix_last_scan_start_cycle);
+    if (matrix_scan_interval_count < UINT32_MAX)
+      matrix_scan_interval_count++;
+    if (matrix_scan_interval_cycles_accum != 0u) {
+      matrix_scan_diagnostics.matrix_scan_hz =
+          (uint32_t)((((uint64_t)F_CPU *
+                       (uint64_t)matrix_scan_interval_count) +
+                      (matrix_scan_interval_cycles_accum / 2ull)) /
+                     matrix_scan_interval_cycles_accum);
+    }
+  }
+  matrix_last_scan_start_cycle = scan_cycle_start;
+  matrix_last_scan_start_cycle_valid = true;
+#if MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
+  matrix_refresh_raw_scan_diagnostics();
+  const uint32_t fast_budget_us = matrix_fast_scan_budget_us();
+  if (fast_budget_us != 0u &&
+      matrix_scan_diagnostics.last_scan_us > fast_budget_us) {
+    matrix_scan_diagnostics.matrix_fast_overrun_count++;
+  }
+#endif
 
   if (scan_cycles > matrix_scan_diagnostics.max_scan_cycles) {
     matrix_scan_diagnostics.max_scan_cycles = scan_cycles;
@@ -435,13 +683,135 @@ void matrix_scan(void) {
   }
 }
 
+static void matrix_scan_housekeeping_internal(bool force) {
+  const uint32_t housekeeping_tick = timer_read();
+  if (!force && matrix_last_housekeeping_tick_valid &&
+      housekeeping_tick - matrix_last_housekeeping_tick <
+          MATRIX_HOUSEKEEPING_INTERVAL_MS) {
+    return;
+  }
+
+  const uint32_t housekeeping_cycle_start = board_cycle_count();
+
+  matrix_dispatch_pending_rgb_keypresses();
+  matrix_run_continuous_calibration_housekeeping();
+  matrix_persist_bottom_out_thresholds();
+
+  const uint32_t housekeeping_cycles =
+      board_cycle_count() - housekeeping_cycle_start;
+  matrix_scan_diagnostics.last_housekeeping_us =
+      matrix_cycles_to_us(housekeeping_cycles);
+  if (housekeeping_cycles > 0u &&
+      matrix_last_housekeeping_start_cycle_valid) {
+    matrix_scan_diagnostics.matrix_housekeeping_hz =
+        matrix_cycles_to_hz(housekeeping_cycle_start -
+                            matrix_last_housekeeping_start_cycle);
+  }
+  if (matrix_scan_diagnostics.last_housekeeping_us >
+      matrix_scan_diagnostics.max_housekeeping_us) {
+    matrix_scan_diagnostics.max_housekeeping_us =
+        matrix_scan_diagnostics.last_housekeeping_us;
+  }
+
+  matrix_last_housekeeping_start_cycle = housekeeping_cycle_start;
+  matrix_last_housekeeping_start_cycle_valid = true;
+  matrix_last_housekeeping_tick = housekeeping_tick;
+  matrix_last_housekeeping_tick_valid = true;
+}
+
+void matrix_scan_housekeeping(void) {
+  matrix_scan_housekeeping_internal(false);
+}
+
+void matrix_scan(void) {
+  matrix_scan_fast();
+  matrix_scan_housekeeping_internal(true);
+}
+
+void matrix_task(void) {
+  uint32_t current_generation = analog_scan_get_full_scan_generation();
+
+  if (current_generation < matrix_last_seen_generation) {
+    matrix_last_seen_generation = current_generation;
+    matrix_next_processing_generation =
+        matrix_next_scheduled_generation_after(current_generation);
+    matrix_refresh_raw_scan_diagnostics();
+    return;
+  }
+
+  matrix_account_generation_progress(current_generation);
+  matrix_scan_diagnostics.missed_generation_count =
+      matrix_scan_diagnostics.overload_missed_generation_count;
+
+  if (current_generation < matrix_next_processing_generation) {
+    matrix_scan_diagnostics.skipped_main_loop_count++;
+    matrix_refresh_raw_scan_diagnostics();
+    return;
+  }
+
+  const uint32_t scheduler_start_cycle = board_cycle_count();
+  uint32_t scans_this_call = 0u;
+
+  while (current_generation >= matrix_next_processing_generation) {
+    matrix_scan_fast();
+    scans_this_call++;
+    if (scans_this_call > 1u)
+      matrix_scan_diagnostics.matrix_catchup_scan_count++;
+
+    matrix_next_processing_generation += MATRIX_PROCESSING_DIVIDER;
+
+    const uint32_t latest_generation = analog_scan_get_full_scan_generation();
+    if (latest_generation < matrix_last_seen_generation) {
+      matrix_last_seen_generation = latest_generation;
+      matrix_next_processing_generation =
+          matrix_next_scheduled_generation_after(latest_generation);
+      break;
+    }
+
+    matrix_account_generation_progress(latest_generation);
+    current_generation = latest_generation;
+    matrix_scan_diagnostics.missed_generation_count =
+        matrix_scan_diagnostics.overload_missed_generation_count;
+
+    if (current_generation < matrix_next_processing_generation)
+      break;
+
+    const uint32_t elapsed_cycles =
+        board_cycle_count() - scheduler_start_cycle;
+    if (scans_this_call >= MATRIX_SCHEDULER_MAX_CATCHUP_SCANS ||
+        matrix_cycles_to_us(elapsed_cycles) >= MATRIX_SCHEDULER_BUDGET_US) {
+      matrix_scan_diagnostics.scheduler_budget_exhausted_count++;
+      break;
+    }
+  }
+
+  matrix_refresh_raw_scan_diagnostics();
+}
+
+bool matrix_snapshot_key_pressed(uint8_t key) {
+  return key < NUM_KEYS ? key_matrix[key].is_pressed : false;
+}
+
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
+  if (key >= NUM_KEYS)
+    return;
+
+  const bool was_disabled = bitmap_get(rapid_trigger_disabled, key);
+  if (was_disabled == disable)
+    return;
+
   bitmap_set(rapid_trigger_disabled, key, disable);
+  if (disable) {
+    if (matrix_rapid_trigger_disabled_count < UINT16_MAX)
+      matrix_rapid_trigger_disabled_count++;
+  } else if (matrix_rapid_trigger_disabled_count != 0u) {
+    matrix_rapid_trigger_disabled_count--;
+  }
 }
 
 uint32_t matrix_get_idle_time(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    if (key_matrix[i].is_pressed) {
+    if (matrix_snapshot_key_pressed((uint8_t)i)) {
       return 0; // Not idle if any key is held
     }
   }
@@ -449,9 +819,27 @@ uint32_t matrix_get_idle_time(void) {
 }
 
 const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
+  matrix_refresh_raw_scan_diagnostics();
+#if !MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
+  if (matrix_scan_diagnostics.raw_scan_hz != 0u) {
+    matrix_scan_diagnostics.matrix_scan_hz =
+        (matrix_scan_diagnostics.raw_scan_hz +
+         (MATRIX_PROCESSING_DIVIDER / 2u)) /
+        MATRIX_PROCESSING_DIVIDER;
+  }
+#endif
   return &matrix_scan_diagnostics;
 }
 
 void matrix_reset_scan_diagnostics(void) {
   memset(&matrix_scan_diagnostics, 0, sizeof(matrix_scan_diagnostics));
+  matrix_last_scan_start_cycle_valid = false;
+  matrix_scan_interval_cycles_accum = 0u;
+  matrix_scan_interval_count = 0u;
+  matrix_last_housekeeping_tick_valid = false;
+  matrix_last_housekeeping_start_cycle_valid = false;
+  matrix_last_seen_generation = analog_scan_get_full_scan_generation();
+  matrix_next_processing_generation =
+      matrix_next_scheduled_generation_after(matrix_last_seen_generation);
+  matrix_refresh_raw_scan_diagnostics();
 }

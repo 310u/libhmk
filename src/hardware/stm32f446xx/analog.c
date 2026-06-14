@@ -212,6 +212,7 @@ static volatile uint16_t analog_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
 static volatile bool analog_mux_delay_reconfigure_pending = false;
 static uint32_t analog_mux_last_full_scan_cycle = 0u;
 static bool analog_mux_last_full_scan_cycle_valid = false;
+static uint32_t analog_mux_last_diag_refresh_count = UINT32_MAX;
 
 static uint32_t analog_mux_cycles_to_us(uint32_t cycles) {
 #if defined(F_CPU) && F_CPU > 0
@@ -276,18 +277,30 @@ static void analog_record_full_scan_cycle(uint32_t end_cycle) {
 
   analog_scan_diagnostics.scan_count++;
   analog_scan_diagnostics.last_scan_cycles = elapsed_cycles;
-  analog_scan_diagnostics.last_scan_us = analog_mux_cycles_to_us(elapsed_cycles);
-  analog_scan_diagnostics.estimated_scan_hz =
-      analog_mux_cycles_to_hz(elapsed_cycles);
   if (elapsed_cycles > analog_scan_diagnostics.max_scan_cycles) {
     analog_scan_diagnostics.max_scan_cycles = elapsed_cycles;
-    analog_scan_diagnostics.max_scan_us = analog_scan_diagnostics.last_scan_us;
   }
+}
+
+static void analog_refresh_scan_timing_diagnostics(void) {
+  const uint32_t scan_count = analog_scan_diagnostics.scan_count;
+
+  if (scan_count == analog_mux_last_diag_refresh_count)
+    return;
+
+  analog_mux_last_diag_refresh_count = scan_count;
+  analog_scan_diagnostics.last_scan_us =
+      analog_mux_cycles_to_us(analog_scan_diagnostics.last_scan_cycles);
+  analog_scan_diagnostics.max_scan_us =
+      analog_mux_cycles_to_us(analog_scan_diagnostics.max_scan_cycles);
+  analog_scan_diagnostics.estimated_scan_hz =
+      analog_mux_cycles_to_hz(analog_scan_diagnostics.last_scan_cycles);
 }
 
 static void analog_reset_mux_full_scan_timing(void) {
   analog_mux_last_full_scan_cycle = 0u;
   analog_mux_last_full_scan_cycle_valid = false;
+  analog_mux_last_diag_refresh_count = UINT32_MAX;
 }
 #else
 static void analog_update_mux_scan_delay_in_diagnostics(void) {
@@ -457,6 +470,9 @@ uint16_t analog_read_raw(uint8_t index) { return analog_scan_read_raw(index); }
 #endif
 
 const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
+#if ADC_NUM_MUX_INPUTS > 0
+  analog_refresh_scan_timing_diagnostics();
+#endif
   return &analog_scan_diagnostics;
 }
 
@@ -543,6 +559,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
     adc_initialized |= (current_mux_channel == 0);
     if (current_mux_channel == 0u) {
       analog_record_full_scan_cycle(board_cycle_count());
+      analog_scan_record_full_scan_generation();
     }
 
     // Set the multiplexer select pins
@@ -556,6 +573,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 #else
     // We initialize all the ADC values when we have read all the raw input.
     adc_initialized = true;
+    analog_scan_record_full_scan_generation();
     // Immediately start the next conversion
     HAL_ADC_Start_DMA(&adc_handle, (uint32_t *)adc_buffer,
                       ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS);

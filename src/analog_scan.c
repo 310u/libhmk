@@ -22,7 +22,10 @@ _Static_assert(M_ARRAY_SIZE(analog_raw_input_vector) == ADC_NUM_RAW_INPUTS,
                "Invalid number of ADC raw input mappings");
 #endif
 
-static volatile uint16_t analog_key_values[NUM_KEYS];
+volatile uint16_t analog_key_values[NUM_KEYS];
+volatile uint8_t analog_key_versions[NUM_KEYS];
+static volatile uint32_t analog_full_scan_generation;
+static uint16_t analog_key_version_reference_values[NUM_KEYS];
 
 #if ADC_NUM_RAW_INPUTS > 0
 static volatile uint16_t analog_raw_values[ADC_NUM_RAW_INPUTS];
@@ -30,10 +33,29 @@ static volatile uint16_t analog_raw_values[ADC_NUM_RAW_INPUTS];
 
 void analog_scan_reset(void) {
   memset((void *)analog_key_values, 0, sizeof(analog_key_values));
+  memset((void *)analog_key_versions, 0, sizeof(analog_key_versions));
+  memset(analog_key_version_reference_values, 0,
+         sizeof(analog_key_version_reference_values));
+  analog_full_scan_generation = 0u;
 #if ADC_NUM_RAW_INPUTS > 0
   memset((void *)analog_raw_values, 0, sizeof(analog_raw_values));
 #endif
 }
+
+#if ANALOG_SCAN_KEY_VERSION_DELTA > 0
+__attribute__((always_inline)) static inline void
+analog_scan_store_key_sample(uint8_t key, uint16_t sample) {
+  const uint16_t reference = analog_key_version_reference_values[key];
+  const uint16_t delta =
+      sample > reference ? (uint16_t)(sample - reference)
+                         : (uint16_t)(reference - sample);
+  if (delta >= ANALOG_SCAN_KEY_VERSION_DELTA) {
+    analog_key_version_reference_values[key] = sample;
+    analog_key_versions[key]++;
+  }
+  analog_key_values[key] = sample;
+}
+#endif
 
 void analog_scan_store_samples(const volatile uint16_t *samples,
                                uint8_t mux_channel) {
@@ -41,7 +63,11 @@ void analog_scan_store_samples(const volatile uint16_t *samples,
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS; i++) {
     const uint16_t key = analog_mux_input_matrix[mux_channel][i];
     if (key != 0 && key <= NUM_KEYS) {
-      analog_key_values[key - 1] = samples[i];
+#if ANALOG_SCAN_KEY_VERSION_DELTA > 0
+      analog_scan_store_key_sample((uint8_t)(key - 1u), samples[i]);
+#else
+      analog_key_values[key - 1u] = samples[i];
+#endif
     }
   }
 #else
@@ -55,14 +81,44 @@ void analog_scan_store_samples(const volatile uint16_t *samples,
 
     analog_raw_values[i] = sample;
     if (key != 0 && key <= NUM_KEYS) {
-      analog_key_values[key - 1] = sample;
+#if ANALOG_SCAN_KEY_VERSION_DELTA > 0
+      analog_scan_store_key_sample((uint8_t)(key - 1u), sample);
+#else
+      analog_key_values[key - 1u] = sample;
+#endif
     }
   }
 #endif
 }
 
 uint16_t analog_scan_read_key(uint8_t key) {
-  return key < NUM_KEYS ? analog_key_values[key] : 0;
+  return analog_scan_peek_key(key);
+}
+
+void analog_scan_record_full_scan_generation(void) {
+  analog_full_scan_generation++;
+}
+
+uint32_t analog_scan_get_full_scan_generation(void) {
+  return analog_full_scan_generation;
+}
+
+bool analog_scan_consume_full_scan_generation(uint32_t *last_seen_generation,
+                                              uint32_t *missed_count) {
+  if (last_seen_generation == NULL)
+    return false;
+
+  const uint32_t current_generation = analog_scan_get_full_scan_generation();
+  if (current_generation == *last_seen_generation)
+    return false;
+
+  if (missed_count != NULL &&
+      current_generation - *last_seen_generation > 1u) {
+    *missed_count += (current_generation - *last_seen_generation) - 1u;
+  }
+
+  *last_seen_generation = current_generation;
+  return true;
 }
 
 #if ADC_NUM_RAW_INPUTS > 0

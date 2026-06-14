@@ -146,6 +146,51 @@ _Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
 #define MATRIX_INACTIVITY_TIMEOUT 3000
 #endif
 
+#if !defined(MATRIX_HOUSEKEEPING_INTERVAL_MS)
+// Run slower calibration/persistence housekeeping at up to this cadence.
+#define MATRIX_HOUSEKEEPING_INTERVAL_MS 1
+#endif
+
+#if !defined(MATRIX_PROCESSING_DIVIDER)
+// Run matrix processing once per this many completed raw full scans.
+#define MATRIX_PROCESSING_DIVIDER 1
+#endif
+
+#if !defined(MATRIX_SCHEDULER_MAX_CATCHUP_SCANS)
+// Maximum number of matrix fast scans to run per matrix_task() call.
+#define MATRIX_SCHEDULER_MAX_CATCHUP_SCANS 2
+#endif
+
+#if !defined(MATRIX_SCHEDULER_BUDGET_US)
+// Soft time budget for one matrix_task() call.
+#define MATRIX_SCHEDULER_BUDGET_US 250
+#endif
+
+#if !defined(MATRIX_DETAILED_SCAN_DIAGNOSTICS)
+// Collect per-key filter diagnostics during every matrix fast scan.
+#define MATRIX_DETAILED_SCAN_DIAGNOSTICS 1
+#endif
+
+#if !defined(MATRIX_IDLE_EMA_FAST_PATH)
+// Bypass filter-mode resolution for keys that are fully idle at rest.
+#define MATRIX_IDLE_EMA_FAST_PATH 0
+#endif
+
+#if !defined(MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS)
+// Update matrix scan-rate timing diagnostics during every matrix fast scan.
+#define MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS 1
+#endif
+
+#if !defined(MATRIX_IDLE_RAW_FAST_PATH_MARGIN)
+// Treat fully idle keys within this ADC margin above rest as distance 0.
+#define MATRIX_IDLE_RAW_FAST_PATH_MARGIN 0
+#endif
+
+_Static_assert(MATRIX_PROCESSING_DIVIDER > 0,
+               "MATRIX_PROCESSING_DIVIDER must be greater than zero");
+_Static_assert(MATRIX_SCHEDULER_MAX_CATCHUP_SCANS > 0,
+               "MATRIX_SCHEDULER_MAX_CATCHUP_SCANS must be greater than zero");
+
 //--------------------------------------------------------------------+
 // Key Matrix
 //--------------------------------------------------------------------+
@@ -205,6 +250,22 @@ typedef struct {
   uint16_t max_sample_delta;
   uint16_t max_sample_velocity;
   uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint32_t raw_scan_hz;
+  uint32_t last_raw_scan_us;
+  uint32_t max_raw_scan_us;
+  uint32_t full_scan_generation;
+  uint32_t matrix_scan_hz;
+  uint32_t skipped_main_loop_count;
+  uint32_t missed_generation_count;
+  uint32_t intentional_skip_count;
+  uint32_t overload_missed_generation_count;
+  uint32_t scheduler_budget_exhausted_count;
+  uint32_t matrix_catchup_scan_count;
+  uint32_t matrix_processing_divider;
+  uint32_t matrix_fast_overrun_count;
+  uint32_t matrix_housekeeping_hz;
+  uint32_t last_housekeeping_us;
+  uint32_t max_housekeeping_us;
 } matrix_scan_diagnostics_t;
 
 //--------------------------------------------------------------------+
@@ -236,6 +297,45 @@ void matrix_recalibrate(bool reset_bottom_out_threshold);
  * @return None
  */
 void matrix_scan(void);
+
+/**
+ * @brief Run the latency-sensitive matrix processing path
+ *
+ * This only performs the per-key filter, distance, and actuation state update
+ * needed for fast analog/Rapid Trigger behavior.
+ *
+ * @return None
+ */
+void matrix_scan_fast(void);
+
+/**
+ * @brief Run slower matrix housekeeping outside the fast path
+ *
+ * This handles deferred work such as continuous calibration, RGB keypress
+ * notifications, and bottom-out threshold persistence at a lower cadence.
+ *
+ * @return None
+ */
+void matrix_scan_housekeeping(void);
+
+/**
+ * @brief Run one generation-gated matrix task from the main loop
+ *
+ * This only calls `matrix_scan_fast()` when a new full analog scan has
+ * completed and the configured divider selects that generation.
+ *
+ * @return None
+ */
+void matrix_task(void);
+
+/**
+ * @brief Return the latest processed pressed snapshot for a key
+ *
+ * @param key Key index
+ *
+ * @return `true` if the key is pressed in the latest completed matrix scan
+ */
+bool matrix_snapshot_key_pressed(uint8_t key);
 
 /**
  * @brief Disable Rapid Trigger of a key

@@ -115,19 +115,23 @@ int main(void) {
     usb_runtime_task();
 
     analog_task();
-    matrix_scan();
+    matrix_task();
     encoder_task();
 #if defined(JOYSTICK_ENABLED)
     joystick_task();
 #endif
     trackball_task();
+    matrix_task();
     slider_task();
     xinput_task();
+    matrix_task();
     layout_task();
+    command_task();
+    matrix_task();
+    matrix_scan_housekeeping();
 #if defined(RGB_ENABLED)
     rgb_task();
 #endif
-    command_task();
 #if defined(__arm__)
     __asm__ volatile ("wfi");
 #endif

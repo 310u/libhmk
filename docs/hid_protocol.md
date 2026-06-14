@@ -99,6 +99,49 @@ The firmware validates `mux_sample_delay_us` in the inclusive range `1..50`.
 For boards without a mux-scanned ADC pipeline, `GET` returns `0` and `SET`
 fails with `COMMAND_UNKNOWN`.
 
+## Matrix Scan Diagnostics
+
+`COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS` returns this packed payload:
+
+```c
+struct matrix_scan_diagnostics_report {
+  uint32_t matrix_scan_count;
+  uint32_t matrix_scan_hz;
+  uint32_t last_matrix_scan_us;
+  uint32_t max_matrix_scan_us;
+  uint32_t raw_scan_hz;
+  uint32_t last_raw_scan_us;
+  uint32_t max_raw_scan_us;
+  uint32_t full_scan_generation;
+  uint32_t missed_generation_count;
+  uint32_t matrix_processing_divider;
+  uint32_t intentional_skip_count;
+  uint32_t overload_missed_generation_count;
+  uint32_t scheduler_budget_exhausted_count;
+  uint32_t matrix_catchup_scan_count;
+};
+```
+
+`raw_scan_*` describes the ADC/MUX full-scan pipeline, while `matrix_scan_*`
+describes how often the firmware actually ran `matrix_scan_fast()` in the main
+loop. When `matrix_processing_divider` is greater than `1`, the matrix/RT path
+is intentionally decimated relative to the raw scan rate.
+
+`missed_generation_count` now reports the same overload-only value as
+`overload_missed_generation_count` for backward compatibility with older host
+tools that only know about a single missed-generation field.
+
+The scheduler-specific counters are:
+
+- `intentional_skip_count`: generations skipped on purpose because the selected
+  divider did not schedule them for matrix processing.
+- `overload_missed_generation_count`: scheduled generations that were missed
+  because the main loop observed a newer generation before the fast path ran.
+- `scheduler_budget_exhausted_count`: `matrix_task()` still had due work but
+  stopped because it hit the catch-up scan cap or time budget for that call.
+- `matrix_catchup_scan_count`: extra `matrix_scan_fast()` runs performed beyond
+  the first scan in each `matrix_task()` call.
+
 ## Analog Scan Diagnostics
 
 `COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS` returns this packed payload:

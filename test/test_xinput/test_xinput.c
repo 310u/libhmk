@@ -12,6 +12,8 @@ eeconfig_t mock_eeconfig;
 const eeconfig_t *eeconfig = &mock_eeconfig;
 bool is_sniper_active = false;
 
+bool matrix_snapshot_key_pressed(uint8_t key) { return key_matrix[key].is_pressed; }
+
 static joystick_state_t mock_joystick_state;
 static joystick_config_t mock_joystick_config;
 static bool mock_usb_ready;
@@ -93,11 +95,11 @@ void test_xinput_hid_gamepad_preserves_transient_button_tap_while_busy(void) {
   mock_hid_ready = false;
 
   key_matrix[1].is_pressed = true;
-  xinput_process(1);
+  xinput_process(1, key_matrix[1].is_pressed);
   xinput_task();
 
   key_matrix[1].is_pressed = false;
-  xinput_process(1);
+  xinput_process(1, key_matrix[1].is_pressed);
   xinput_task();
 
   TEST_ASSERT_EQUAL_UINT8(0, hid_report_count);
@@ -132,7 +134,7 @@ void test_xinput_hid_gamepad_maps_key_stick_up_to_negative_y(void) {
   mock_eeconfig.profiles[0].gamepad_buttons[1] = GP_BUTTON_LS_UP;
   key_matrix[1].distance = 255;
 
-  xinput_process(1);
+  xinput_process(1, key_matrix[1].is_pressed);
   xinput_task();
 
   TEST_ASSERT_EQUAL_UINT8(1, hid_report_count);
@@ -146,8 +148,8 @@ void test_xinput_hid_gamepad_uses_unsigned_opposite_axis_delta(void) {
   key_matrix[1].distance = 200;
   key_matrix[2].distance = 50;
 
-  xinput_process(1);
-  xinput_process(2);
+  xinput_process(1, key_matrix[1].is_pressed);
+  xinput_process(2, key_matrix[2].is_pressed);
   xinput_task();
 
   TEST_ASSERT_EQUAL_UINT8(1, hid_report_count);

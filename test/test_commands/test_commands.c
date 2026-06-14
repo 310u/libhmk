@@ -341,6 +341,17 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
   mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_TRACK] = 7u;
   mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_FAST] = 2u;
   mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_BURST] = 1u;
+  mock_matrix_diag.raw_scan_hz = 28750u;
+  mock_matrix_diag.last_raw_scan_us = 30u;
+  mock_matrix_diag.max_raw_scan_us = 44u;
+  mock_matrix_diag.full_scan_generation = 99u;
+  mock_matrix_diag.matrix_scan_hz = 14375u;
+  mock_matrix_diag.missed_generation_count = 2u;
+  mock_matrix_diag.matrix_processing_divider = 2u;
+  mock_matrix_diag.intentional_skip_count = 11u;
+  mock_matrix_diag.overload_missed_generation_count = 3u;
+  mock_matrix_diag.scheduler_budget_exhausted_count = 5u;
+  mock_matrix_diag.matrix_catchup_scan_count = 13u;
 
   command_send_and_flush(&get_diag);
 
@@ -350,22 +361,29 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
 
   command_out_buffer_t out = {0};
   memcpy(&out, raw_hid_reports[0], sizeof(out));
-  TEST_ASSERT_EQUAL_UINT32(77u, out.matrix_scan_diagnostics.scan_count);
-  TEST_ASSERT_EQUAL_UINT32(8100u, out.matrix_scan_diagnostics.last_scan_cycles);
-  TEST_ASSERT_EQUAL_UINT32(9100u, out.matrix_scan_diagnostics.max_scan_cycles);
-  TEST_ASSERT_EQUAL_UINT32(37u, out.matrix_scan_diagnostics.last_scan_us);
-  TEST_ASSERT_EQUAL_UINT32(42u, out.matrix_scan_diagnostics.max_scan_us);
-  TEST_ASSERT_EQUAL_UINT16(55u, out.matrix_scan_diagnostics.max_sample_delta);
-  TEST_ASSERT_EQUAL_UINT16(34u,
-                           out.matrix_scan_diagnostics.max_sample_velocity);
-  TEST_ASSERT_EQUAL_UINT16(
-      12u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_IDLE]);
-  TEST_ASSERT_EQUAL_UINT16(
-      7u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_TRACK]);
-  TEST_ASSERT_EQUAL_UINT16(
-      2u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_FAST]);
-  TEST_ASSERT_EQUAL_UINT16(
-      1u, out.matrix_scan_diagnostics.last_mode_counts[MATRIX_FILTER_MODE_BURST]);
+  TEST_ASSERT_EQUAL_UINT32(77u, out.matrix_scan_diagnostics.matrix_scan_count);
+  TEST_ASSERT_EQUAL_UINT32(14375u, out.matrix_scan_diagnostics.matrix_scan_hz);
+  TEST_ASSERT_EQUAL_UINT32(37u,
+                           out.matrix_scan_diagnostics.last_matrix_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(42u,
+                           out.matrix_scan_diagnostics.max_matrix_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(28750u, out.matrix_scan_diagnostics.raw_scan_hz);
+  TEST_ASSERT_EQUAL_UINT32(30u, out.matrix_scan_diagnostics.last_raw_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(44u, out.matrix_scan_diagnostics.max_raw_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(99u,
+                           out.matrix_scan_diagnostics.full_scan_generation);
+  TEST_ASSERT_EQUAL_UINT32(
+      2u, out.matrix_scan_diagnostics.missed_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(
+      2u, out.matrix_scan_diagnostics.matrix_processing_divider);
+  TEST_ASSERT_EQUAL_UINT32(
+      11u, out.matrix_scan_diagnostics.intentional_skip_count);
+  TEST_ASSERT_EQUAL_UINT32(
+      3u, out.matrix_scan_diagnostics.overload_missed_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(
+      5u, out.matrix_scan_diagnostics.scheduler_budget_exhausted_count);
+  TEST_ASSERT_EQUAL_UINT32(
+      13u, out.matrix_scan_diagnostics.matrix_catchup_scan_count);
 }
 
 void test_command_reset_matrix_scan_diagnostics_clears_snapshot(void) {

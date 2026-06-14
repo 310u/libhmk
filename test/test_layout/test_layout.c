@@ -35,6 +35,10 @@ uint8_t hid_remove_count = 0;
 uint8_t xinput_processed[8] = {0};
 uint8_t xinput_process_count = 0;
 
+bool matrix_snapshot_key_pressed(uint8_t key) {
+    return key_matrix[key].is_pressed;
+}
+
 void advanced_key_init(void) {}
 void advanced_key_clear(void) {}
 void advanced_key_process(const advanced_key_event_t *event) {}
@@ -72,15 +76,24 @@ void hid_keycode_remove(uint8_t keycode) {
         hid_removed[hid_remove_count++] = keycode;
     }
 }
+void hid_mouse_scroll(int8_t wheel, int8_t pan, uint8_t buttons) {
+    (void)wheel;
+    (void)pan;
+    (void)buttons;
+}
 void hid_send_reports(void) {}
 void hid_clear_runtime_state(void) { hid_clear_runtime_state_count++; }
 
-void xinput_process(uint8_t key) {
+void xinput_process(uint8_t key, bool pressed) {
+    (void)pressed;
     if (xinput_process_count < 8) {
         xinput_processed[xinput_process_count++] = key;
     }
 }
 void xinput_reset_runtime_state(void) { xinput_reset_runtime_state_count++; }
+
+void trackball_increase_cpi(void) {}
+void trackball_decrease_cpi(void) {}
 
 #if defined(RGB_ENABLED)
 static rgb_config_t mock_rgb_config;
@@ -141,6 +154,9 @@ void setUp(void) {
     joystick_init_default_config(&mock_joystick_config);
 #endif
     layout_init();
+    deferred_action_clear_count = 0;
+    hid_clear_runtime_state_count = 0;
+    xinput_reset_runtime_state_count = 0;
 }
 
 void tearDown(void) {
@@ -222,6 +238,14 @@ void test_layout_processes_gamepad_keys_when_xinput_disabled(void) {
     TEST_ASSERT_EQUAL_UINT8(1, xinput_process_count);
     TEST_ASSERT_EQUAL_UINT8(1, xinput_processed[0]);
     TEST_ASSERT_EQUAL_UINT8(0, hid_add_count);
+}
+
+void test_layout_init_resets_runtime_state(void) {
+    layout_init();
+
+    TEST_ASSERT_EQUAL_UINT32(1, deferred_action_clear_count);
+    TEST_ASSERT_EQUAL_UINT32(1, hid_clear_runtime_state_count);
+    TEST_ASSERT_EQUAL_UINT32(1, xinput_reset_runtime_state_count);
 }
 
 #if defined(RGB_ENABLED)
@@ -308,6 +332,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_profile_switch_resets_runtime_state);
     RUN_TEST(test_layout_sorts_same_timestamp_presses_by_distance);
     RUN_TEST(test_layout_processes_gamepad_keys_when_xinput_disabled);
+    RUN_TEST(test_layout_init_resets_runtime_state);
 #if defined(RGB_ENABLED)
     RUN_TEST(test_rgb_effect_next_persists_and_updates_live_config);
     RUN_TEST(test_rgb_effect_prev_wraps_without_hitting_off);

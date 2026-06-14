@@ -93,10 +93,11 @@ void xinput_init(void);
  * @brief Process an XInput key
  *
  * @param key Key index
+ * @param pressed Stable main-loop pressed snapshot for the key
  *
  * @return None
  */
-void xinput_process(uint8_t key);
+void xinput_process(uint8_t key, bool pressed);
 
 /**
  * @brief Reset runtime gamepad/XInput state.

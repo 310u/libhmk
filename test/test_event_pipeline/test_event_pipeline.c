@@ -12,6 +12,10 @@ key_state_t key_matrix[NUM_KEYS];
 eeconfig_t mock_eeconfig;
 const eeconfig_t *eeconfig = &mock_eeconfig;
 
+bool matrix_snapshot_key_pressed(uint8_t key) {
+  return key_matrix[key].is_pressed;
+}
+
 static uint32_t mock_timer;
 static uint8_t hid_added[16];
 static uint8_t hid_removed[16];
@@ -76,7 +80,10 @@ bool wear_leveling_write(uint32_t address, const void *data, uint32_t len) {
   return true;
 }
 
-void xinput_process(uint8_t key) {}
+void xinput_process(uint8_t key, bool pressed) {
+  (void)key;
+  (void)pressed;
+}
 void xinput_reset_runtime_state(void) {}
 
 void setUp(void) {

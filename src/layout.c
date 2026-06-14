@@ -352,7 +352,10 @@ static void layout_toggle_polling_rate(void) {
     board_reset();
 }
 
-void layout_init(void) { profile_runtime_apply_current(); }
+void layout_init(void) {
+  layout_reset_runtime_state();
+  profile_runtime_apply_current();
+}
 
 void layout_reset_runtime_state(void) {
   advanced_key_clear();
@@ -378,7 +381,7 @@ void layout_reset_runtime_state(void) {
 #endif
 
   for (uint32_t i = 0; i < NUM_KEYS; i++)
-    bitmap_set(key_press_states, i, key_matrix[i].is_pressed);
+    bitmap_set(key_press_states, i, matrix_snapshot_key_pressed((uint8_t)i));
 }
 
 /**
@@ -522,25 +525,26 @@ static bool layout_key_is_tap_hold(uint8_t key) {
 
 static bool layout_should_skip_key_processing(uint8_t key,
                                               const key_state_t *state,
+                                              bool pressed,
                                               uint8_t current_layer) {
   if (CURRENT_PROFILE.gamepad_buttons[key] != GP_BUTTON_NONE) {
-    xinput_process(key);
+    xinput_process(key, pressed);
 
     if (CURRENT_PROFILE.gamepad_options.gamepad_override) {
-      bitmap_set(key_press_states, key, state->is_pressed);
+      bitmap_set(key_press_states, key, pressed);
       return true;
     }
   }
 
   if (current_layer == 0) {
     if (!CURRENT_PROFILE.gamepad_options.keyboard_enabled) {
-      bitmap_set(key_press_states, key, state->is_pressed);
+      bitmap_set(key_press_states, key, pressed);
       return true;
     }
   }
 
   if (current_layer == 0 && bitmap_get(key_disabled, key)) {
-    bitmap_set(key_press_states, key, state->is_pressed);
+    bitmap_set(key_press_states, key, pressed);
     return true;
   }
 
@@ -554,12 +558,14 @@ static void layout_collect_events(layout_event_t *events,
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     const key_state_t *state = &key_matrix[i];
+    const bool pressed = matrix_snapshot_key_pressed((uint8_t)i);
     const bool last_key_press = bitmap_get(key_press_states, i);
 
-    if (layout_should_skip_key_processing((uint8_t)i, state, current_layer))
+    if (layout_should_skip_key_processing((uint8_t)i, state, pressed,
+                                          current_layer))
       continue;
 
-    if (state->is_pressed && !last_key_press) {
+    if (pressed && !last_key_press) {
       if (*event_count >= NUM_KEYS) {
         continue;
       }
@@ -570,7 +576,7 @@ static void layout_collect_events(layout_event_t *events,
           .distance = state->distance,
       };
       layout_trace_events("collected", &events[*event_count - 1], 1);
-    } else if (!state->is_pressed && last_key_press) {
+    } else if (!pressed && last_key_press) {
       if (*event_count >= NUM_KEYS) {
         continue;
       }
@@ -581,7 +587,7 @@ static void layout_collect_events(layout_event_t *events,
           .distance = state->distance,
       };
       layout_trace_events("collected", &events[*event_count - 1], 1);
-    } else if (state->is_pressed) {
+    } else if (pressed) {
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
 
@@ -672,7 +678,8 @@ static void layout_process_events(const layout_event_t *events,
         *has_non_tap_hold_release = true;
     }
 
-    bitmap_set(key_press_states, event->key, key_matrix[event->key].is_pressed);
+    bitmap_set(key_press_states, event->key,
+               matrix_snapshot_key_pressed(event->key));
   }
 }
 
