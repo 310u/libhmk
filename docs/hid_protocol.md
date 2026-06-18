@@ -74,6 +74,9 @@ be dropped.
 | `154` | `COMMAND_GET_ANALOG_DEBUG_FRAMES` | Reads backend-specific debug frames, if available. |
 | `155` | `COMMAND_GET_ANALOG_SCAN_CONFIG` | Reads the active runtime MUX scan configuration. |
 | `156` | `COMMAND_SET_ANALOG_SCAN_CONFIG` | Updates and persists the runtime MUX scan configuration. |
+| `157` | `COMMAND_CAPTURE_ANALOG_DIAG_BASELINE` | Copies the latest raw-by-step snapshot into the diagnostic baseline buffer. |
+| `158` | `COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST` | Analyzes the latest raw-by-step snapshot against the saved baseline for one expected key. |
+| `159` | `COMMAND_GET_ANALOG_RAW_BY_STEP` | Returns one MUX step row of raw, baseline, and delta diagnostic data. |
 
 ## Paging and Offsets
 Because the HID reports are limited to 64 bytes, bulk data (such as Keymaps, Actuation arrays, Macros, and Metadata) is split into chunks.
@@ -99,6 +102,28 @@ The firmware validates `mux_sample_delay_us` in the inclusive range `1..50`.
 For boards without a mux-scanned ADC pipeline, `GET` returns `0` and `SET`
 fails with `COMMAND_UNKNOWN`.
 
+## Metadata Diagnostics Capability
+
+`COMMAND_GET_METADATA` may include a top-level `diagnostics` object. Normal
+firmware keeps every field disabled. Diagnostic firmware advertises:
+
+```json
+{
+  "diagnostics": {
+    "debugFirmware": true,
+    "diagChannelIdentity": true,
+    "rawByStep": true,
+    "muxSteps": 8,
+    "adcLanes": 5,
+    "supportsDelaySweep": true,
+    "supportsWalkingKeyTest": true
+  }
+}
+```
+
+When `diagChannelIdentity` is enabled, `keyToStepLane` maps each logical key
+index to its expected MUX step and ADC lane.
+
 ## Matrix Scan Diagnostics
 
 `COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS` returns this packed payload:
@@ -116,6 +141,7 @@ struct matrix_scan_diagnostics_report {
   uint32_t missed_generation_count;
   uint32_t matrix_processing_divider;
   uint32_t intentional_skip_count;
+  uint32_t coalesced_generation_count;
   uint32_t overload_missed_generation_count;
   uint32_t scheduler_budget_exhausted_count;
   uint32_t matrix_catchup_scan_count;
@@ -135,12 +161,14 @@ The scheduler-specific counters are:
 
 - `intentional_skip_count`: generations skipped on purpose because the selected
   divider did not schedule them for matrix processing.
+- `coalesced_generation_count`: raw generations folded into a later
+  latest-snapshot matrix pass instead of being replayed individually.
 - `overload_missed_generation_count`: scheduled generations that were missed
   because the main loop observed a newer generation before the fast path ran.
-- `scheduler_budget_exhausted_count`: `matrix_task()` still had due work but
-  stopped because it hit the catch-up scan cap or time budget for that call.
-- `matrix_catchup_scan_count`: extra `matrix_scan_fast()` runs performed beyond
-  the first scan in each `matrix_task()` call.
+- `scheduler_budget_exhausted_count`: `matrix_task()` exceeded its time budget
+  or ended the call while a newer due generation was already pending.
+- `matrix_catchup_scan_count`: reserved for ring-buffered implementations that
+  replay historical raw generations. Latest-snapshot firmware keeps this at `0`.
 
 ## Analog Scan Diagnostics
 
@@ -167,5 +195,64 @@ struct analog_scan_diagnostics_report {
 For mux-based MCU ADC backends, `scan_count`, `last_scan_*`, `max_scan_*`, and
 `estimated_scan_hz` refer to a full mux sweep across every select state, not an
 individual mux step.
+
+## Diagnostic Channel Identity
+
+`COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST` uses this packed request payload:
+
+```c
+struct analog_channel_identity_test_request {
+  uint8_t expected_key;
+  uint16_t min_delta;
+  uint8_t max_secondary_ratio_percent;
+};
+```
+
+The response payload is:
+
+```c
+struct analog_channel_identity_test_response {
+  uint8_t expected_key;
+  uint8_t expected_step;
+  uint8_t expected_lane;
+  uint8_t observed_max_step;
+  uint8_t observed_max_lane;
+  uint8_t observed_logical_key;
+  uint8_t observed_second_step;
+  uint8_t observed_second_lane;
+  uint16_t observed_max_delta;
+  uint16_t observed_second_delta;
+  uint16_t min_delta;
+  uint8_t max_secondary_ratio_percent;
+  uint8_t failure_reason;
+  bool pass;
+};
+```
+
+`min_delta == 0` uses the firmware default threshold. Likewise,
+`max_secondary_ratio_percent == 0` uses the firmware default crosstalk limit.
+
+`COMMAND_GET_ANALOG_RAW_BY_STEP` takes:
+
+```c
+struct analog_raw_by_step_request {
+  uint8_t step;
+};
+```
+
+and returns one row of the current diagnostic snapshot:
+
+```c
+struct analog_raw_by_step_response {
+  uint8_t step;
+  uint8_t lane_count;
+  uint16_t raw_by_lane[8];
+  uint16_t baseline_by_lane[8];
+  uint16_t delta_by_lane[8];
+};
+```
+
+All three diagnostic commands return `COMMAND_UNKNOWN` unless the connected
+firmware advertises `diagnostics.diagChannelIdentity = true`.
 
 *All structs are packed (`__attribute__((packed))`). The byte order is little-endian.*

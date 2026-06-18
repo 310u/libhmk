@@ -16,6 +16,7 @@
 #include "commands.h"
 
 #include "advanced_keys.h"
+#include "analog_scan.h"
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "joystick.h"
@@ -557,6 +558,58 @@ void command_process(const uint8_t *buf) {
     }
     break;
   }
+  case COMMAND_CAPTURE_ANALOG_DIAG_BASELINE: {
+    COMMAND_VERIFY(analog_diag_channel_identity_enabled());
+    analog_diag_capture_baseline();
+    break;
+  }
+  case COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST: {
+    const command_in_analog_channel_identity_test_t *p =
+        &in->analog_channel_identity_test;
+    command_out_analog_channel_identity_result_t *o =
+        &out->analog_channel_identity_result;
+    analog_channel_identity_result_t result;
+
+    COMMAND_VERIFY(p->expected_key < NUM_KEYS);
+    COMMAND_VERIFY(analog_diag_run_channel_identity_test(
+        p->expected_key, p->min_delta, p->max_secondary_ratio_percent,
+        &result));
+
+    o->expected_key = result.expected_key;
+    o->expected_step = result.expected_step;
+    o->expected_lane = result.expected_lane;
+    o->observed_max_step = result.observed_max_step;
+    o->observed_max_lane = result.observed_max_lane;
+    o->observed_logical_key = result.observed_logical_key;
+    o->observed_second_step = result.observed_second_step;
+    o->observed_second_lane = result.observed_second_lane;
+    o->observed_max_delta = result.observed_max_delta;
+    o->observed_second_delta = result.observed_second_delta;
+    o->min_delta = result.min_delta;
+    o->max_secondary_ratio_percent = result.max_secondary_ratio_percent;
+    o->failure_reason = (uint8_t)result.failure_reason;
+    o->pass = result.pass;
+    break;
+  }
+  case COMMAND_GET_ANALOG_RAW_BY_STEP: {
+    const command_in_analog_raw_by_step_t *p = &in->analog_raw_by_step;
+    command_out_analog_raw_by_step_t *o = &out->analog_raw_by_step;
+    const uint8_t lane_count = analog_diag_adc_lane_count();
+
+    COMMAND_VERIFY(analog_diag_channel_identity_enabled());
+    COMMAND_VERIFY(p->step < analog_diag_mux_step_count());
+    COMMAND_VERIFY(lane_count <= COMMAND_ANALOG_DIAG_MAX_ADC_LANES);
+
+    o->step = p->step;
+    o->lane_count = lane_count;
+    for (uint8_t lane = 0; lane < lane_count; lane++) {
+      o->raw_by_lane[lane] = analog_diag_read_raw_by_step(p->step, lane);
+      o->baseline_by_lane[lane] =
+          analog_diag_read_baseline_by_step(p->step, lane);
+      o->delta_by_lane[lane] = analog_diag_read_delta_by_step(p->step, lane);
+    }
+    break;
+  }
   case COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS: {
     const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
     out->matrix_scan_diagnostics.matrix_scan_count = diag->scan_count;
@@ -574,6 +627,8 @@ void command_process(const uint8_t *buf) {
         diag->matrix_processing_divider;
     out->matrix_scan_diagnostics.intentional_skip_count =
         diag->intentional_skip_count;
+    out->matrix_scan_diagnostics.coalesced_generation_count =
+        diag->coalesced_generation_count;
     out->matrix_scan_diagnostics.overload_missed_generation_count =
         diag->overload_missed_generation_count;
     out->matrix_scan_diagnostics.scheduler_budget_exhausted_count =

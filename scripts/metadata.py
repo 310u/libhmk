@@ -40,6 +40,15 @@ kb_json = utils.get_kb_json(keyboard)
 driver = utils.get_driver(keyboard)
 
 
+def project_bool_option(name: str) -> bool:
+    try:
+        value = env.GetProjectOption(name)
+    except Exception:
+        return False
+
+    return str(value).lower() not in ("", "0", "false", "no")
+
+
 def ms_os_20_guid_def():
     uuid = uuid4().hex.upper()
     guid = f"{{{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}}}"
@@ -49,7 +58,18 @@ def ms_os_20_guid_def():
 
 
 def keyboard_metadata_def():
-    metadata = build_keyboard_metadata(kb_json, driver)
+    diagnostic_capabilities = None
+    if project_bool_option("custom_diag_channel_identity"):
+        diagnostic_capabilities = {
+            "debugFirmware": True,
+            "diagChannelIdentity": True,
+            "supportsDelaySweep": True,
+            "supportsWalkingKeyTest": True,
+        }
+
+    metadata = build_keyboard_metadata(
+        kb_json, driver, diagnostic_capabilities=diagnostic_capabilities
+    )
     uncompressed = json.dumps(metadata).encode("utf-8")
     compressed = gzip.compress(uncompressed)
     print(f"Uncompressed metadata size: {len(uncompressed)} bytes")

@@ -263,6 +263,8 @@ void test_matrix_task_runs_only_when_a_new_full_scan_is_ready(void) {
   TEST_ASSERT_EQUAL_UINT32(1u, diag->full_scan_generation);
   TEST_ASSERT_EQUAL_UINT32(1u, diag->matrix_processing_divider);
   TEST_ASSERT_EQUAL_UINT32(1u, diag->skipped_main_loop_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, diag->coalesced_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, diag->matrix_catchup_scan_count);
 }
 
 void test_matrix_task_counts_missed_generations(void) {
@@ -276,14 +278,15 @@ void test_matrix_task_counts_missed_generations(void) {
   matrix_task();
 
   const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
-  TEST_ASSERT_EQUAL_UINT32(4u, diag->scan_count);
-  TEST_ASSERT_EQUAL_UINT32(15000u, diag->matrix_scan_hz);
+  TEST_ASSERT_EQUAL_UINT32(2u, diag->scan_count);
+  TEST_ASSERT_EQUAL_UINT32(25000u, diag->matrix_scan_hz);
   TEST_ASSERT_EQUAL_UINT32(4u, diag->full_scan_generation);
-  TEST_ASSERT_EQUAL_UINT32(0u, diag->missed_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(2u, diag->missed_generation_count);
   TEST_ASSERT_EQUAL_UINT32(0u, diag->intentional_skip_count);
-  TEST_ASSERT_EQUAL_UINT32(0u, diag->overload_missed_generation_count);
-  TEST_ASSERT_EQUAL_UINT32(1u, diag->scheduler_budget_exhausted_count);
-  TEST_ASSERT_EQUAL_UINT32(1u, diag->matrix_catchup_scan_count);
+  TEST_ASSERT_EQUAL_UINT32(2u, diag->coalesced_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(2u, diag->overload_missed_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, diag->scheduler_budget_exhausted_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, diag->matrix_catchup_scan_count);
 }
 
 int main(void) {

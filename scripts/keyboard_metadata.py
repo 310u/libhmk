@@ -3,9 +3,10 @@ import json
 import utils
 
 
-def build_keyboard_metadata(kb_json: dict, driver):
+def build_keyboard_metadata(kb_json: dict, driver, diagnostic_capabilities=None):
     num_keys = kb_json["keyboard"]["num_keys"]
     num_layers = kb_json["keyboard"]["num_layers"]
+    diagnostic_capabilities = diagnostic_capabilities or {}
 
     features = kb_json.get("features", {})
     metadata_features = {
@@ -106,6 +107,42 @@ def build_keyboard_metadata(kb_json: dict, driver):
                 }
             )
 
+    diagnostics_metadata = {
+        "debugFirmware": bool(diagnostic_capabilities.get("debugFirmware", False)),
+        "diagChannelIdentity": False,
+        "rawByStep": False,
+        "muxSteps": 0,
+        "adcLanes": 0,
+        "supportsDelaySweep": False,
+        "supportsWalkingKeyTest": False,
+        "keyToStepLane": [],
+    }
+
+    if diagnostic_capabilities.get("diagChannelIdentity", False):
+        mux_rows = mux.get("matrix", [])
+        key_to_step_lane = [None] * num_keys
+
+        for lane, row in enumerate(mux_rows):
+            for step, key in enumerate(row):
+                if isinstance(key, int) and 1 <= key <= num_keys:
+                    key_to_step_lane[key - 1] = {"step": step, "lane": lane}
+
+        diagnostics_metadata.update(
+            {
+                "diagChannelIdentity": True,
+                "rawByStep": True,
+                "muxSteps": max((len(row) for row in mux_rows), default=0),
+                "adcLanes": len(mux_rows),
+                "supportsDelaySweep": bool(
+                    diagnostic_capabilities.get("supportsDelaySweep", False)
+                ),
+                "supportsWalkingKeyTest": bool(
+                    diagnostic_capabilities.get("supportsWalkingKeyTest", False)
+                ),
+                "keyToStepLane": key_to_step_lane,
+            }
+        )
+
     return {
         "name": kb_json["name"],
         "vendorId": kb_json["usb"]["vid"],
@@ -124,8 +161,13 @@ def build_keyboard_metadata(kb_json: dict, driver):
         "ledCoords": led_coords,
         "modLedIndices": mod_led_indices,
         "defaultKeymaps": utils.resolve_default_keymaps(kb_json),
+        "diagnostics": diagnostics_metadata,
     }
 
 
-def build_keyboard_metadata_json(kb_json: dict, driver):
-    return json.dumps(build_keyboard_metadata(kb_json, driver))
+def build_keyboard_metadata_json(kb_json: dict, driver, diagnostic_capabilities=None):
+    return json.dumps(
+        build_keyboard_metadata(
+            kb_json, driver, diagnostic_capabilities=diagnostic_capabilities
+        )
+    )

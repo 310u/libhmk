@@ -30,7 +30,20 @@ try:
 except Exception:
     usb_port_override = None
 
+try:
+    usb_product_name_override = env.GetProjectOption("custom_usb_product_name")
+except Exception:
+    usb_product_name_override = None
+
+try:
+    diag_channel_identity = str(
+        env.GetProjectOption("custom_diag_channel_identity")
+    ).lower() not in ("", "0", "false", "no")
+except Exception:
+    diag_channel_identity = False
+
 usb_port = usb_port_override or kb_json["usb"]["port"]
+usb_product_name = usb_product_name_override or kb_json["name"]
 
 if kb_json.get("features", {}).get("rgb", False):
     gen_rgb_coords(os.path.join("keyboards", keyboard))
@@ -81,9 +94,12 @@ if usb_port == "fs":
 else:
     build_flags.define("BOARD_USB_HS")
 build_flags.define("USB_MANUFACTURER_NAME", f"\"{kb_json['manufacturer']}\"")
-build_flags.define("USB_PRODUCT_NAME", f"\"{kb_json['name']}\"")
+build_flags.define("USB_PRODUCT_NAME", f"\"{usb_product_name}\"")
 build_flags.define("USB_VENDOR_ID", kb_json["usb"]["vid"])
 build_flags.define("USB_PRODUCT_ID", kb_json["usb"]["pid"])
+
+if diag_channel_identity:
+    build_flags.define("HMK_DIAG_CHANNEL_IDENTITY", 1)
 
 # Analog Configuration
 analog = kb_json["analog"]

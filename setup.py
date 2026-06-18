@@ -83,8 +83,29 @@ if __name__ == "__main__":
         "test_ignore": "*",
         "upload_protocol": "dfu",
     }
+    analog = kb_json.get("analog", {})
+    if "mux" in analog:
+        pio_config[f"env:{keyboard}_diag"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(build_flags),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_diag_channel_identity": "true",
+            "custom_keyboard_name": keyboard,
+            "custom_usb_product_name": f"{kb_json['name']} Diagnostic",
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
     if cpu_hz is not None:
-        for env_name in (f"env:{keyboard}", f"env:{keyboard}_recovery"):
+        env_names = [f"env:{keyboard}", f"env:{keyboard}_recovery"]
+        if f"env:{keyboard}_diag" in pio_config:
+            env_names.append(f"env:{keyboard}_diag")
+        for env_name in env_names:
             pio_config[env_name]["board_build.f_cpu"] = f"{cpu_hz}L"
 
     def native_test_env(test_filter, build_src_filter, extra_flags=None):
@@ -164,6 +185,7 @@ if __name__ == "__main__":
         "test_analog_scan",
         "+<analog_scan.c>",
         [
+            "-DHMK_DIAG_CHANNEL_IDENTITY=1",
             "-DADC_NUM_CHANNELS=4",
             "-DADC_NUM_MUX_INPUTS=2",
             "-DADC_MUX_INPUT_CHANNELS='{0, 1}'",

@@ -157,12 +157,13 @@ _Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
 #endif
 
 #if !defined(MATRIX_SCHEDULER_MAX_CATCHUP_SCANS)
-// Maximum number of matrix fast scans to run per matrix_task() call.
+// Legacy catch-up cap kept for compatibility with older builds. Latest-snapshot
+// matrix scheduling now coalesces due generations into a single fast scan.
 #define MATRIX_SCHEDULER_MAX_CATCHUP_SCANS 2
 #endif
 
 #if !defined(MATRIX_SCHEDULER_BUDGET_US)
-// Soft time budget for one matrix_task() call.
+// Soft time budget used for overload diagnostics in matrix_task().
 #define MATRIX_SCHEDULER_BUDGET_US 250
 #endif
 
@@ -258,6 +259,7 @@ typedef struct {
   uint32_t skipped_main_loop_count;
   uint32_t missed_generation_count;
   uint32_t intentional_skip_count;
+  uint32_t coalesced_generation_count;
   uint32_t overload_missed_generation_count;
   uint32_t scheduler_budget_exhausted_count;
   uint32_t matrix_catchup_scan_count;

@@ -6,8 +6,24 @@ This note summarizes the main runtime boundaries in `libhmk` after the recent re
 
 - Analog backends are responsible only for acquiring samples.
 - `analog_scan.c` converts sampled channel buffers into key-facing values and raw input values.
-- `matrix.c` turns those values into press/release events based on calibration and actuation settings.
+- When diagnostic firmware is enabled, `analog_scan.c` also keeps a latest
+  `raw_by_step` snapshot for low-rate channel-identity analysis without adding
+  analysis work to the DMA/ISR fast path.
+- `matrix.c` turns the latest analog snapshot into press/release events based
+  on calibration and actuation settings.
 - `layout.c` resolves key indices into keycodes, layer actions, advanced keys, and deferred actions.
+
+## Matrix Scheduling
+
+- `matrix_scan_fast()` owns the latency-sensitive filter, distance, and Rapid
+  Trigger work.
+- `matrix_scan_housekeeping()` owns deferred RGB dispatch, continuous
+  calibration maintenance, and other slower housekeeping.
+- `matrix_task()` is generation-gated and processes the latest snapshot once
+  per due matrix generation window.
+- Latest-snapshot builds do not replay missed raw generations. When the main
+  loop falls behind, the firmware coalesces generations and records counters
+  instead of re-running the matrix filter against the same raw frame.
 
 ## Non-Matrix Inputs
 
@@ -45,6 +61,9 @@ This keeps USB suspend/resume policy out of MCU-specific `board.c` files.
   to the USB callback.
 - The current transport is intentionally single-flight: hosts should wait for
   each response before sending the next command instead of pipelining requests.
+- Diagnostic firmware exposes additional channel-identity commands and metadata
+  capabilities so host tools can opt into Developer mode without probing the
+  normal fast path.
 
 ## Future Analog Backends
 

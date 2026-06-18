@@ -72,6 +72,9 @@ typedef enum {
   COMMAND_GET_ANALOG_DEBUG_FRAMES,
   COMMAND_GET_ANALOG_SCAN_CONFIG,
   COMMAND_SET_ANALOG_SCAN_CONFIG,
+  COMMAND_CAPTURE_ANALOG_DIAG_BASELINE,
+  COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST,
+  COMMAND_GET_ANALOG_RAW_BY_STEP,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -169,6 +172,16 @@ typedef struct __attribute__((packed)) {
   uint16_t mux_sample_delay_us;
 } command_analog_scan_config_t;
 
+typedef struct __attribute__((packed)) {
+  uint8_t expected_key;
+  uint16_t min_delta;
+  uint8_t max_secondary_ratio_percent;
+} command_in_analog_channel_identity_test_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t step;
+} command_in_analog_raw_by_step_t;
+
 // Command input buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -191,6 +204,8 @@ typedef struct __attribute__((packed)) {
     command_in_joystick_config_t joystick_config;
     command_in_host_time_t host_time;
     command_analog_scan_config_t analog_scan_config;
+    command_in_analog_channel_identity_test_t analog_channel_identity_test;
+    command_in_analog_raw_by_step_t analog_raw_by_step;
   };
 } command_in_buffer_t;
 
@@ -247,6 +262,7 @@ typedef struct __attribute__((packed)) {
   uint32_t missed_generation_count;
   uint32_t matrix_processing_divider;
   uint32_t intentional_skip_count;
+  uint32_t coalesced_generation_count;
   uint32_t overload_missed_generation_count;
   uint32_t scheduler_budget_exhausted_count;
   uint32_t matrix_catchup_scan_count;
@@ -267,6 +283,35 @@ typedef struct __attribute__((packed)) {
   uint32_t spi_error_count;
   uint32_t missed_scan_count;
 } command_out_analog_scan_diagnostics_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t expected_key;
+  uint8_t expected_step;
+  uint8_t expected_lane;
+  uint8_t observed_max_step;
+  uint8_t observed_max_lane;
+  uint8_t observed_logical_key;
+  uint8_t observed_second_step;
+  uint8_t observed_second_lane;
+  uint16_t observed_max_delta;
+  uint16_t observed_second_delta;
+  uint16_t min_delta;
+  uint8_t max_secondary_ratio_percent;
+  uint8_t failure_reason;
+  bool pass;
+} command_out_analog_channel_identity_result_t;
+
+enum {
+  COMMAND_ANALOG_DIAG_MAX_ADC_LANES = 8u,
+};
+
+typedef struct __attribute__((packed)) {
+  uint8_t step;
+  uint8_t lane_count;
+  uint16_t raw_by_lane[COMMAND_ANALOG_DIAG_MAX_ADC_LANES];
+  uint16_t baseline_by_lane[COMMAND_ANALOG_DIAG_MAX_ADC_LANES];
+  uint16_t delta_by_lane[COMMAND_ANALOG_DIAG_MAX_ADC_LANES];
+} command_out_analog_raw_by_step_t;
 
 // Command output buffer type
 typedef struct __attribute__((packed)) {
@@ -315,6 +360,10 @@ typedef struct __attribute__((packed)) {
     command_out_matrix_scan_diagnostics_t matrix_scan_diagnostics;
     // For `COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS`
     command_out_analog_scan_diagnostics_t analog_scan_diagnostics;
+    // For `COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST`
+    command_out_analog_channel_identity_result_t analog_channel_identity_result;
+    // For `COMMAND_GET_ANALOG_RAW_BY_STEP`
+    command_out_analog_raw_by_step_t analog_raw_by_step;
   };
 } command_out_buffer_t;
 

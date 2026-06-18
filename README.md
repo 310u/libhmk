@@ -152,7 +152,7 @@ Current in-tree keyboard definitions include `he16`, `he60`, `he60-v2`,
 
 4. Wait for PlatformIO to finish initializing the environment.
 
-5. Build the firmware using either `pio run` in the PlatformIO Core CLI or through the PlatformIO IDE's "Build" option. The generated `platformio.ini` contains only the selected keyboard and its `<keyboard>_recovery` companion environment, so rerun `setup.py` whenever you switch targets. The firmware binaries will be generated in the `.pio/build/<YOUR_KEYBOARD>/` directory with the following files:
+5. Build the firmware using either `pio run` in the PlatformIO Core CLI or through the PlatformIO IDE's "Build" option. The generated `platformio.ini` contains only the selected keyboard, its `<keyboard>_recovery` companion environment, and for mux-scanned boards a `<keyboard>_diag` diagnostic environment for channel-identity validation. Rerun `setup.py` whenever you switch targets. The firmware binaries will be generated in the `.pio/build/<YOUR_KEYBOARD>/` directory with the following files:
 
    - `firmware.bin`: The binary firmware file
    - `firmware.elf`: The ELF firmware file
@@ -185,7 +185,7 @@ For day-to-day regression checks, use:
 python scripts/run_regression.py -k mochiko40he
 ```
 
-This regenerates `platformio.ini` for the selected keyboard, runs the maintained native unit test set, and then builds both `<keyboard>` and `<keyboard>_recovery`.
+This regenerates `platformio.ini` for the selected keyboard, runs the maintained native unit test set, and then builds `<keyboard>` plus `<keyboard>_recovery`. Mux-scanned keyboards also gain a `<keyboard>_diag` build for raw-by-step and channel-identity validation work.
 
 You can use an existing keyboard implementation as a reference. If your keyboard hardware isn't currently supported by the firmware, you'll need to implement the necessary drivers and features. See the [Porting](#porting) section for more details.
 

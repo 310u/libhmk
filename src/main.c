@@ -94,7 +94,7 @@ int main(void) {
   analog_init();
   main_apply_analog_scan_runtime_config();
   matrix_init();
-#if defined(RGB_ENABLED)
+#if defined(RGB_ENABLED) && !defined(HMK_DIAG_CHANNEL_IDENTITY)
   rgb_init();
 #endif
   hid_init();
@@ -103,10 +103,12 @@ int main(void) {
   xinput_init();
   layout_init();
   encoder_init();
-#if defined(JOYSTICK_ENABLED)
+#if defined(JOYSTICK_ENABLED) && !defined(HMK_DIAG_CHANNEL_IDENTITY)
   joystick_init();
 #endif
+#if !defined(HMK_DIAG_CHANNEL_IDENTITY)
   trackball_init();
+#endif
   slider_init();
   command_init();
 
@@ -116,21 +118,24 @@ int main(void) {
 
     analog_task();
     matrix_task();
-    encoder_task();
+
+#if defined(HMK_DIAG_CHANNEL_IDENTITY)
+    matrix_scan_housekeeping();
+    command_task();
+#else
+    layout_task();
+    xinput_task();
+    trackball_task();
 #if defined(JOYSTICK_ENABLED)
     joystick_task();
 #endif
-    trackball_task();
-    matrix_task();
+    encoder_task();
     slider_task();
-    xinput_task();
-    matrix_task();
-    layout_task();
-    command_task();
-    matrix_task();
     matrix_scan_housekeeping();
 #if defined(RGB_ENABLED)
     rgb_task();
+#endif
+    command_task();
 #endif
 #if defined(__arm__)
     __asm__ volatile ("wfi");

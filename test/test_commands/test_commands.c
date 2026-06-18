@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include "analog_scan.h"
 #include "commands.h"
 #include "hardware/analog_api.h"
 #include "layout.h"
@@ -116,6 +117,50 @@ bool analog_set_mux_sample_delay_us(uint16_t delay_us) {
 uint16_t analog_read_raw(uint8_t index) {
   (void)index;
   return 0u;
+}
+
+bool analog_diag_channel_identity_enabled(void) { return false; }
+
+uint8_t analog_diag_mux_step_count(void) { return 0u; }
+
+uint8_t analog_diag_adc_lane_count(void) { return 0u; }
+
+void analog_diag_capture_baseline(void) {}
+
+bool analog_diag_find_key_step_lane(uint8_t key, uint8_t *step, uint8_t *lane) {
+  (void)key;
+  (void)step;
+  (void)lane;
+  return false;
+}
+
+uint16_t analog_diag_read_raw_by_step(uint8_t step, uint8_t lane) {
+  (void)step;
+  (void)lane;
+  return 0u;
+}
+
+uint16_t analog_diag_read_baseline_by_step(uint8_t step, uint8_t lane) {
+  (void)step;
+  (void)lane;
+  return 0u;
+}
+
+uint16_t analog_diag_read_delta_by_step(uint8_t step, uint8_t lane) {
+  (void)step;
+  (void)lane;
+  return 0u;
+}
+
+bool analog_diag_run_channel_identity_test(
+    uint8_t expected_key, uint16_t min_delta,
+    uint8_t max_secondary_ratio_percent,
+    analog_channel_identity_result_t *result) {
+  (void)expected_key;
+  (void)min_delta;
+  (void)max_secondary_ratio_percent;
+  (void)result;
+  return false;
 }
 
 uint16_t analog_debug_frame_count(void) { return 0u; }
@@ -349,6 +394,7 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
   mock_matrix_diag.missed_generation_count = 2u;
   mock_matrix_diag.matrix_processing_divider = 2u;
   mock_matrix_diag.intentional_skip_count = 11u;
+  mock_matrix_diag.coalesced_generation_count = 17u;
   mock_matrix_diag.overload_missed_generation_count = 3u;
   mock_matrix_diag.scheduler_budget_exhausted_count = 5u;
   mock_matrix_diag.matrix_catchup_scan_count = 13u;
@@ -378,6 +424,8 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
       2u, out.matrix_scan_diagnostics.matrix_processing_divider);
   TEST_ASSERT_EQUAL_UINT32(
       11u, out.matrix_scan_diagnostics.intentional_skip_count);
+  TEST_ASSERT_EQUAL_UINT32(
+      17u, out.matrix_scan_diagnostics.coalesced_generation_count);
   TEST_ASSERT_EQUAL_UINT32(
       3u, out.matrix_scan_diagnostics.overload_missed_generation_count);
   TEST_ASSERT_EQUAL_UINT32(
@@ -534,6 +582,34 @@ void test_command_set_analog_scan_config_rejects_invalid_value_without_write(voi
   TEST_ASSERT_EQUAL_UINT32(0u, wear_leveling_write_count);
 }
 
+void test_command_capture_analog_diag_baseline_requires_diag_firmware(void) {
+  command_in_buffer_t capture = {
+      .command_id = COMMAND_CAPTURE_ANALOG_DIAG_BASELINE,
+  };
+
+  command_send_and_flush(&capture);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+}
+
+void test_command_run_analog_channel_identity_requires_diag_firmware(void) {
+  command_in_buffer_t run_test = {
+      .command_id = COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST,
+      .analog_channel_identity_test =
+          {
+              .expected_key = 0u,
+              .min_delta = 32u,
+              .max_secondary_ratio_percent = 20u,
+          },
+  };
+
+  command_send_and_flush(&run_test);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+}
+
 #if defined(RGB_ENABLED)
 void test_command_set_host_time_updates_runtime_clock_without_flash_write(void) {
   command_in_buffer_t set_host_time = {
@@ -573,6 +649,8 @@ int main(void) {
   RUN_TEST(test_command_get_analog_scan_config_returns_current_value);
   RUN_TEST(test_command_set_analog_scan_config_updates_runtime_and_persists);
   RUN_TEST(test_command_set_analog_scan_config_rejects_invalid_value_without_write);
+  RUN_TEST(test_command_capture_analog_diag_baseline_requires_diag_firmware);
+  RUN_TEST(test_command_run_analog_channel_identity_requires_diag_firmware);
 #if defined(RGB_ENABLED)
   RUN_TEST(test_command_set_host_time_updates_runtime_clock_without_flash_write);
 #endif

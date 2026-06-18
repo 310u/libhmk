@@ -293,6 +293,11 @@ static uint32_t matrix_next_scheduled_generation_after(uint32_t generation) {
              : next_generation + (MATRIX_PROCESSING_DIVIDER - remainder);
 }
 
+static uint32_t matrix_latest_scheduled_generation_at_or_before(
+    uint32_t generation) {
+  return generation - (generation % MATRIX_PROCESSING_DIVIDER);
+}
+
 #if MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
 static uint32_t matrix_fast_scan_budget_us(void) {
   if (matrix_scan_diagnostics.last_raw_scan_us != 0u) {
@@ -749,40 +754,42 @@ void matrix_task(void) {
     return;
   }
 
-  const uint32_t scheduler_start_cycle = board_cycle_count();
-  uint32_t scans_this_call = 0u;
+  const uint32_t due_generation = matrix_next_processing_generation;
+  const uint32_t latest_scheduled_generation =
+      matrix_latest_scheduled_generation_at_or_before(current_generation);
+  const uint32_t scheduled_due_count =
+      ((latest_scheduled_generation - due_generation) /
+       MATRIX_PROCESSING_DIVIDER) +
+      1u;
+  const uint32_t coalesced_generations = current_generation - due_generation;
 
-  while (current_generation >= matrix_next_processing_generation) {
-    matrix_scan_fast();
-    scans_this_call++;
-    if (scans_this_call > 1u)
-      matrix_scan_diagnostics.matrix_catchup_scan_count++;
+  if (coalesced_generations != 0u)
+    matrix_scan_diagnostics.coalesced_generation_count +=
+        coalesced_generations;
 
-    matrix_next_processing_generation += MATRIX_PROCESSING_DIVIDER;
-
-    const uint32_t latest_generation = analog_scan_get_full_scan_generation();
-    if (latest_generation < matrix_last_seen_generation) {
-      matrix_last_seen_generation = latest_generation;
-      matrix_next_processing_generation =
-          matrix_next_scheduled_generation_after(latest_generation);
-      break;
-    }
-
-    matrix_account_generation_progress(latest_generation);
-    current_generation = latest_generation;
+  if (scheduled_due_count > 1u) {
+    matrix_scan_diagnostics.overload_missed_generation_count +=
+        scheduled_due_count - 1u;
     matrix_scan_diagnostics.missed_generation_count =
         matrix_scan_diagnostics.overload_missed_generation_count;
+  }
 
-    if (current_generation < matrix_next_processing_generation)
-      break;
+  matrix_scan_fast();
+  matrix_next_processing_generation =
+      latest_scheduled_generation + MATRIX_PROCESSING_DIVIDER;
 
-    const uint32_t elapsed_cycles =
-        board_cycle_count() - scheduler_start_cycle;
-    if (scans_this_call >= MATRIX_SCHEDULER_MAX_CATCHUP_SCANS ||
-        matrix_cycles_to_us(elapsed_cycles) >= MATRIX_SCHEDULER_BUDGET_US) {
-      matrix_scan_diagnostics.scheduler_budget_exhausted_count++;
-      break;
-    }
+  if (MATRIX_SCHEDULER_BUDGET_US != 0u &&
+      matrix_scan_diagnostics.last_scan_us > MATRIX_SCHEDULER_BUDGET_US) {
+    matrix_scan_diagnostics.scheduler_budget_exhausted_count++;
+  }
+
+  current_generation = analog_scan_get_full_scan_generation();
+  if (current_generation < matrix_last_seen_generation) {
+    matrix_last_seen_generation = current_generation;
+    matrix_next_processing_generation =
+        matrix_next_scheduled_generation_after(current_generation);
+  } else if (current_generation >= matrix_next_processing_generation) {
+    matrix_scan_diagnostics.scheduler_budget_exhausted_count++;
   }
 
   matrix_refresh_raw_scan_diagnostics();
@@ -820,6 +827,8 @@ uint32_t matrix_get_idle_time(void) {
 
 const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
   matrix_refresh_raw_scan_diagnostics();
+  matrix_scan_diagnostics.missed_generation_count =
+      matrix_scan_diagnostics.overload_missed_generation_count;
 #if !MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
   if (matrix_scan_diagnostics.raw_scan_hz != 0u) {
     matrix_scan_diagnostics.matrix_scan_hz =
