@@ -69,6 +69,8 @@ typedef struct __attribute__((packed)) {
   uint16_t max_sample_delta;
   uint16_t max_sample_velocity;
   uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint16_t idle_keys_detected;
+  uint16_t active_keys_detected;
 } hid_raw_matrix_diagnostic_payload_t;
 
 typedef struct __attribute__((packed)) {
@@ -109,6 +111,8 @@ hid_fill_raw_hid_matrix_diagnostics(hid_raw_diagnostic_report_t *report) {
   report->matrix.max_sample_velocity = diag->max_sample_velocity;
   memcpy(report->matrix.last_mode_counts, diag->last_mode_counts,
          sizeof(report->matrix.last_mode_counts));
+  report->matrix.idle_keys_detected = diag->idle_keys_detected;
+  report->matrix.active_keys_detected = diag->active_keys_detected;
 }
 
 static void hid_send_raw_hid_diagnostic_report(void) {
