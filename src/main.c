@@ -123,19 +123,24 @@ int main(void) {
     matrix_scan_housekeeping();
     command_task();
 #else
-    layout_task();
-    xinput_task();
-    trackball_task();
-#if defined(JOYSTICK_ENABLED)
-    joystick_task();
-#endif
-    encoder_task();
-    slider_task();
     matrix_scan_housekeeping();
-#if defined(RGB_ENABLED)
-    rgb_task();
+
+    static uint32_t loop_count = 0;
+    if ((loop_count & 3) == 0) {
+      layout_task();
+      xinput_task();
+      trackball_task();
+#if defined(JOYSTICK_ENABLED)
+      joystick_task();
 #endif
-    command_task();
+      encoder_task();
+      slider_task();
+#if defined(RGB_ENABLED)
+      rgb_task();
+#endif
+      command_task();
+    }
+    loop_count++;
 #endif
 #if defined(__arm__)
     __asm__ volatile ("wfi");
