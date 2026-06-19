@@ -126,7 +126,7 @@ int main(void) {
     matrix_scan_housekeeping();
 
     static uint32_t loop_count = 0;
-    if ((loop_count & 3) == 0) {
+    if ((loop_count & 7) == 0) {
       layout_task();
       xinput_task();
       trackball_task();
