@@ -672,11 +672,19 @@ void matrix_scan_fast(void) {
   matrix_scan_diagnostics.max_sample_velocity = max_sample_velocity;
   memcpy(matrix_scan_diagnostics.last_mode_counts, mode_counts,
          sizeof(mode_counts));
+  matrix_scan_diagnostics.idle_keys_detected =
+      (uint16_t)mode_counts[MATRIX_FILTER_MODE_IDLE];
+  matrix_scan_diagnostics.active_keys_detected =
+      (uint16_t)(mode_counts[MATRIX_FILTER_MODE_TRACK] +
+                 mode_counts[MATRIX_FILTER_MODE_FAST] +
+                 mode_counts[MATRIX_FILTER_MODE_BURST]);
 #else
   matrix_scan_diagnostics.max_sample_delta = 0u;
   matrix_scan_diagnostics.max_sample_velocity = 0u;
   memset(matrix_scan_diagnostics.last_mode_counts, 0,
          sizeof(matrix_scan_diagnostics.last_mode_counts));
+  matrix_scan_diagnostics.idle_keys_detected = 0u;
+  matrix_scan_diagnostics.active_keys_detected = 0u;
 #endif
   if (MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS && matrix_last_scan_start_cycle_valid) {
     matrix_scan_interval_cycles_accum +=

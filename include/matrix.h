@@ -251,6 +251,8 @@ typedef struct {
   uint16_t max_sample_delta;
   uint16_t max_sample_velocity;
   uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint16_t idle_keys_detected;
+  uint16_t active_keys_detected;
   uint32_t raw_scan_hz;
   uint32_t last_raw_scan_us;
   uint32_t max_raw_scan_us;
