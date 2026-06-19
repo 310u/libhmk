@@ -113,8 +113,12 @@ int main(void) {
   command_init();
 
   while (1) {
-    tud_task();
-    usb_runtime_task();
+    static uint32_t loop_count = 0;
+
+    if ((loop_count & 1) == 0) {
+      tud_task();
+      usb_runtime_task();
+    }
 
     analog_task();
     matrix_task();
@@ -125,7 +129,6 @@ int main(void) {
 #else
     matrix_scan_housekeeping();
 
-    static uint32_t loop_count = 0;
     if ((loop_count & 7) == 0) {
       layout_task();
       xinput_task();
