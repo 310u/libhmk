@@ -169,7 +169,7 @@ _Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
 
 #if !defined(MATRIX_DETAILED_SCAN_DIAGNOSTICS)
 // Collect per-key filter diagnostics during every matrix fast scan.
-#define MATRIX_DETAILED_SCAN_DIAGNOSTICS 1
+#define MATRIX_DETAILED_SCAN_DIAGNOSTICS 0
 #endif
 
 #if !defined(MATRIX_IDLE_EMA_FAST_PATH)
@@ -256,6 +256,7 @@ typedef struct {
   uint32_t max_raw_scan_us;
   uint32_t full_scan_generation;
   uint32_t matrix_scan_hz;
+  uint32_t expected_matrix_scan_hz;
   uint32_t skipped_main_loop_count;
   uint32_t missed_generation_count;
   uint32_t intentional_skip_count;
@@ -295,6 +296,9 @@ void matrix_recalibrate(bool reset_bottom_out_threshold);
 
 /**
  * @brief Update the key matrix to reflect the current state of the keys
+ *
+ * Legacy/manual scan entry point. Do not call this from the high-rate
+ * scheduler; use `matrix_task()` or `matrix_scan_fast()` instead.
  *
  * @return None
  */

@@ -145,6 +145,8 @@ struct matrix_scan_diagnostics_report {
   uint32_t overload_missed_generation_count;
   uint32_t scheduler_budget_exhausted_count;
   uint32_t matrix_catchup_scan_count;
+  uint16_t expected_matrix_scan_hz;
+  uint8_t matrix_fast_overrun_count;
 };
 ```
 
@@ -152,6 +154,11 @@ struct matrix_scan_diagnostics_report {
 describes how often the firmware actually ran `matrix_scan_fast()` in the main
 loop. When `matrix_processing_divider` is greater than `1`, the matrix/RT path
 is intentionally decimated relative to the raw scan rate.
+
+`expected_matrix_scan_hz` is the divider-derived target rate based on the
+current raw scan estimate. `matrix_fast_overrun_count` is appended as a
+byte-sized convenience counter for live-timing validation builds and saturates
+at `255`.
 
 `missed_generation_count` now reports the same overload-only value as
 `overload_missed_generation_count` for backward compatibility with older host

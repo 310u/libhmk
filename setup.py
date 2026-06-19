@@ -69,6 +69,51 @@ if __name__ == "__main__":
         "test_ignore": "*",
         "upload_protocol": "dfu",
     }
+    if keyboard == "mochiko40he":
+        pio_config[f"env:{keyboard}_matrix_div4"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + [
+                    "-DMATRIX_PROCESSING_DIVIDER=4",
+                    "-DMATRIX_SCHEDULER_BUDGET_US=125",
+                    "-DMATRIX_DETAILED_SCAN_DIAGNOSTICS=0",
+                    "-DMATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS=1",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + [
+                    "-DMATRIX_PROCESSING_DIVIDER=2",
+                    "-DMATRIX_SCHEDULER_BUDGET_US=63",
+                    "-DMATRIX_DETAILED_SCAN_DIAGNOSTICS=0",
+                    "-DMATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS=1",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
     pio_config[f"env:{keyboard}_recovery"] = {
         "board": driver.platformio.board,
         "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
@@ -103,6 +148,10 @@ if __name__ == "__main__":
         }
     if cpu_hz is not None:
         env_names = [f"env:{keyboard}", f"env:{keyboard}_recovery"]
+        if keyboard == "mochiko40he":
+            env_names.extend(
+                [f"env:{keyboard}_matrix_div4", f"env:{keyboard}_matrix_div2"]
+            )
         if f"env:{keyboard}_diag" in pio_config:
             env_names.append(f"env:{keyboard}_diag")
         for env_name in env_names:

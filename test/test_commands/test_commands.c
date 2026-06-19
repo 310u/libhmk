@@ -398,6 +398,8 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
   mock_matrix_diag.overload_missed_generation_count = 3u;
   mock_matrix_diag.scheduler_budget_exhausted_count = 5u;
   mock_matrix_diag.matrix_catchup_scan_count = 13u;
+  mock_matrix_diag.expected_matrix_scan_hz = 14375u;
+  mock_matrix_diag.matrix_fast_overrun_count = 9u;
 
   command_send_and_flush(&get_diag);
 
@@ -432,6 +434,10 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
       5u, out.matrix_scan_diagnostics.scheduler_budget_exhausted_count);
   TEST_ASSERT_EQUAL_UINT32(
       13u, out.matrix_scan_diagnostics.matrix_catchup_scan_count);
+  TEST_ASSERT_EQUAL_UINT16(
+      14375u, out.matrix_scan_diagnostics.expected_matrix_scan_hz);
+  TEST_ASSERT_EQUAL_UINT8(
+      9u, out.matrix_scan_diagnostics.matrix_fast_overrun_count);
 }
 
 void test_command_reset_matrix_scan_diagnostics_clears_snapshot(void) {

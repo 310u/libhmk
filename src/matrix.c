@@ -227,6 +227,8 @@ static bool matrix_last_housekeeping_tick_valid = false;
 static uint32_t matrix_last_housekeeping_start_cycle = 0u;
 static bool matrix_last_housekeeping_start_cycle_valid = false;
 
+static uint32_t matrix_expected_scan_hz(void);
+
 __attribute__((always_inline)) static inline uint32_t
 matrix_cycles_to_us(uint32_t cycles) {
 #if defined(F_CPU) && F_CPU > 0
@@ -272,6 +274,7 @@ static void matrix_refresh_raw_scan_diagnostics(void) {
       analog_scan_get_full_scan_generation();
   matrix_scan_diagnostics.matrix_processing_divider =
       MATRIX_PROCESSING_DIVIDER;
+  matrix_scan_diagnostics.expected_matrix_scan_hz = matrix_expected_scan_hz();
 }
 
 __attribute__((always_inline)) static inline uint32_t
@@ -296,6 +299,15 @@ static uint32_t matrix_next_scheduled_generation_after(uint32_t generation) {
 static uint32_t matrix_latest_scheduled_generation_at_or_before(
     uint32_t generation) {
   return generation - (generation % MATRIX_PROCESSING_DIVIDER);
+}
+
+static uint32_t matrix_expected_scan_hz(void) {
+  if (matrix_scan_diagnostics.raw_scan_hz == 0u)
+    return 0u;
+
+  return (matrix_scan_diagnostics.raw_scan_hz +
+          (MATRIX_PROCESSING_DIVIDER / 2u)) /
+         MATRIX_PROCESSING_DIVIDER;
 }
 
 #if MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
@@ -523,21 +535,29 @@ void matrix_scan_fast(void) {
 #if MATRIX_IDLE_EMA_FAST_PATH
     if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
         state->distance == 0u && raw_adc <= state->adc_rest_value) {
-      state->filter_mode = MATRIX_FILTER_MODE_IDLE;
-      state->filter_decay = 0u;
+      state->adc_raw = raw_adc;
       new_adc_filtered =
           matrix_ema(raw_adc, previous_filtered, MATRIX_EMA_ALPHA_EXPONENT);
+      state->adc_filtered = new_adc_filtered;
+      state->filter_mode = MATRIX_FILTER_MODE_IDLE;
+      state->filter_decay = 0u;
+      state->distance = 0u;
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
+      mode_counts[MATRIX_FILTER_MODE_IDLE]++;
       sample_delta = matrix_abs_diff_u16(raw_adc, previous_filtered);
       sample_velocity = matrix_abs_diff_u16(raw_adc, state->adc_raw);
+      if (sample_delta > max_sample_delta)
+        max_sample_delta = sample_delta;
+      if (sample_velocity > max_sample_velocity)
+        max_sample_velocity = sample_velocity;
 #endif
-    } else
-#endif
-    {
-      new_adc_filtered =
-          matrix_filter_adc((uint8_t)i, raw_adc, actuation, &filter_mode,
-                            &sample_delta, &sample_velocity);
+      continue;
     }
+#endif
+
+    new_adc_filtered =
+        matrix_filter_adc((uint8_t)i, raw_adc, actuation, &filter_mode,
+                          &sample_delta, &sample_velocity);
 
     state->adc_raw = raw_adc;
     state->adc_filtered = new_adc_filtered;
@@ -774,6 +794,8 @@ void matrix_task(void) {
         matrix_scan_diagnostics.overload_missed_generation_count;
   }
 
+  // Latest-snapshot scheduling intentionally coalesces overdue generations
+  // into one fast pass; do not replay matrix_scan_fast() against old samples.
   matrix_scan_fast();
   matrix_next_processing_generation =
       latest_scheduled_generation + MATRIX_PROCESSING_DIVIDER;
@@ -830,12 +852,8 @@ const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
   matrix_scan_diagnostics.missed_generation_count =
       matrix_scan_diagnostics.overload_missed_generation_count;
 #if !MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS
-  if (matrix_scan_diagnostics.raw_scan_hz != 0u) {
-    matrix_scan_diagnostics.matrix_scan_hz =
-        (matrix_scan_diagnostics.raw_scan_hz +
-         (MATRIX_PROCESSING_DIVIDER / 2u)) /
-        MATRIX_PROCESSING_DIVIDER;
-  }
+  matrix_scan_diagnostics.matrix_scan_hz =
+      matrix_scan_diagnostics.expected_matrix_scan_hz;
 #endif
   return &matrix_scan_diagnostics;
 }

@@ -635,6 +635,14 @@ void command_process(const uint8_t *buf) {
         diag->scheduler_budget_exhausted_count;
     out->matrix_scan_diagnostics.matrix_catchup_scan_count =
         diag->matrix_catchup_scan_count;
+    out->matrix_scan_diagnostics.expected_matrix_scan_hz =
+        diag->expected_matrix_scan_hz > UINT16_MAX
+            ? UINT16_MAX
+            : (uint16_t)diag->expected_matrix_scan_hz;
+    out->matrix_scan_diagnostics.matrix_fast_overrun_count =
+        diag->matrix_fast_overrun_count > UINT8_MAX
+            ? UINT8_MAX
+            : (uint8_t)diag->matrix_fast_overrun_count;
     break;
   }
   case COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS: {

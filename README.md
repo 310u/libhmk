@@ -187,6 +187,42 @@ python scripts/run_regression.py -k mochiko40he
 
 This regenerates `platformio.ini` for the selected keyboard, runs the maintained native unit test set, and then builds `<keyboard>` plus `<keyboard>_recovery`. Mux-scanned keyboards also gain a `<keyboard>_diag` build for raw-by-step and channel-identity validation work.
 
+### Mochiko40HE Matrix Divider Validation
+
+`Mochiko40HE` sets its default `MATRIX_PROCESSING_DIVIDER` in [`keyboards/mochiko40he/board_def.h`](keyboards/mochiko40he/board_def.h). The normal production build keeps `divider=4`.
+
+For the 16 kHz matrix/RT validation pass, regenerate `platformio.ini` first:
+
+```bash
+python setup.py -k mochiko40he
+```
+
+Then build one of the dedicated validation environments:
+
+```bash
+pio run -e mochiko40he_matrix_div4
+pio run -e mochiko40he_matrix_div2
+```
+
+These validation builds keep `MATRIX_DETAILED_SCAN_DIAGNOSTICS=0`, enable live matrix timing diagnostics, and set a divider-matched scheduler budget:
+
+- `mochiko40he_matrix_div4`: `MATRIX_PROCESSING_DIVIDER=4`, `MATRIX_SCHEDULER_BUDGET_US=125`
+- `mochiko40he_matrix_div2`: `MATRIX_PROCESSING_DIVIDER=2`, `MATRIX_SCHEDULER_BUDGET_US=63`
+
+In `hmkconf`, reset the matrix scan diagnostics before measuring and check:
+
+- `raw_scan_hz`
+- `expected_matrix_scan_hz`
+- `matrix_scan_hz`
+- `matrix_processing_divider`
+- `last_matrix_scan_us` / `max_matrix_scan_us`
+- `last_raw_scan_us` / `max_raw_scan_us`
+- `coalesced_generation_count`
+- `overload_missed_generation_count`
+- `scheduler_budget_exhausted_count`
+
+`expected_matrix_scan_hz` should be close to `raw_scan_hz / matrix_processing_divider`. The scheduler remains latest-snapshot based: overdue generations are coalesced into one fast pass, not replayed one-by-one.
+
 You can use an existing keyboard implementation as a reference. If your keyboard hardware isn't currently supported by the firmware, you'll need to implement the necessary drivers and features. See the [Porting](#porting) section for more details.
 
 ## Porting

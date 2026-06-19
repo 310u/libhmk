@@ -266,6 +266,8 @@ typedef struct __attribute__((packed)) {
   uint32_t overload_missed_generation_count;
   uint32_t scheduler_budget_exhausted_count;
   uint32_t matrix_catchup_scan_count;
+  uint16_t expected_matrix_scan_hz;
+  uint8_t matrix_fast_overrun_count;
 } command_out_matrix_scan_diagnostics_t;
 
 typedef struct __attribute__((packed)) {
