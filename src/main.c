@@ -145,9 +145,6 @@ int main(void) {
     }
     loop_count++;
 #endif
-#if defined(__arm__)
-    __asm__ volatile ("wfi");
-#endif
   }
 
   return 0;
