@@ -32,6 +32,118 @@
 #include "slider.h"
 #include "trackball.h"
 
+#ifndef HMK_ENABLE_LAYOUT_TASK
+#define HMK_ENABLE_LAYOUT_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_XINPUT_TASK
+#define HMK_ENABLE_XINPUT_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_TRACKBALL_TASK
+#define HMK_ENABLE_TRACKBALL_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_JOYSTICK_TASK
+#define HMK_ENABLE_JOYSTICK_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_ENCODER_TASK
+#define HMK_ENABLE_ENCODER_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_SLIDER_TASK
+#define HMK_ENABLE_SLIDER_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_RGB_TASK
+#define HMK_ENABLE_RGB_TASK 1
+#endif
+
+#ifndef HMK_ENABLE_COMMAND_TASK
+#define HMK_ENABLE_COMMAND_TASK 1
+#endif
+
+#ifndef HMK_STAGGER_BACKGROUND_TASKS
+// Staggering every loop can starve matrix throughput under heavy host traffic.
+// Keep legacy burst mode as the safe default; enable staggering explicitly for
+// controlled experiments.
+#define HMK_STAGGER_BACKGROUND_TASKS 0
+#endif
+
+#ifndef HMK_LAYOUT_TASK_INTERVAL
+#define HMK_LAYOUT_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_LAYOUT_TASK_PHASE
+#define HMK_LAYOUT_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_XINPUT_TASK_INTERVAL
+#define HMK_XINPUT_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_XINPUT_TASK_PHASE
+#define HMK_XINPUT_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_TRACKBALL_TASK_INTERVAL
+#define HMK_TRACKBALL_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_TRACKBALL_TASK_PHASE
+#define HMK_TRACKBALL_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_JOYSTICK_TASK_INTERVAL
+#define HMK_JOYSTICK_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_JOYSTICK_TASK_PHASE
+#define HMK_JOYSTICK_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_ENCODER_TASK_INTERVAL
+#define HMK_ENCODER_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_ENCODER_TASK_PHASE
+#define HMK_ENCODER_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_SLIDER_TASK_INTERVAL
+#define HMK_SLIDER_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_SLIDER_TASK_PHASE
+#define HMK_SLIDER_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_RGB_TASK_INTERVAL
+#define HMK_RGB_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_RGB_TASK_PHASE
+#define HMK_RGB_TASK_PHASE 0u
+#endif
+
+#ifndef HMK_COMMAND_TASK_INTERVAL
+#define HMK_COMMAND_TASK_INTERVAL 8u
+#endif
+
+#ifndef HMK_COMMAND_TASK_PHASE
+#define HMK_COMMAND_TASK_PHASE 0u
+#endif
+
+static inline bool main_task_due(uint32_t loop_count, uint32_t interval,
+                                 uint32_t phase) {
+  if (interval <= 1u) {
+    return true;
+  }
+
+  return (loop_count % interval) == (phase % interval);
+}
+
 static void main_apply_analog_scan_runtime_config(void) {
   if (!analog_set_mux_sample_delay_us(eeconfig->mux_sample_delay_us)) {
     (void)analog_set_mux_sample_delay_us(ADC_SAMPLE_DELAY_DEFAULT);
@@ -125,24 +237,102 @@ int main(void) {
 
 #if defined(HMK_DIAG_CHANNEL_IDENTITY)
     matrix_scan_housekeeping();
+#if HMK_ENABLE_COMMAND_TASK
     command_task();
+#endif
 #else
     matrix_scan_housekeeping();
 
-    if ((loop_count & 7) == 0) {
+#if HMK_STAGGER_BACKGROUND_TASKS
+    const uint32_t task_phase = loop_count & 7u;
+
+    if (task_phase == 0u) {
+#if HMK_ENABLE_LAYOUT_TASK
       layout_task();
+#endif
+    } else if (task_phase == 1u) {
+#if HMK_ENABLE_XINPUT_TASK
       xinput_task();
+#endif
+    } else if (task_phase == 2u) {
+#if HMK_ENABLE_TRACKBALL_TASK
       trackball_task();
-#if defined(JOYSTICK_ENABLED)
+#endif
+    } else if (task_phase == 3u) {
+#if defined(JOYSTICK_ENABLED) && HMK_ENABLE_JOYSTICK_TASK
       joystick_task();
 #endif
+    } else if (task_phase == 4u) {
+#if HMK_ENABLE_ENCODER_TASK
       encoder_task();
+#endif
+    } else if (task_phase == 5u) {
+#if HMK_ENABLE_SLIDER_TASK
       slider_task();
+#endif
+    } else if (task_phase == 6u) {
 #if defined(RGB_ENABLED)
+#if HMK_ENABLE_RGB_TASK
       rgb_task();
 #endif
+#endif
+    } else {
+#if HMK_ENABLE_COMMAND_TASK
       command_task();
+#endif
     }
+#else
+#if HMK_ENABLE_LAYOUT_TASK
+    if (main_task_due(loop_count, HMK_LAYOUT_TASK_INTERVAL,
+          HMK_LAYOUT_TASK_PHASE)) {
+  layout_task();
+    }
+#endif
+#if HMK_ENABLE_XINPUT_TASK
+    if (main_task_due(loop_count, HMK_XINPUT_TASK_INTERVAL,
+          HMK_XINPUT_TASK_PHASE)) {
+  xinput_task();
+    }
+#endif
+#if HMK_ENABLE_TRACKBALL_TASK
+    if (main_task_due(loop_count, HMK_TRACKBALL_TASK_INTERVAL,
+          HMK_TRACKBALL_TASK_PHASE)) {
+  trackball_task();
+    }
+#endif
+#if defined(JOYSTICK_ENABLED) && HMK_ENABLE_JOYSTICK_TASK
+    if (main_task_due(loop_count, HMK_JOYSTICK_TASK_INTERVAL,
+          HMK_JOYSTICK_TASK_PHASE)) {
+  joystick_task();
+    }
+#endif
+#if HMK_ENABLE_ENCODER_TASK
+    if (main_task_due(loop_count, HMK_ENCODER_TASK_INTERVAL,
+          HMK_ENCODER_TASK_PHASE)) {
+  encoder_task();
+    }
+#endif
+#if HMK_ENABLE_SLIDER_TASK
+    if (main_task_due(loop_count, HMK_SLIDER_TASK_INTERVAL,
+          HMK_SLIDER_TASK_PHASE)) {
+  slider_task();
+    }
+#endif
+#if defined(RGB_ENABLED)
+#if HMK_ENABLE_RGB_TASK
+    if (main_task_due(loop_count, HMK_RGB_TASK_INTERVAL,
+          HMK_RGB_TASK_PHASE)) {
+  rgb_task();
+    }
+#endif
+#endif
+#if HMK_ENABLE_COMMAND_TASK
+    if (main_task_due(loop_count, HMK_COMMAND_TASK_INTERVAL,
+          HMK_COMMAND_TASK_PHASE)) {
+  command_task();
+    }
+#endif
+#endif
     loop_count++;
 #endif
 #if defined(__arm__)

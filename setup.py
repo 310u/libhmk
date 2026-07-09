@@ -70,6 +70,12 @@ if __name__ == "__main__":
         "upload_protocol": "dfu",
     }
     if keyboard == "mochiko40he":
+        matrix_div2_base_flags = [
+            "-DMATRIX_PROCESSING_DIVIDER=2",
+            "-DMATRIX_SCHEDULER_BUDGET_US=63",
+            "-DMATRIX_DETAILED_SCAN_DIAGNOSTICS=0",
+            "-DMATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS=1",
+        ]
         pio_config[f"env:{keyboard}_matrix_div4"] = {
             "board": driver.platformio.board,
             "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
@@ -98,10 +104,315 @@ if __name__ == "__main__":
             "build_flags": "\n".join(
                 build_flags
                 + [
-                    "-DMATRIX_PROCESSING_DIVIDER=2",
-                    "-DMATRIX_SCHEDULER_BUDGET_US=63",
-                    "-DMATRIX_DETAILED_SCAN_DIAGNOSTICS=0",
-                    "-DMATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS=1",
+                    flag
+                    for flag in matrix_div2_base_flags
+                    if not flag.startswith("-DMATRIX_SCHEDULER_BUDGET_US=")
+                ]
+                + [
+                    "-DHMK_STAGGER_BACKGROUND_TASKS=0",
+                    "-DADC_SAMPLE_DELAY_DEFAULT=1",
+                    "-DMATRIX_SCHEDULER_BUDGET_US=1200",
+                    "-DHMK_LAYOUT_TASK_INTERVAL=32",
+                    "-DHMK_LAYOUT_TASK_PHASE=0",
+                    "-DHMK_XINPUT_TASK_INTERVAL=32",
+                    "-DHMK_XINPUT_TASK_PHASE=16",
+                    "-DHMK_COMMAND_TASK_INTERVAL=64",
+                    "-DHMK_COMMAND_TASK_PHASE=8",
+                    "-DHMK_TRACKBALL_TASK_INTERVAL=64",
+                    "-DHMK_TRACKBALL_TASK_PHASE=4",
+                    "-DHMK_JOYSTICK_TASK_INTERVAL=64",
+                    "-DHMK_JOYSTICK_TASK_PHASE=20",
+                    "-DHMK_ENCODER_TASK_INTERVAL=64",
+                    "-DHMK_ENCODER_TASK_PHASE=36",
+                    "-DHMK_SLIDER_TASK_INTERVAL=64",
+                    "-DHMK_SLIDER_TASK_PHASE=52",
+                    "-DHMK_RGB_TASK_INTERVAL=128",
+                    "-DHMK_RGB_TASK_PHASE=28",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_no_rgb"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags + matrix_div2_base_flags + ["-DHMK_ENABLE_RGB_TASK=0"]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_no_layout"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + matrix_div2_base_flags
+                + [
+                    "-DHMK_ENABLE_LAYOUT_TASK=0",
+                    "-DHMK_ENABLE_XINPUT_TASK=0",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_no_inputs"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + matrix_div2_base_flags
+                + [
+                    "-DHMK_ENABLE_TRACKBALL_TASK=0",
+                    "-DHMK_ENABLE_JOYSTICK_TASK=0",
+                    "-DHMK_ENABLE_ENCODER_TASK=0",
+                    "-DHMK_ENABLE_SLIDER_TASK=0",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_min_tasks"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + matrix_div2_base_flags
+                + [
+                    "-DHMK_ENABLE_LAYOUT_TASK=0",
+                    "-DHMK_ENABLE_XINPUT_TASK=0",
+                    "-DHMK_ENABLE_TRACKBALL_TASK=0",
+                    "-DHMK_ENABLE_JOYSTICK_TASK=0",
+                    "-DHMK_ENABLE_ENCODER_TASK=0",
+                    "-DHMK_ENABLE_SLIDER_TASK=0",
+                    "-DHMK_ENABLE_RGB_TASK=0",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_tuned"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + matrix_div2_base_flags
+                + [
+                    "-DHMK_STAGGER_BACKGROUND_TASKS=0",
+                    "-DHMK_LAYOUT_TASK_INTERVAL=8",
+                    "-DHMK_LAYOUT_TASK_PHASE=0",
+                    "-DHMK_XINPUT_TASK_INTERVAL=8",
+                    "-DHMK_XINPUT_TASK_PHASE=4",
+                    "-DHMK_COMMAND_TASK_INTERVAL=8",
+                    "-DHMK_COMMAND_TASK_PHASE=2",
+                    "-DHMK_TRACKBALL_TASK_INTERVAL=16",
+                    "-DHMK_TRACKBALL_TASK_PHASE=1",
+                    "-DHMK_JOYSTICK_TASK_INTERVAL=16",
+                    "-DHMK_JOYSTICK_TASK_PHASE=5",
+                    "-DHMK_ENCODER_TASK_INTERVAL=16",
+                    "-DHMK_ENCODER_TASK_PHASE=9",
+                    "-DHMK_SLIDER_TASK_INTERVAL=16",
+                    "-DHMK_SLIDER_TASK_PHASE=13",
+                    "-DHMK_RGB_TASK_INTERVAL=32",
+                    "-DHMK_RGB_TASK_PHASE=11",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_tuned2"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + matrix_div2_base_flags
+                + [
+                    "-DHMK_STAGGER_BACKGROUND_TASKS=0",
+                    "-DADC_SAMPLE_DELAY_DEFAULT=1",
+                    "-DHMK_LAYOUT_TASK_INTERVAL=16",
+                    "-DHMK_LAYOUT_TASK_PHASE=0",
+                    "-DHMK_XINPUT_TASK_INTERVAL=16",
+                    "-DHMK_XINPUT_TASK_PHASE=8",
+                    "-DHMK_COMMAND_TASK_INTERVAL=16",
+                    "-DHMK_COMMAND_TASK_PHASE=4",
+                    "-DHMK_TRACKBALL_TASK_INTERVAL=32",
+                    "-DHMK_TRACKBALL_TASK_PHASE=2",
+                    "-DHMK_JOYSTICK_TASK_INTERVAL=32",
+                    "-DHMK_JOYSTICK_TASK_PHASE=10",
+                    "-DHMK_ENCODER_TASK_INTERVAL=32",
+                    "-DHMK_ENCODER_TASK_PHASE=18",
+                    "-DHMK_SLIDER_TASK_INTERVAL=32",
+                    "-DHMK_SLIDER_TASK_PHASE=26",
+                    "-DHMK_RGB_TASK_INTERVAL=64",
+                    "-DHMK_RGB_TASK_PHASE=14",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_tuned3"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + [
+                    flag
+                    for flag in matrix_div2_base_flags
+                    if not flag.startswith("-DMATRIX_SCHEDULER_BUDGET_US=")
+                ]
+                + [
+                    "-DHMK_STAGGER_BACKGROUND_TASKS=0",
+                    "-DADC_SAMPLE_DELAY_DEFAULT=1",
+                    "-DMATRIX_SCHEDULER_BUDGET_US=1200",
+                    "-DHMK_LAYOUT_TASK_INTERVAL=16",
+                    "-DHMK_LAYOUT_TASK_PHASE=0",
+                    "-DHMK_XINPUT_TASK_INTERVAL=16",
+                    "-DHMK_XINPUT_TASK_PHASE=8",
+                    "-DHMK_COMMAND_TASK_INTERVAL=32",
+                    "-DHMK_COMMAND_TASK_PHASE=4",
+                    "-DHMK_TRACKBALL_TASK_INTERVAL=32",
+                    "-DHMK_TRACKBALL_TASK_PHASE=2",
+                    "-DHMK_JOYSTICK_TASK_INTERVAL=32",
+                    "-DHMK_JOYSTICK_TASK_PHASE=10",
+                    "-DHMK_ENCODER_TASK_INTERVAL=32",
+                    "-DHMK_ENCODER_TASK_PHASE=18",
+                    "-DHMK_SLIDER_TASK_INTERVAL=32",
+                    "-DHMK_SLIDER_TASK_PHASE=26",
+                    "-DHMK_RGB_TASK_INTERVAL=64",
+                    "-DHMK_RGB_TASK_PHASE=14",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_tuned4"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + [
+                    flag
+                    for flag in matrix_div2_base_flags
+                    if not flag.startswith("-DMATRIX_SCHEDULER_BUDGET_US=")
+                ]
+                + [
+                    "-DHMK_STAGGER_BACKGROUND_TASKS=0",
+                    "-DADC_SAMPLE_DELAY_DEFAULT=1",
+                    "-DMATRIX_SCHEDULER_BUDGET_US=1200",
+                    "-DHMK_LAYOUT_TASK_INTERVAL=32",
+                    "-DHMK_LAYOUT_TASK_PHASE=0",
+                    "-DHMK_XINPUT_TASK_INTERVAL=32",
+                    "-DHMK_XINPUT_TASK_PHASE=16",
+                    "-DHMK_COMMAND_TASK_INTERVAL=64",
+                    "-DHMK_COMMAND_TASK_PHASE=8",
+                    "-DHMK_TRACKBALL_TASK_INTERVAL=64",
+                    "-DHMK_TRACKBALL_TASK_PHASE=4",
+                    "-DHMK_JOYSTICK_TASK_INTERVAL=64",
+                    "-DHMK_JOYSTICK_TASK_PHASE=20",
+                    "-DHMK_ENCODER_TASK_INTERVAL=64",
+                    "-DHMK_ENCODER_TASK_PHASE=36",
+                    "-DHMK_SLIDER_TASK_INTERVAL=64",
+                    "-DHMK_SLIDER_TASK_PHASE=52",
+                    "-DHMK_RGB_TASK_INTERVAL=128",
+                    "-DHMK_RGB_TASK_PHASE=28",
+                ]
+            ),
+            "build_src_filter": "${env.build_src_filter}",
+            "build_src_flags": "\n".join(build_src_flags),
+            "extra_scripts": "\n".join(extra_scripts),
+            "framework": driver.platformio.framework,
+            "custom_keyboard_name": keyboard,
+            "lib_deps": "\n".join(lib_deps),
+            "platform": driver.platformio.platform,
+            "test_ignore": "*",
+            "upload_protocol": "dfu",
+        }
+        pio_config[f"env:{keyboard}_matrix_div2_tuned5"] = {
+            "board": driver.platformio.board,
+            "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+            "build_flags": "\n".join(
+                build_flags
+                + [
+                    flag
+                    for flag in matrix_div2_base_flags
+                    if not flag.startswith("-DMATRIX_SCHEDULER_BUDGET_US=")
+                ]
+                + [
+                    "-DHMK_STAGGER_BACKGROUND_TASKS=0",
+                    "-DADC_SAMPLE_DELAY_DEFAULT=1",
+                    "-DMATRIX_SCHEDULER_BUDGET_US=1400",
+                    "-DHMK_LAYOUT_TASK_INTERVAL=40",
+                    "-DHMK_LAYOUT_TASK_PHASE=0",
+                    "-DHMK_XINPUT_TASK_INTERVAL=40",
+                    "-DHMK_XINPUT_TASK_PHASE=20",
+                    "-DHMK_COMMAND_TASK_INTERVAL=128",
+                    "-DHMK_COMMAND_TASK_PHASE=16",
+                    "-DHMK_TRACKBALL_TASK_INTERVAL=64",
+                    "-DHMK_TRACKBALL_TASK_PHASE=4",
+                    "-DHMK_JOYSTICK_TASK_INTERVAL=64",
+                    "-DHMK_JOYSTICK_TASK_PHASE=20",
+                    "-DHMK_ENCODER_TASK_INTERVAL=64",
+                    "-DHMK_ENCODER_TASK_PHASE=36",
+                    "-DHMK_SLIDER_TASK_INTERVAL=64",
+                    "-DHMK_SLIDER_TASK_PHASE=52",
+                    "-DHMK_RGB_TASK_INTERVAL=128",
+                    "-DHMK_RGB_TASK_PHASE=28",
                 ]
             ),
             "build_src_filter": "${env.build_src_filter}",
@@ -150,7 +461,19 @@ if __name__ == "__main__":
         env_names = [f"env:{keyboard}", f"env:{keyboard}_recovery"]
         if keyboard == "mochiko40he":
             env_names.extend(
-                [f"env:{keyboard}_matrix_div4", f"env:{keyboard}_matrix_div2"]
+                [
+                    f"env:{keyboard}_matrix_div4",
+                    f"env:{keyboard}_matrix_div2",
+                    f"env:{keyboard}_matrix_div2_no_rgb",
+                    f"env:{keyboard}_matrix_div2_no_layout",
+                    f"env:{keyboard}_matrix_div2_no_inputs",
+                    f"env:{keyboard}_matrix_div2_min_tasks",
+                    f"env:{keyboard}_matrix_div2_tuned",
+                    f"env:{keyboard}_matrix_div2_tuned2",
+                    f"env:{keyboard}_matrix_div2_tuned3",
+                    f"env:{keyboard}_matrix_div2_tuned4",
+                    f"env:{keyboard}_matrix_div2_tuned5",
+                ]
             )
         if f"env:{keyboard}_diag" in pio_config:
             env_names.append(f"env:{keyboard}_diag")
