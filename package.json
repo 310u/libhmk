@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "node-hid": "^3.4.0"
+  }
+}

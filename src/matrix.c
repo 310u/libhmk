@@ -423,6 +423,11 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
     key_matrix[i].is_pressed = false;
     key_matrix[i].rest_stable_since = 0;
     key_matrix[i].event_time = 0;
+#if MATRIX_RT_PREDICTIVE_ENABLE
+    key_matrix[i].prev_adc_filtered =
+        (int16_t)eeconfig->calibration.initial_rest_value;
+    key_matrix[i].prev_velocity = 0;
+#endif
   }
 
   // We only calibrate the rest value. The bottom-out value will be updated
@@ -443,6 +448,10 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
 
       key_matrix[i].adc_raw = raw_adc;
       key_matrix[i].adc_filtered = new_adc_filtered;
+#if MATRIX_RT_PREDICTIVE_ENABLE
+      key_matrix[i].prev_adc_filtered = (int16_t)new_adc_filtered;
+      key_matrix[i].prev_velocity = 0;
+#endif
 
       if (new_adc_filtered + MATRIX_CALIBRATION_EPSILON <=
           key_matrix[i].adc_rest_value)
@@ -561,6 +570,13 @@ void matrix_scan_fast(void) {
 
     state->adc_raw = raw_adc;
     state->adc_filtered = new_adc_filtered;
+#if MATRIX_RT_PREDICTIVE_ENABLE
+    const int16_t velocity =
+        (int16_t)new_adc_filtered - (int16_t)previous_filtered;
+    const int16_t acceleration = velocity - state->prev_velocity;
+    state->prev_velocity = velocity;
+    state->prev_adc_filtered = (int16_t)new_adc_filtered;
+#endif
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
     mode_counts[filter_mode]++;
     if (sample_delta > max_sample_delta)
@@ -599,6 +615,19 @@ void matrix_scan_fast(void) {
           actuation->continuous ? 0 : actuation->actuation_point;
       const uint8_t rt_up =
           actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
+#if MATRIX_RT_PREDICTIVE_ENABLE
+      uint8_t effective_rt_up = rt_up;
+      if (state->is_pressed && state->key_dir == KEY_DIR_DOWN &&
+          ((int32_t)velocity * (int32_t)acceleration < 0) &&
+          (acceleration > ((int16_t)MATRIX_RT_DECEL_THRESHOLD) ||
+           acceleration < -((int16_t)MATRIX_RT_DECEL_THRESHOLD))) {
+        // Sudden deceleration while pressing: arm the release threshold
+        // so the key turns off on the slightest upward movement.
+        effective_rt_up = 1;
+      }
+#else
+      const uint8_t effective_rt_up = rt_up;
+#endif
 
       switch (state->key_dir) {
       case KEY_DIR_INACTIVE:
@@ -616,7 +645,7 @@ void matrix_scan_fast(void) {
           state->extremum = state->distance;
           state->key_dir = KEY_DIR_INACTIVE;
           state->is_pressed = false;
-        } else if (state->distance + rt_up < state->extremum) {
+        } else if (state->distance + effective_rt_up < state->extremum) {
           // Released by Rapid Trigger
           state->extremum = state->distance;
           state->key_dir = KEY_DIR_UP;

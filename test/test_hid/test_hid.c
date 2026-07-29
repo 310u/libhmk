@@ -45,7 +45,10 @@ typedef struct __attribute__((packed)) {
   uint32_t max_scan_us;
   uint16_t max_sample_delta;
   uint16_t max_sample_velocity;
-  uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint8_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint8_t idle_keys_detected;
+  uint8_t active_keys_detected;
+  uint8_t reserved[2];
 } test_raw_hid_matrix_diagnostic_payload_t;
 
 typedef struct __attribute__((packed)) {
@@ -432,14 +435,14 @@ void test_hid_usbmon_diagnostic_stream_chains_raw_hid_reports(void) {
   TEST_ASSERT_EQUAL_UINT32(4u, first_report.matrix.max_scan_us);
   TEST_ASSERT_EQUAL_UINT16(18u, first_report.matrix.max_sample_delta);
   TEST_ASSERT_EQUAL_UINT16(11u, first_report.matrix.max_sample_velocity);
-  TEST_ASSERT_EQUAL_UINT16(6u,
-                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_IDLE]);
-  TEST_ASSERT_EQUAL_UINT16(2u,
-                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_TRACK]);
-  TEST_ASSERT_EQUAL_UINT16(1u,
-                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_FAST]);
-  TEST_ASSERT_EQUAL_UINT16(1u,
-                           first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_BURST]);
+  TEST_ASSERT_EQUAL_UINT8(6u,
+                          first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_IDLE]);
+  TEST_ASSERT_EQUAL_UINT8(2u,
+                          first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_TRACK]);
+  TEST_ASSERT_EQUAL_UINT8(1u,
+                          first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_FAST]);
+  TEST_ASSERT_EQUAL_UINT8(1u,
+                          first_report.matrix.last_mode_counts[MATRIX_FILTER_MODE_BURST]);
 
   tud_hid_report_complete_cb(USB_ITF_RAW_HID, raw_hid_reports[0], RAW_HID_EP_SIZE);
 

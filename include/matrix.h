@@ -100,6 +100,22 @@
 _Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
                "MATRIX_EMA_MODE_DECAY_SCANS must fit in key_state_t.filter_decay");
 
+#if !defined(MATRIX_RT_PREDICTIVE_ENABLE)
+// Enable predictive Rapid Trigger release by monitoring key deceleration.
+// When the key is being pressed down but suddenly decelerates, the release
+// threshold is temporarily tightened to the minimum (1 distance unit) so the
+// key releases as soon as the user begins to let go.
+#define MATRIX_RT_PREDICTIVE_ENABLE 0
+#endif
+
+#if !defined(MATRIX_RT_DECEL_THRESHOLD)
+// Minimum per-scan deceleration magnitude (in ADC units) required to trigger
+// the predictive release threshold. The sign of the acceleration is compared
+// against the current velocity so that deceleration is detected regardless of
+// whether pressing increases or decreases the raw ADC value.
+#define MATRIX_RT_DECEL_THRESHOLD 15
+#endif
+
 #if !defined(MATRIX_CALIBRATION_EPSILON)
 // Minimum change in ADC values required to update the calibration values. This
 // is used to mitigate the inconsistency of the Hall effect sensors.
@@ -220,6 +236,10 @@ typedef struct {
   uint16_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
+  // Filtered ADC value from the previous scan (for velocity calculation)
+  int16_t prev_adc_filtered;
+  // Velocity (signed per-scan ADC delta) from the previous scan
+  int16_t prev_velocity;
   // Current dynamic EMA stage (matrix_filter_mode_t)
   uint8_t filter_mode;
   // Consecutive calmer samples seen while decaying the filter stage
@@ -271,6 +291,7 @@ typedef struct {
   uint32_t matrix_housekeeping_hz;
   uint32_t last_housekeeping_us;
   uint32_t max_housekeeping_us;
+  uint16_t rpt_trigger_count;
 } matrix_scan_diagnostics_t;
 
 //--------------------------------------------------------------------+

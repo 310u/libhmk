@@ -168,13 +168,14 @@ static wear_leveling_status_t wear_leveling_replay_log(void) {
     wl_log_entry_t entry;
     entry.raw[0] = value;
 
-    if (entry.fields.addr + entry.fields.len > WL_VIRTUAL_SIZE) {
+    if (wl_entry_get_addr(&entry) + wl_entry_get_len(&entry) >
+        WL_VIRTUAL_SIZE) {
       // The entry is invalid
       status = WL_STATUS_FAILED;
       break;
     }
 
-    if (entry.fields.len > 2) {
+    if (wl_entry_get_len(&entry) > 2) {
       // More data in the second word
       if (!wear_leveling_flash_read(addr, &entry.raw[1], 1)) {
         status = WL_STATUS_FAILED;
@@ -184,7 +185,8 @@ static wear_leveling_status_t wear_leveling_replay_log(void) {
     }
 
     // Update the cache with the entry
-    memcpy(wl_cache + entry.fields.addr, entry.fields.data, entry.fields.len);
+    memcpy(wl_cache + wl_entry_get_addr(&entry), entry.fields.data,
+           wl_entry_get_len(&entry));
   }
 
   write_address = addr;
@@ -215,8 +217,7 @@ wear_leveling_write_raw(uint32_t addr, const void *buf, uint32_t len) {
     const uint32_t write_len = M_MIN(len, WL_MAX_BYTES_PER_ENTRY);
     wl_log_entry_t entry = {0};
 
-    entry.fields.addr = addr;
-    entry.fields.len = write_len;
+    wl_entry_set(&entry, addr, write_len);
     memcpy(entry.fields.data, buf8, write_len);
 
     wear_leveling_status_t status = wear_leveling_append(entry.raw[0]);

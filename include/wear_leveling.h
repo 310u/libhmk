@@ -44,12 +44,32 @@ _Static_assert(WL_BACKING_STORE_SIZE <= FLASH_SIZE,
 
 typedef union __attribute__((packed)) {
   struct __attribute__((packed)) {
-    uint16_t addr : 13;
-    uint8_t len : 3;
+    // 16-bit header: bits 0-12 store the 13-bit virtual address, bits 13-15
+    // store the 3-bit data length.  Explicit bit layout instead of bit-fields
+    // avoids compiler-dependent packing (e.g. MinGW vs. ARM GCC).
+    uint16_t header;
     uint8_t data[WL_MAX_BYTES_PER_ENTRY];
   } fields;
   uint32_t raw[2];
 } wl_log_entry_t;
+
+// Extract the 13-bit address from the header.
+__attribute__((always_inline)) static inline uint16_t
+wl_entry_get_addr(const wl_log_entry_t *e) {
+  return e->fields.header & 0x1FFF;
+}
+
+// Extract the 3-bit length from the header.
+__attribute__((always_inline)) static inline uint8_t
+wl_entry_get_len(const wl_log_entry_t *e) {
+  return (uint8_t)(e->fields.header >> 13);
+}
+
+// Pack the address and length into the header.
+__attribute__((always_inline)) static inline void
+wl_entry_set(wl_log_entry_t *e, uint16_t addr, uint8_t len) {
+  e->fields.header = (uint16_t)((addr & 0x1FFF) | ((uint16_t)(len & 0x07) << 13));
+}
 
 _Static_assert(sizeof(wl_log_entry_t) == WL_LOG_ENTRY_SIZE,
                "wl_log_entry_t must be 8 bytes.");

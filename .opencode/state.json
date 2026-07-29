@@ -1,0 +1,56 @@
+{
+  "session": "2026-07-28",
+  "branch": "main (uncommitted work)",
+  "summary": "RPT (Predictive Rapid Trigger) 実装中。減速検出ロジック・16kHz divider=2設定・診断ペイロード変更・wear_levelingビットフィールド修正まで実装済み。",
+  "changed_files": [
+    "include/matrix.h",
+    "include/rgb_coords.h",
+    "include/wear_leveling.h",
+    "keyboards/mochiko40he/board_def.h",
+    "setup.py",
+    "src/hid.c",
+    "src/main.c",
+    "src/matrix.c",
+    "src/wear_leveling.c",
+    "test/test_config.h",
+    "test/test_hid/test_hid.c",
+    "report.md"
+  ],
+  "next_todos": [
+    {
+      "id": 1,
+      "title": "RPT 実機検証",
+      "description": "長時間タイピング/ゲーミングにおける体感検証（未検証）",
+      "status": "pending",
+      "priority": "high"
+    },
+    {
+      "id": 2,
+      "title": "MATRIX_RT_DECEL_THRESHOLD 調整",
+      "description": "減速検出閾値の最適化（現在 15、初期値）",
+      "status": "pending",
+      "priority": "high"
+    },
+    {
+      "id": 3,
+      "title": "ビルド検証",
+      "description": "pio test（通常 + サニタイザ）+ mochiko40he_prt ファームウェアビルド → リンクまで通す",
+      "status": "pending",
+      "priority": "high"
+    },
+    {
+      "id": 4,
+      "title": "他キーボード対応",
+      "description": "mochiko40he 以外の keyboard.json への RPT 適用検証",
+      "status": "pending",
+      "priority": "low"
+    },
+    {
+      "id": 5,
+      "title": "消費電力・熱測定",
+      "description": "16kHz 運用時の消費電力と温度への影響測定",
+      "status": "pending",
+      "priority": "low"
+    }
+  ]
+}

@@ -64,6 +64,17 @@
 #define HMK_ENABLE_COMMAND_TASK 1
 #endif
 
+#ifndef HMK_USB_TASK_INTERVAL
+// TinyUSB task polling cadence. Values > 2 reduce USB interrupt overhead and can
+// improve high-rate matrix scheduling at the cost of slightly higher command
+// latency. For low-rate builds, keep the legacy every-other-loop default.
+#define HMK_USB_TASK_INTERVAL 2u
+#endif
+
+#ifndef HMK_USB_TASK_PHASE
+#define HMK_USB_TASK_PHASE 0u
+#endif
+
 #ifndef HMK_STAGGER_BACKGROUND_TASKS
 // Staggering every loop can starve matrix throughput under heavy host traffic.
 // Keep legacy burst mode as the safe default; enable staggering explicitly for
@@ -227,7 +238,7 @@ int main(void) {
   while (1) {
     static uint32_t loop_count = 0;
 
-    if ((loop_count & 1) == 0) {
+    if (main_task_due(loop_count, HMK_USB_TASK_INTERVAL, HMK_USB_TASK_PHASE)) {
       tud_task();
       usb_runtime_task();
     }

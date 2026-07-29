@@ -56,10 +56,12 @@ typedef union __attribute__((packed)) {
     uint32_t high_polling_rate_enabled : 1;
     // Whether to continuously auto-calibrate the resting baseline
     uint32_t continuous_calibration : 1;
+    // Whether Predictive Rapid Trigger (deceleration detection) is enabled
+    uint32_t rapid_trigger_predictive_enabled : 1;
     // Sniper mode speed multiplier (e.g., 128 = 50%, 0 = 0%)
     uint32_t sniper_mode_multiplier : 8;
     // Reserved bits
-    uint32_t reserved : 4;
+    uint32_t reserved : 3;
 
     // Slider configuration
     uint32_t slider_mode : 2;   // 0: Disabled, 1: Volume, 2: Gamepad
@@ -151,6 +153,7 @@ extern const eeconfig_t *eeconfig;
       .save_bottom_out_threshold = false,                                      \
       .high_polling_rate_enabled = true,                                       \
       .continuous_calibration = true,                                          \
+      .rapid_trigger_predictive_enabled = true,                                \
       .sniper_mode_multiplier = 128, /* 50% speed */                           \
       .slider_mode = 0,                                                        \
       .slider_action = 0,                                                      \

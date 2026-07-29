@@ -36,3 +36,7 @@
 
 #define DEFAULT_CALIBRATION {0}
 #define DEFAULT_KEYMAPS {{{0}}}
+
+// Enable detailed matrix scan diagnostics for native unit tests so that
+// matrix timing and filter-mode coverage can be verified.
+#define MATRIX_DETAILED_SCAN_DIAGNOSTICS 1

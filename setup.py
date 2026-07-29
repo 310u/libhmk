@@ -64,6 +64,27 @@ if __name__ == "__main__":
         "build_src_flags": "\n".join(build_src_flags),
         "extra_scripts": "\n".join(extra_scripts),
         "framework": driver.platformio.framework,
+        "custom_keyboard_name": keyboard,
+        "lib_deps": "\n".join(lib_deps),
+        "platform": driver.platformio.platform,
+        "test_ignore": "*",
+        "upload_protocol": "dfu",
+    }
+    pio_config[f"env:{keyboard}_prt"] = {
+        "board": driver.platformio.board,
+        "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+        "build_flags": "\n".join(
+            build_flags
+            + [
+                "-DMATRIX_RT_PREDICTIVE_ENABLE=1",
+                "-DMATRIX_RT_DECEL_THRESHOLD=15",
+            ]
+        ),
+        "build_src_filter": "${env.build_src_filter}",
+        "build_src_flags": "\n".join(build_src_flags),
+        "extra_scripts": "\n".join(extra_scripts),
+        "framework": driver.platformio.framework,
+        "custom_keyboard_name": keyboard,
         "lib_deps": "\n".join(lib_deps),
         "platform": driver.platformio.platform,
         "test_ignore": "*",

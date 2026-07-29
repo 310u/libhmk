@@ -3,13 +3,19 @@
 // RGB config
 #define RGB_ENABLED 1
 #if !defined(MATRIX_PROCESSING_DIVIDER)
-// Stable mode default: divider=4, ~8 kHz matrix/RT with ~32 kHz raw scan.
-// Validation builds can override this to divider=2 for ~16 kHz matrix/RT.
-#define MATRIX_PROCESSING_DIVIDER 3
+// Default: divider=2, ~16 kHz matrix/RT with ~32 kHz raw scan.
+// Stable builds may override this to divider=3/4 for ~10/8 kHz.
+#define MATRIX_PROCESSING_DIVIDER 2
 #endif
 #define MATRIX_SCHEDULER_MAX_CATCHUP_SCANS 4
 #if !defined(MATRIX_SCHEDULER_BUDGET_US)
-#define MATRIX_SCHEDULER_BUDGET_US 1000
+// Soft diagnostic budget: ~2 raw-scan intervals (raw scan ~32 kHz => 31 us).
+#define MATRIX_SCHEDULER_BUDGET_US 63
+#endif
+
+// Minimize multiplexer settle delay to maximize raw scan rate headroom.
+#if !defined(ADC_SAMPLE_DELAY_DEFAULT)
+#define ADC_SAMPLE_DELAY_DEFAULT 1
 #endif
 #define ANALOG_SCAN_KEY_VERSION_DELTA 0
 #if !defined(MATRIX_DETAILED_SCAN_DIAGNOSTICS)
@@ -20,6 +26,66 @@
 #if !defined(MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS)
 #define MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS 0
 #endif
+
+// When running at divider=2, increase background-task intervals to keep the
+// main loop iteration time short enough to meet the ~62 us matrix budget.
+#if MATRIX_PROCESSING_DIVIDER == 2
+#if !defined(HMK_USB_TASK_INTERVAL)
+#define HMK_USB_TASK_INTERVAL 8
+#endif
+#if !defined(HMK_USB_TASK_PHASE)
+#define HMK_USB_TASK_PHASE 0
+#endif
+#if !defined(HMK_LAYOUT_TASK_INTERVAL)
+#define HMK_LAYOUT_TASK_INTERVAL 64
+#endif
+#if !defined(HMK_LAYOUT_TASK_PHASE)
+#define HMK_LAYOUT_TASK_PHASE 0
+#endif
+#if !defined(HMK_XINPUT_TASK_INTERVAL)
+#define HMK_XINPUT_TASK_INTERVAL 64
+#endif
+#if !defined(HMK_XINPUT_TASK_PHASE)
+#define HMK_XINPUT_TASK_PHASE 16
+#endif
+#if !defined(HMK_COMMAND_TASK_INTERVAL)
+#define HMK_COMMAND_TASK_INTERVAL 128
+#endif
+#if !defined(HMK_COMMAND_TASK_PHASE)
+#define HMK_COMMAND_TASK_PHASE 8
+#endif
+#if !defined(HMK_TRACKBALL_TASK_INTERVAL)
+#define HMK_TRACKBALL_TASK_INTERVAL 128
+#endif
+#if !defined(HMK_TRACKBALL_TASK_PHASE)
+#define HMK_TRACKBALL_TASK_PHASE 4
+#endif
+#if !defined(HMK_JOYSTICK_TASK_INTERVAL)
+#define HMK_JOYSTICK_TASK_INTERVAL 128
+#endif
+#if !defined(HMK_JOYSTICK_TASK_PHASE)
+#define HMK_JOYSTICK_TASK_PHASE 20
+#endif
+#if !defined(HMK_ENCODER_TASK_INTERVAL)
+#define HMK_ENCODER_TASK_INTERVAL 128
+#endif
+#if !defined(HMK_ENCODER_TASK_PHASE)
+#define HMK_ENCODER_TASK_PHASE 36
+#endif
+#if !defined(HMK_SLIDER_TASK_INTERVAL)
+#define HMK_SLIDER_TASK_INTERVAL 128
+#endif
+#if !defined(HMK_SLIDER_TASK_PHASE)
+#define HMK_SLIDER_TASK_PHASE 52
+#endif
+#if !defined(HMK_RGB_TASK_INTERVAL)
+#define HMK_RGB_TASK_INTERVAL 256
+#endif
+#if !defined(HMK_RGB_TASK_PHASE)
+#define HMK_RGB_TASK_PHASE 28
+#endif
+#endif
+
 #define NUM_LEDS 40
 #define RGB_DATA_PIN GPIO_PINS_10
 #define RGB_DATA_PORT GPIOA
