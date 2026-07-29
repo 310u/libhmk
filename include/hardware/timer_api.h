@@ -48,6 +48,25 @@ timer_elapsed(uint32_t since) {
 }
 
 /**
+ * @brief Read the current timer value in microseconds
+ *
+ * @return Current timer value in microseconds
+ */
+uint32_t timer_read_us(void);
+
+/**
+ * @brief Get the elapsed time in microseconds since a given time
+ *
+ * @param since Time to compare against in microseconds
+ *
+ * @return Elapsed time in microseconds
+ */
+__attribute__((always_inline)) static inline uint32_t
+timer_elapsed_us(uint32_t since) {
+  return timer_read_us() - since;
+}
+
+/**
  * @brief Delay for a given amount of time
  *
  * @param ms Time to delay in milliseconds
@@ -59,3 +78,4 @@ __attribute__((always_inline)) static inline void timer_delay(uint32_t ms) {
   while (timer_elapsed(start) < ms)
     ;
 }
+

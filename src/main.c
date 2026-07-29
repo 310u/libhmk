@@ -24,6 +24,7 @@
 #include "joystick.h"
 #include "layout.h"
 #include "matrix.h"
+#include "micro_scheduler.h"
 #include "rgb.h"
 #include "tusb.h"
 #include "usb_runtime.h"
@@ -32,37 +33,8 @@
 #include "slider.h"
 #include "trackball.h"
 
-#ifndef HMK_ENABLE_LAYOUT_TASK
-#define HMK_ENABLE_LAYOUT_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_XINPUT_TASK
-#define HMK_ENABLE_XINPUT_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_TRACKBALL_TASK
-#define HMK_ENABLE_TRACKBALL_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_JOYSTICK_TASK
-#define HMK_ENABLE_JOYSTICK_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_ENCODER_TASK
-#define HMK_ENABLE_ENCODER_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_SLIDER_TASK
-#define HMK_ENABLE_SLIDER_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_RGB_TASK
-#define HMK_ENABLE_RGB_TASK 1
-#endif
-
-#ifndef HMK_ENABLE_COMMAND_TASK
-#define HMK_ENABLE_COMMAND_TASK 1
-#endif
+// HMK_ENABLE_* flags are defined in micro_scheduler.h
+// They can be overridden to 0 before that header is included.
 
 #ifndef HMK_STAGGER_BACKGROUND_TASKS
 // Staggering every loop can starve matrix throughput under heavy host traffic.
@@ -223,15 +195,9 @@ int main(void) {
 #endif
   slider_init();
   command_init();
+  micro_scheduler_init();
 
   while (1) {
-    static uint32_t loop_count = 0;
-
-    if ((loop_count & 1) == 0) {
-      tud_task();
-      usb_runtime_task();
-    }
-
     analog_task();
     matrix_task();
 
@@ -242,101 +208,7 @@ int main(void) {
 #endif
 #else
     matrix_scan_housekeeping();
-
-#if HMK_STAGGER_BACKGROUND_TASKS
-    const uint32_t task_phase = loop_count & 7u;
-
-    if (task_phase == 0u) {
-#if HMK_ENABLE_LAYOUT_TASK
-      layout_task();
-#endif
-    } else if (task_phase == 1u) {
-#if HMK_ENABLE_XINPUT_TASK
-      xinput_task();
-#endif
-    } else if (task_phase == 2u) {
-#if HMK_ENABLE_TRACKBALL_TASK
-      trackball_task();
-#endif
-    } else if (task_phase == 3u) {
-#if defined(JOYSTICK_ENABLED) && HMK_ENABLE_JOYSTICK_TASK
-      joystick_task();
-#endif
-    } else if (task_phase == 4u) {
-#if HMK_ENABLE_ENCODER_TASK
-      encoder_task();
-#endif
-    } else if (task_phase == 5u) {
-#if HMK_ENABLE_SLIDER_TASK
-      slider_task();
-#endif
-    } else if (task_phase == 6u) {
-#if defined(RGB_ENABLED)
-#if HMK_ENABLE_RGB_TASK
-      rgb_task();
-#endif
-#endif
-    } else {
-#if HMK_ENABLE_COMMAND_TASK
-      command_task();
-#endif
-    }
-#else
-#if HMK_ENABLE_LAYOUT_TASK
-    if (main_task_due(loop_count, HMK_LAYOUT_TASK_INTERVAL,
-          HMK_LAYOUT_TASK_PHASE)) {
-  layout_task();
-    }
-#endif
-#if HMK_ENABLE_XINPUT_TASK
-    if (main_task_due(loop_count, HMK_XINPUT_TASK_INTERVAL,
-          HMK_XINPUT_TASK_PHASE)) {
-  xinput_task();
-    }
-#endif
-#if HMK_ENABLE_TRACKBALL_TASK
-    if (main_task_due(loop_count, HMK_TRACKBALL_TASK_INTERVAL,
-          HMK_TRACKBALL_TASK_PHASE)) {
-  trackball_task();
-    }
-#endif
-#if defined(JOYSTICK_ENABLED) && HMK_ENABLE_JOYSTICK_TASK
-    if (main_task_due(loop_count, HMK_JOYSTICK_TASK_INTERVAL,
-          HMK_JOYSTICK_TASK_PHASE)) {
-  joystick_task();
-    }
-#endif
-#if HMK_ENABLE_ENCODER_TASK
-    if (main_task_due(loop_count, HMK_ENCODER_TASK_INTERVAL,
-          HMK_ENCODER_TASK_PHASE)) {
-  encoder_task();
-    }
-#endif
-#if HMK_ENABLE_SLIDER_TASK
-    if (main_task_due(loop_count, HMK_SLIDER_TASK_INTERVAL,
-          HMK_SLIDER_TASK_PHASE)) {
-  slider_task();
-    }
-#endif
-#if defined(RGB_ENABLED)
-#if HMK_ENABLE_RGB_TASK
-    if (main_task_due(loop_count, HMK_RGB_TASK_INTERVAL,
-          HMK_RGB_TASK_PHASE)) {
-  rgb_task();
-    }
-#endif
-#endif
-#if HMK_ENABLE_COMMAND_TASK
-    if (main_task_due(loop_count, HMK_COMMAND_TASK_INTERVAL,
-          HMK_COMMAND_TASK_PHASE)) {
-  command_task();
-    }
-#endif
-#endif
-    loop_count++;
-#endif
-#if defined(__arm__)
-    __asm__ volatile ("wfi");
+    micro_scheduler_run();
 #endif
   }
 

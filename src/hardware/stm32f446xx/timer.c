@@ -20,3 +20,21 @@
 void timer_init(void) {}
 
 uint32_t timer_read(void) { return HAL_GetTick(); }
+
+uint32_t timer_read_us(void) {
+  uint32_t m;
+  uint32_t val;
+  uint32_t load;
+  do {
+    m = HAL_GetTick();
+    val = SysTick->VAL;
+  } while (m != HAL_GetTick());
+  load = SysTick->LOAD + 1u;
+  if (load == 0u) {
+    return m * 1000u;
+  }
+  uint32_t elapsed_cycles = load - val;
+  uint32_t us_in_ms = (uint32_t)(((uint64_t)elapsed_cycles * 1000u) / load);
+  return m * 1000u + us_in_ms;
+}
+

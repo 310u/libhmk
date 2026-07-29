@@ -3,13 +3,13 @@
 // RGB config
 #define RGB_ENABLED 1
 #if !defined(MATRIX_PROCESSING_DIVIDER)
-// Stable mode default: divider=4, ~8 kHz matrix/RT with ~32 kHz raw scan.
-// Validation builds can override this to divider=2 for ~16 kHz matrix/RT.
-#define MATRIX_PROCESSING_DIVIDER 3
+// Stable mode default: divider=2, ~16 kHz matrix/RT with ~32 kHz raw scan.
+// Use divider=4 for ~8 kHz if main loop overhead is too high.
+#define MATRIX_PROCESSING_DIVIDER 2
 #endif
 #define MATRIX_SCHEDULER_MAX_CATCHUP_SCANS 4
 #if !defined(MATRIX_SCHEDULER_BUDGET_US)
-#define MATRIX_SCHEDULER_BUDGET_US 1000
+#define MATRIX_SCHEDULER_BUDGET_US 63
 #endif
 #define ANALOG_SCAN_KEY_VERSION_DELTA 0
 #if !defined(MATRIX_DETAILED_SCAN_DIAGNOSTICS)
