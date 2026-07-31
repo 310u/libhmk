@@ -77,6 +77,8 @@ be dropped.
 | `157` | `COMMAND_CAPTURE_ANALOG_DIAG_BASELINE` | Copies the latest raw-by-step snapshot into the diagnostic baseline buffer. |
 | `158` | `COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST` | Analyzes the latest raw-by-step snapshot against the saved baseline for one expected key. |
 | `159` | `COMMAND_GET_ANALOG_RAW_BY_STEP` | Returns one MUX step row of raw, baseline, and delta diagnostic data. |
+| `160` | `COMMAND_GET_KALMAN_CONFIG` | Reads the active runtime Kalman filter configuration. |
+| `161` | `COMMAND_SET_KALMAN_CONFIG` | Updates and persists the runtime Kalman filter configuration. |
 
 ## Paging and Offsets
 Because the HID reports are limited to 64 bytes, bulk data (such as Keymaps, Actuation arrays, Macros, and Metadata) is split into chunks.
@@ -101,6 +103,34 @@ struct analog_scan_config {
 The firmware validates `mux_sample_delay_us` in the inclusive range `1..50`.
 For boards without a mux-scanned ADC pipeline, `GET` returns `0` and `SET`
 fails with `COMMAND_UNKNOWN`.
+
+## Kalman Filter Runtime Config
+
+`COMMAND_GET_KALMAN_CONFIG` and `COMMAND_SET_KALMAN_CONFIG` share this packed
+payload:
+
+```c
+struct kalman_config {
+  float position_gain;                // 0.0 - 1.0
+  float velocity_gain;                // 0.0 - 1.0
+  float velocity_damping;             // 0.0 - 1.0
+  float rt_down_min_velocity;         // >= 0.0 (distance units per scan)
+  float rt_up_min_velocity;           // >= 0.0 (distance units per scan)
+  float innovation_event_threshold;   // > 0.0 (distance units)
+  uint16_t bottom_out_hold_scans;     // 0 .. 65535
+  uint8_t bottom_out_rt_up;             // 0 .. 255
+  uint16_t noise_deadzone;            // 0 .. ADC_MAX_VALUE
+};
+```
+
+These parameters control how the matrix fast path estimates key position and
+velocity and how bottom-out collision detection arms the Rapid Trigger release
+threshold. `SET` rejects any value outside the ranges above and returns
+`COMMAND_UNKNOWN` without changing the runtime state or flash.
+
+Default values are taken from the firmware compile-time macros and are also
+advertised in `COMMAND_GET_METADATA` under the `kalman` object so the host can
+restore defaults without hard-coding them.
 
 ## Metadata Diagnostics Capability
 

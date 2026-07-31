@@ -75,6 +75,8 @@ typedef enum {
   COMMAND_CAPTURE_ANALOG_DIAG_BASELINE,
   COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST,
   COMMAND_GET_ANALOG_RAW_BY_STEP,
+  COMMAND_GET_KALMAN_CONFIG,
+  COMMAND_SET_KALMAN_CONFIG,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -172,6 +174,8 @@ typedef struct __attribute__((packed)) {
   uint16_t mux_sample_delay_us;
 } command_analog_scan_config_t;
 
+typedef kalman_config_t command_in_kalman_config_t;
+
 typedef struct __attribute__((packed)) {
   uint8_t expected_key;
   uint16_t min_delta;
@@ -204,6 +208,7 @@ typedef struct __attribute__((packed)) {
     command_in_joystick_config_t joystick_config;
     command_in_host_time_t host_time;
     command_analog_scan_config_t analog_scan_config;
+    command_in_kalman_config_t kalman_config;
     command_in_analog_channel_identity_test_t analog_channel_identity_test;
     command_in_analog_raw_by_step_t analog_raw_by_step;
   };
@@ -315,6 +320,8 @@ typedef struct __attribute__((packed)) {
   uint16_t delta_by_lane[COMMAND_ANALOG_DIAG_MAX_ADC_LANES];
 } command_out_analog_raw_by_step_t;
 
+typedef kalman_config_t command_out_kalman_config_t;
+
 // Command output buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -358,6 +365,8 @@ typedef struct __attribute__((packed)) {
     command_out_trackball_state_t trackball_state;
     // For `COMMAND_GET_ANALOG_SCAN_CONFIG`
     command_analog_scan_config_t analog_scan_config;
+    // For `COMMAND_GET_KALMAN_CONFIG`
+    command_out_kalman_config_t kalman_config;
     // For `COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS`
     command_out_matrix_scan_diagnostics_t matrix_scan_diagnostics;
     // For `COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS`

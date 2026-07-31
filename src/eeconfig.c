@@ -23,6 +23,8 @@ const eeconfig_t *eeconfig;
 // Default configuration values
 static eeconfig_options_t default_options = DEFAULT_OPTIONS;
 static eeconfig_calibration_t default_calibration = DEFAULT_CALIBRATION;
+static const kalman_config_t default_kalman_config =
+    (kalman_config_t)DEFAULT_KALMAN_CONFIG;
 static const uint8_t
     default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] = DEFAULT_KEYMAPS;
 #if defined(RGB_ENABLED)
@@ -83,6 +85,7 @@ bool eeconfig_reset(void) {
   status &= EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
   status &= EECONFIG_WRITE(options, &default_options);
   EECONFIG_WRITE_LOCAL(mux_sample_delay_us, default_mux_sample_delay_us);
+  status &= EECONFIG_WRITE(kalman_config, &default_kalman_config);
   EECONFIG_WRITE_LOCAL(current_profile, 0);
   EECONFIG_WRITE_LOCAL(last_non_default_profile, M_MIN(1, NUM_PROFILES - 1));
   for (uint32_t i = 0; i < NUM_PROFILES; i++)

@@ -415,6 +415,41 @@ Webコンフィギュレータでのキーボードの描画方法を定義し�
 
 ---
 
+## `kalman` — Kalman フィルタ設定（オプション）
+
+アナログキー入力に適用される steady-state Kalman（α-β）フィルタのデフォルトパラメータを定義します。Webコンフィギュレータはこの情報を使って、キーボードごとの推奨値を表示します。省略した場合は `include/matrix.h` のコンパイル時デフォルトが使用されます。
+
+| フィールド | 型 | デフォルト | 範囲 | 説明 |
+|---|---|---|---|---|
+| `position_gain` | number | `0.35` | 0.0–1.0 | 位置推定の更新ゲイン（α）。高いほど raw ADC の変化に素早く追従するが、ノイズも通しやすくなる |
+| `velocity_gain` | number | `0.05` | 0.0–1.0 | 速度推定の更新ゲイン（β）。高いほど速度変化に素早く追従するが、滑らかさが減る |
+| `velocity_damping` | number | `0.90` | 0.0–1.0 | 停止時・底打ち保持中の速度減衰率。小さいほど速度推定値が素早く 0 に戻る |
+| `rt_down_min_velocity` | number | `0.3` | 0.0–10.0 | Rapid Trigger 押下・再押下に必要な最低下向き速度（distance units / scan） |
+| `rt_up_min_velocity` | number | `0.3` | 0.0–10.0 | Rapid Trigger 解放に必要な最低上向き速度（distance units / scan） |
+| `innovation_event_threshold` | number | `5.0` | 0.0–100.0 | 底打ち衝突検出の固定 innovation 閾値（distance units）。予測値に対する残差がこの値を超える負値で検出 |
+| `bottom_out_hold_scans` | integer | `4` | 0–100 | 底打ち検出後、減衰・縮小した rt_up を適用する scan 数 |
+| `bottom_out_rt_up` | integer | `5` | 0–255 | 底打ち保持中に一時的に使用する縮小 rt_up 値 |
+| `noise_deadzone` | integer | `2` | 0–20 | rest 値上の ADC units をノイズとして扱い、distance を 0 にクランプする |
+
+```json
+"kalman": {
+  "position_gain": 0.35,
+  "velocity_gain": 0.05,
+  "velocity_damping": 0.90,
+  "rt_down_min_velocity": 0.3,
+  "rt_up_min_velocity": 0.3,
+  "innovation_event_threshold": 5.0,
+  "bottom_out_hold_scans": 4,
+  "bottom_out_rt_up": 5,
+  "noise_deadzone": 2
+}
+```
+
+> [!NOTE]
+> 現在のファームウェアではこれらの値は **コンパイル時に固定** されており、`keyboard.json` の変更を反映するにはファームウェアの再ビルドが必要です。将来的な firmware/hmkconf 対応でランタイム調整が可能になる予定です。
+
+---
+
 ## `board_def.h` — ハードウェア定義ヘッダー {#board_def}
 
 `keyboards/<keyboard_name>/board_def.h` はオプションです。RGB、ジョイスティック、ロータリーエンコーダー、スライダーなどの追加ハードウェア機能を使う場合や、ボード固有の compile-time macro が必要な場合にのみ作成します。

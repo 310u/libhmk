@@ -118,6 +118,24 @@ def build_keyboard_metadata(kb_json: dict, driver, diagnostic_capabilities=None)
         "keyToStepLane": [],
     }
 
+    # Default Kalman filter parameters. These mirror the compile-time defaults in
+    # include/matrix.h. A keyboard definition may override any of these via the
+    # optional "kalman" object in keyboard.json.
+    kalman_config = kb_json.get("kalman", {})
+    kalman_metadata = {
+        "positionGain": kalman_config.get("position_gain", 0.35),
+        "velocityGain": kalman_config.get("velocity_gain", 0.05),
+        "velocityDamping": kalman_config.get("velocity_damping", 0.90),
+        "rtDownMinVelocity": kalman_config.get("rt_down_min_velocity", 0.3),
+        "rtUpMinVelocity": kalman_config.get("rt_up_min_velocity", 0.3),
+        "innovationEventThreshold": kalman_config.get(
+            "innovation_event_threshold", 5.0
+        ),
+        "bottomOutHoldScans": kalman_config.get("bottom_out_hold_scans", 4),
+        "bottomOutRtUp": kalman_config.get("bottom_out_rt_up", 5),
+        "noiseDeadzone": kalman_config.get("noise_deadzone", 2),
+    }
+
     if diagnostic_capabilities.get("diagChannelIdentity", False):
         mux_rows = mux.get("matrix", [])
         key_to_step_lane = [None] * num_keys
@@ -162,6 +180,7 @@ def build_keyboard_metadata(kb_json: dict, driver, diagnostic_capabilities=None)
         "modLedIndices": mod_led_indices,
         "defaultKeymaps": utils.resolve_default_keymaps(kb_json),
         "diagnostics": diagnostics_metadata,
+        "kalman": kalman_metadata,
     }
 
 

@@ -17,6 +17,17 @@
         "rgb": true,
         "joystick": true
     },
+    "kalman": {
+        "position_gain": 0.35,
+        "velocity_gain": 0.05,
+        "velocity_damping": 0.90,
+        "rt_down_min_velocity": 0.3,
+        "rt_up_min_velocity": 0.3,
+        "innovation_event_threshold": 5.0,
+        "bottom_out_hold_scans": 4,
+        "bottom_out_rt_up": 5,
+        "noise_deadzone": 2
+    },
     "rgb": {
         "led_map": [
             38,

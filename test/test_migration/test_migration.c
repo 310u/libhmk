@@ -242,6 +242,57 @@ static void write_legacy_profile_v1_10(uint8_t **dst, uint8_t seed) {
   write_bytes(dst, &joystick_config, sizeof(joystick_config));
 }
 
+static void write_legacy_rgb_v1_11(uint8_t **dst, uint8_t seed) {
+  // v1.11 RGB layout: v1.D RGB fields followed by trigger_state_colors
+  write_u8(dst, 1);
+  write_u8(dst, (uint8_t)(65 + seed));
+  write_u8(dst, RGB_EFFECT_TRIGGER_STATE);
+  write_u8(dst, (uint8_t)(15 + seed));
+  write_u8(dst, (uint8_t)(25 + seed));
+  write_u8(dst, (uint8_t)(35 + seed));
+  write_u8(dst, (uint8_t)(75 + seed));
+  write_u8(dst, (uint8_t)(85 + seed));
+  write_u8(dst, (uint8_t)(95 + seed));
+  write_u8(dst, (uint8_t)(110 + seed));
+  write_u8(dst, (uint8_t)(7 + seed));
+  write_u8(dst, 2);
+  write_u8(dst, (uint8_t)(4 + seed));
+  write_legacy_rgb_layer_colors(dst, (uint8_t)(100 + seed));
+  write_legacy_rgb_per_key(dst, (uint8_t)(20 + seed));
+  // trigger_state_colors[RGB_TRIGGER_STATE_COLOR_COUNT]
+  for (uint32_t i = 0; i < RGB_TRIGGER_STATE_COLOR_COUNT * 3; i++) {
+    write_u8(dst, (uint8_t)(50 + seed + i));
+  }
+}
+
+static void write_legacy_profile_v1_12(uint8_t **dst, uint8_t seed) {
+  joystick_config_t joystick_config;
+  joystick_init_default_config(&joystick_config);
+
+  joystick_config.x.min = (uint16_t)(500 + seed);
+  joystick_config.x.center = (uint16_t)(1500 + seed);
+  joystick_config.x.max = (uint16_t)(3500 + seed);
+  joystick_config.y.min = (uint16_t)(600 + seed);
+  joystick_config.y.center = (uint16_t)(1600 + seed);
+  joystick_config.y.max = (uint16_t)(3600 + seed);
+  joystick_config.deadzone = (uint8_t)(12 + seed);
+  joystick_config.mode = JOYSTICK_MODE_CURSOR_8;
+  joystick_config.mouse_speed = (uint8_t)(40 + seed);
+  joystick_config.mouse_acceleration = (uint8_t)(90 + seed);
+  joystick_config.sw_debounce_ms = (uint8_t)(6 + seed);
+  joystick_config.active_mouse_preset = 2;
+  joystick_config.mouse_presets[2].mouse_speed = (uint8_t)(70 + seed);
+  joystick_config.mouse_presets[2].mouse_acceleration = (uint8_t)(140 + seed);
+
+  write_legacy_profile_prefix_v1_8_plus(dst, seed);
+  write_legacy_rgb_v1_11(dst, seed);
+  // background_color added in v1.12
+  write_u8(dst, (uint8_t)(75 + seed));
+  write_u8(dst, (uint8_t)(85 + seed));
+  write_u8(dst, (uint8_t)(95 + seed));
+  write_bytes(dst, &joystick_config, sizeof(joystick_config));
+}
+
 static void build_legacy_config_v1_0(void) {
   uint8_t *dst = legacy_config;
 
@@ -352,6 +403,53 @@ static void build_legacy_config_v1_10(uint32_t options) {
 
   for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
     write_legacy_profile_v1_10(&dst, (uint8_t)(profile * 16));
+  }
+}
+
+static void build_legacy_config_v1_13(uint32_t options, uint16_t mux_delay) {
+  uint8_t *dst = legacy_config;
+
+  write_u32(&dst, EECONFIG_MAGIC_START);
+  write_u16(&dst, 0x0113);
+  write_u16(&dst, 1500);
+  write_u16(&dst, 650);
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    write_u16(&dst, (uint16_t)(740 + i));
+  }
+  write_u32(&dst, options);
+  write_u16(&dst, mux_delay);
+  write_u8(&dst, 2);
+  write_u8(&dst, 0);
+
+  for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
+    write_legacy_profile_v1_12(&dst, (uint8_t)(profile * 16));
+  }
+}
+
+static void build_legacy_config_v1_14(uint32_t options, uint16_t mux_delay,
+                                       float position_gain, float velocity_gain,
+                                       uint16_t noise_deadzone) {
+  uint8_t *dst = legacy_config;
+
+  write_u32(&dst, EECONFIG_MAGIC_START);
+  write_u16(&dst, 0x0114);
+  write_u16(&dst, 1600);
+  write_u16(&dst, 660);
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    write_u16(&dst, (uint16_t)(750 + i));
+  }
+  write_u32(&dst, options);
+  write_u16(&dst, mux_delay);
+  write_bytes(&dst, &position_gain, 4);
+  write_bytes(&dst, &velocity_gain, 4);
+  // Old bottom_out_arm_speed_factor and bottom_out_arm_min_threshold
+  write_fill(&dst, 0, 8);
+  write_u16(&dst, noise_deadzone);
+  write_u8(&dst, 1);
+  write_u8(&dst, 2);
+
+  for (uint32_t profile = 0; profile < NUM_PROFILES; profile++) {
+    write_legacy_profile_v1_12(&dst, (uint8_t)(profile * 16));
   }
 }
 
@@ -608,6 +706,64 @@ void test_migration_v1_10_appends_trigger_state_colors_without_clobbering_profil
                           profile->joystick_config.mouse_presets[2].mouse_acceleration);
 }
 
+void test_migration_v1_13_appends_kalman_config_defaults(void) {
+  build_legacy_config_v1_13(0x12345678u, 12u);
+
+  TEST_ASSERT_TRUE(migration_try_migrate());
+  TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
+  TEST_ASSERT_EQUAL_HEX32(0x12345678u, written_config.options.raw);
+  TEST_ASSERT_EQUAL_UINT16(12u, written_config.mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_KALMAN_POSITION_GAIN,
+                          written_config.kalman_config.position_gain);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_KALMAN_VELOCITY_GAIN,
+                          written_config.kalman_config.velocity_gain);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_KALMAN_VELOCITY_DAMPING,
+                          written_config.kalman_config.velocity_damping);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_DOWN_MIN_VELOCITY,
+                          written_config.kalman_config.rt_down_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_UP_MIN_VELOCITY,
+                          written_config.kalman_config.rt_up_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_INNOVATION_EVENT_THRESHOLD,
+                          written_config.kalman_config.innovation_event_threshold);
+  TEST_ASSERT_EQUAL_UINT16(MATRIX_BOTTOM_OUT_HOLD_SCANS,
+                           written_config.kalman_config.bottom_out_hold_scans);
+  TEST_ASSERT_EQUAL_UINT8(MATRIX_BOTTOM_OUT_RT_UP,
+                          written_config.kalman_config.bottom_out_rt_up);
+  TEST_ASSERT_EQUAL_UINT16(MATRIX_NOISE_DEADZONE,
+                           written_config.kalman_config.noise_deadzone);
+  TEST_ASSERT_EQUAL_UINT8(2u, written_config.current_profile);
+  TEST_ASSERT_EQUAL_UINT8(0u, written_config.last_non_default_profile);
+}
+
+void test_migration_v1_14_expands_kalman_config(void) {
+  build_legacy_config_v1_14(0x12345678u, 12u, 0.42f, 0.07f, 5u);
+
+  TEST_ASSERT_TRUE(migration_try_migrate());
+  TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
+  TEST_ASSERT_EQUAL_HEX32(0x12345678u, written_config.options.raw);
+  TEST_ASSERT_EQUAL_UINT16(12u, written_config.mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_FLOAT(0.42f,
+                          written_config.kalman_config.position_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.07f,
+                          written_config.kalman_config.velocity_gain);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_KALMAN_VELOCITY_DAMPING,
+                          written_config.kalman_config.velocity_damping);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_DOWN_MIN_VELOCITY,
+                          written_config.kalman_config.rt_down_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_UP_MIN_VELOCITY,
+                          written_config.kalman_config.rt_up_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(MATRIX_INNOVATION_EVENT_THRESHOLD,
+                          written_config.kalman_config.innovation_event_threshold);
+  TEST_ASSERT_EQUAL_UINT16(MATRIX_BOTTOM_OUT_HOLD_SCANS,
+                           written_config.kalman_config.bottom_out_hold_scans);
+  TEST_ASSERT_EQUAL_UINT8(MATRIX_BOTTOM_OUT_RT_UP,
+                          written_config.kalman_config.bottom_out_rt_up);
+  TEST_ASSERT_EQUAL_UINT16(5u,
+                           written_config.kalman_config.noise_deadzone);
+  TEST_ASSERT_EQUAL_UINT8(1u, written_config.current_profile);
+  TEST_ASSERT_EQUAL_UINT8(2u, written_config.last_non_default_profile);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_migration_rejects_invalid_magic);
@@ -619,5 +775,7 @@ int main(void) {
       test_migration_v1_D_initializes_joystick_debounce_without_clobbering_other_fields);
   RUN_TEST(
       test_migration_v1_10_appends_trigger_state_colors_without_clobbering_profile_data);
+  RUN_TEST(test_migration_v1_13_appends_kalman_config_defaults);
+  RUN_TEST(test_migration_v1_14_expands_kalman_config);
   return UNITY_END();
 }

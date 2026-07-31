@@ -25,116 +25,38 @@
 
 #define MATRIX_BOTTOM_OUT_SAVE_IDLE_MS 3000u
 
+static kalman_config_t matrix_kalman_config;
+
+__attribute__((always_inline)) static inline float
+matrix_kalman_update(key_state_t *state, uint16_t raw_adc) {
+  // Average two 32 kHz samples to produce one 16 kHz distance-space sample.
+  const uint16_t avg_adc =
+      (uint16_t)(((uint32_t)raw_adc + (uint32_t)state->adc_raw) / 2u);
+
+  const float measurement =
+      (float)adc_to_distance(avg_adc, state->adc_rest_value,
+                             state->adc_bottom_out_value);
+  const float predicted_pos = state->pos + state->velocity;
+  const float innovation = measurement - predicted_pos;
+
+  state->pos = predicted_pos + matrix_kalman_config.position_gain * innovation;
+  state->velocity += matrix_kalman_config.velocity_gain * innovation;
+  state->innovation = innovation;
+
+  if (state->pos < 0.0f)
+    state->pos = 0.0f;
+  else if (state->pos > 255.0f)
+    state->pos = 255.0f;
+
+  state->adc_filtered = avg_adc;
+  return innovation;
+}
+
 __attribute__((always_inline)) static inline uint16_t
-matrix_ema(uint16_t sample, uint16_t filtered, uint8_t exponent) {
+matrix_ema_inline(uint16_t sample, uint16_t filtered, uint8_t exponent) {
   return (uint16_t)(((uint32_t)sample +
                      ((uint32_t)filtered * ((1u << exponent) - 1u))) >>
                     exponent);
-}
-
-__attribute__((always_inline)) static inline uint16_t
-matrix_abs_diff_u16(uint16_t lhs, uint16_t rhs) {
-  return lhs > rhs ? (uint16_t)(lhs - rhs) : (uint16_t)(rhs - lhs);
-}
-
-__attribute__((always_inline)) static inline uint8_t
-matrix_filter_mode_exponent(matrix_filter_mode_t mode) {
-  switch (mode) {
-  case MATRIX_FILTER_MODE_IDLE:
-    return MATRIX_EMA_ALPHA_EXPONENT;
-  case MATRIX_FILTER_MODE_TRACK:
-    return MATRIX_EMA_TRACK_ALPHA_EXPONENT;
-  case MATRIX_FILTER_MODE_FAST:
-    return MATRIX_EMA_FAST_ALPHA_EXPONENT;
-  case MATRIX_FILTER_MODE_BURST:
-    return MATRIX_EMA_BURST_ALPHA_EXPONENT;
-  case MATRIX_FILTER_MODE_COUNT:
-  default:
-    return MATRIX_EMA_ALPHA_EXPONENT;
-  }
-}
-
-__attribute__((always_inline)) static inline matrix_filter_mode_t
-matrix_filter_target_mode(const key_state_t *state, uint16_t sample,
-                          const actuation_t *actuation,
-                          uint16_t *sample_delta_out,
-                          uint16_t *sample_velocity_out) {
-  const uint16_t sample_delta = matrix_abs_diff_u16(sample, state->adc_filtered);
-  const uint16_t sample_velocity = matrix_abs_diff_u16(sample, state->adc_raw);
-
-  *sample_delta_out = sample_delta;
-  *sample_velocity_out = sample_velocity;
-
-  if (sample_delta < MATRIX_EMA_TRACK_DELTA &&
-      sample_velocity < MATRIX_EMA_TRACK_VELOCITY &&
-      state->distance == 0u && !state->is_pressed &&
-      state->key_dir == KEY_DIR_INACTIVE &&
-      actuation->actuation_point > MATRIX_EMA_ACTUATION_WINDOW)
-    return MATRIX_FILTER_MODE_IDLE;
-
-  if (sample_delta >= MATRIX_EMA_BURST_DELTA ||
-      sample_velocity >= MATRIX_EMA_BURST_VELOCITY)
-    return MATRIX_FILTER_MODE_BURST;
-
-  if (sample_delta >= MATRIX_EMA_FAST_DELTA ||
-      sample_velocity >= MATRIX_EMA_FAST_VELOCITY)
-    return MATRIX_FILTER_MODE_FAST;
-
-  const uint8_t actuation_distance =
-      state->distance > actuation->actuation_point
-          ? (uint8_t)(state->distance - actuation->actuation_point)
-          : (uint8_t)(actuation->actuation_point - state->distance);
-  const bool near_transition =
-      (state->distance != 0u && state->distance <= MATRIX_EMA_REST_WINDOW) ||
-      actuation_distance <= MATRIX_EMA_ACTUATION_WINDOW;
-
-  if (sample_delta >= MATRIX_EMA_TRACK_DELTA ||
-      sample_velocity >= MATRIX_EMA_TRACK_VELOCITY ||
-      state->distance != 0u || state->is_pressed ||
-      state->key_dir != KEY_DIR_INACTIVE || near_transition)
-    return MATRIX_FILTER_MODE_TRACK;
-
-  return MATRIX_FILTER_MODE_IDLE;
-}
-
-__attribute__((always_inline)) static inline matrix_filter_mode_t
-matrix_filter_resolve_mode(key_state_t *state,
-                           matrix_filter_mode_t target_mode) {
-  matrix_filter_mode_t current_mode = (matrix_filter_mode_t)state->filter_mode;
-
-  if (target_mode >= current_mode) {
-    state->filter_mode = (uint8_t)target_mode;
-    state->filter_decay = 0;
-    return target_mode;
-  }
-
-  if (state->filter_decay + 1u >= MATRIX_EMA_MODE_DECAY_SCANS) {
-    state->filter_decay = 0;
-    current_mode = (matrix_filter_mode_t)(current_mode - 1u);
-    if (current_mode < target_mode)
-      current_mode = target_mode;
-    state->filter_mode = (uint8_t)current_mode;
-    return current_mode;
-  }
-
-  if (state->filter_decay < UINT8_MAX)
-    state->filter_decay++;
-  return current_mode;
-}
-
-__attribute__((always_inline)) static inline uint16_t
-matrix_filter_adc(uint8_t key, uint16_t sample, const actuation_t *actuation,
-                  matrix_filter_mode_t *mode_out, uint16_t *sample_delta_out,
-                  uint16_t *sample_velocity_out) {
-  key_state_t *state = &key_matrix[key];
-  const matrix_filter_mode_t target_mode = matrix_filter_target_mode(
-      state, sample, actuation, sample_delta_out, sample_velocity_out);
-  const matrix_filter_mode_t resolved_mode =
-      matrix_filter_resolve_mode(state, target_mode);
-  *mode_out = resolved_mode;
-
-  return matrix_ema(sample, state->adc_filtered,
-                    matrix_filter_mode_exponent(resolved_mode));
 }
 
 __attribute__((always_inline)) static inline uint16_t
@@ -184,7 +106,7 @@ matrix_apply_continuous_calibration(uint8_t key, uint16_t sample) {
           ? MATRIX_CONTINUOUS_CALIBRATION_FAST_ALPHA_EXPONENT
           : MATRIX_CONTINUOUS_CALIBRATION_ALPHA_EXPONENT;
   const uint16_t previous_rest = state->adc_rest_value;
-  uint16_t new_rest = matrix_ema(sample, previous_rest, exponent);
+  uint16_t new_rest = matrix_ema_inline(sample, previous_rest, exponent);
 
   // Integer EMA stalls on small deltas, so force 1-step progress once the
   // drift is larger than the calibration noise floor.
@@ -389,7 +311,9 @@ static void matrix_persist_bottom_out_thresholds(void) {
 }
 
 static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
-                                        bool service_usb_during_calibration) {
+                                         bool service_usb_during_calibration) {
+  matrix_kalman_config = eeconfig->kalman_config;
+
   if (reset_bottom_out_threshold) {
     memset(matrix_bottom_out_threshold_buf, 0,
            sizeof(matrix_bottom_out_threshold_buf));
@@ -415,19 +339,16 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
     key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_bottom_out_value = matrix_bottom_out_value(
         i, eeconfig->calibration.initial_rest_value);
-    key_matrix[i].filter_mode = MATRIX_FILTER_MODE_IDLE;
-    key_matrix[i].filter_decay = 0;
+    key_matrix[i].pos = 0.0f;
+    key_matrix[i].velocity = 0.0f;
+    key_matrix[i].innovation = 0.0f;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
     key_matrix[i].rest_stable_since = 0;
     key_matrix[i].event_time = 0;
-#if MATRIX_RT_PREDICTIVE_ENABLE
-    key_matrix[i].prev_adc_filtered =
-        (int16_t)eeconfig->calibration.initial_rest_value;
-    key_matrix[i].prev_velocity = 0;
-#endif
+    key_matrix[i].bottom_out_hold = 0;
   }
 
   // We only calibrate the rest value. The bottom-out value will be updated
@@ -442,16 +363,11 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
       const uint16_t raw_adc = matrix_analog_read(i);
-      const uint16_t new_adc_filtered = matrix_ema(raw_adc,
-                                                   key_matrix[i].adc_filtered,
-                                                   MATRIX_EMA_ALPHA_EXPONENT);
+      const uint16_t new_adc_filtered =
+          matrix_ema_inline(raw_adc, key_matrix[i].adc_filtered, 4);
 
       key_matrix[i].adc_raw = raw_adc;
       key_matrix[i].adc_filtered = new_adc_filtered;
-#if MATRIX_RT_PREDICTIVE_ENABLE
-      key_matrix[i].prev_adc_filtered = (int16_t)new_adc_filtered;
-      key_matrix[i].prev_velocity = 0;
-#endif
 
       if (new_adc_filtered + MATRIX_CALIBRATION_EPSILON <=
           key_matrix[i].adc_rest_value)
@@ -479,6 +395,33 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
 
 void matrix_init(void) { matrix_recalibrate_internal(false, true); }
 
+const kalman_config_t *matrix_get_kalman_config(void) {
+  return &matrix_kalman_config;
+}
+
+bool matrix_set_kalman_config(const kalman_config_t *config) {
+  if (config == NULL)
+    return false;
+
+  if (config->position_gain < 0.0f || config->position_gain > 1.0f)
+    return false;
+  if (config->velocity_gain < 0.0f || config->velocity_gain > 1.0f)
+    return false;
+  if (config->velocity_damping < 0.0f || config->velocity_damping > 1.0f)
+    return false;
+  if (config->rt_down_min_velocity < 0.0f)
+    return false;
+  if (config->rt_up_min_velocity < 0.0f)
+    return false;
+  if (config->innovation_event_threshold <= 0.0f)
+    return false;
+  if (config->noise_deadzone > ADC_MAX_VALUE)
+    return false;
+
+  matrix_kalman_config = *config;
+  return EECONFIG_WRITE(kalman_config, config);
+}
+
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   matrix_recalibrate_internal(reset_bottom_out_threshold, false);
 }
@@ -488,7 +431,6 @@ void matrix_scan_fast(void) {
   const uint32_t scan_cycle_start = board_cycle_count();
   const actuation_t *actuation_map = CURRENT_PROFILE.actuation_map;
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
-  uint16_t mode_counts[MATRIX_FILTER_MODE_COUNT] = {0};
   uint16_t max_sample_delta = 0;
   uint16_t max_sample_velocity = 0;
 #endif
@@ -507,12 +449,10 @@ void matrix_scan_fast(void) {
     const uint16_t previous_filtered = state->adc_filtered;
     const uint16_t raw_adc = matrix_analog_read((uint8_t)i);
     const actuation_t *actuation = &actuation_map[i];
-    matrix_filter_mode_t filter_mode = MATRIX_FILTER_MODE_IDLE;
-    uint16_t sample_delta = 0;
-    uint16_t sample_velocity = 0;
-    uint16_t new_adc_filtered = 0u;
+    uint16_t new_adc_filtered = previous_filtered;
+    float innovation = 0.0f;
 
-#if MATRIX_IDLE_RAW_FAST_PATH_MARGIN > 0
+    // Kalman Fast Path: key is fully idle at rest.
     const uint16_t idle_fast_path_rest_limit =
         state->adc_rest_value + MATRIX_IDLE_RAW_FAST_PATH_MARGIN;
     if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
@@ -522,16 +462,18 @@ void matrix_scan_fast(void) {
                                       : (uint16_t)(previous_filtered - raw_adc);
       state->adc_raw = raw_adc;
       state->adc_filtered = raw_adc;
-      state->filter_mode = MATRIX_FILTER_MODE_IDLE;
-      state->filter_decay = 0u;
+      state->pos = 0.0f;
+      state->velocity = 0.0f;
+      state->innovation = 0.0f;
+      state->bottom_out_hold = 0;
       state->distance = 0u;
+      state->extremum = 0;
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
-      mode_counts[MATRIX_FILTER_MODE_IDLE]++;
       if (filtered_delta > max_sample_delta)
         max_sample_delta = filtered_delta;
-      sample_velocity = raw_adc > state->adc_raw
-                            ? (uint16_t)(raw_adc - state->adc_raw)
-                            : (uint16_t)(state->adc_raw - raw_adc);
+      const uint16_t sample_velocity =
+          raw_adc > state->adc_raw ? (uint16_t)(raw_adc - state->adc_raw)
+                                   : (uint16_t)(state->adc_raw - raw_adc);
       if (sample_velocity > max_sample_velocity)
         max_sample_velocity = sample_velocity;
 #endif
@@ -539,48 +481,21 @@ void matrix_scan_fast(void) {
         state->rest_stable_since = scan_time;
       continue;
     }
-#endif
 
-#if MATRIX_IDLE_EMA_FAST_PATH
-    if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
-        state->distance == 0u && raw_adc <= state->adc_rest_value) {
-      state->adc_raw = raw_adc;
-      new_adc_filtered =
-          matrix_ema(raw_adc, previous_filtered, MATRIX_EMA_ALPHA_EXPONENT);
-      state->adc_filtered = new_adc_filtered;
-      state->filter_mode = MATRIX_FILTER_MODE_IDLE;
-      state->filter_decay = 0u;
-      state->distance = 0u;
-#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
-      mode_counts[MATRIX_FILTER_MODE_IDLE]++;
-      sample_delta = matrix_abs_diff_u16(raw_adc, previous_filtered);
-      sample_velocity = matrix_abs_diff_u16(raw_adc, state->adc_raw);
-      if (sample_delta > max_sample_delta)
-        max_sample_delta = sample_delta;
-      if (sample_velocity > max_sample_velocity)
-        max_sample_velocity = sample_velocity;
-#endif
-      continue;
-    }
-#endif
-
-    new_adc_filtered =
-        matrix_filter_adc((uint8_t)i, raw_adc, actuation, &filter_mode,
-                          &sample_delta, &sample_velocity);
-
+    // Kalman filter update for active keys.
+    innovation = matrix_kalman_update(state, raw_adc);
     state->adc_raw = raw_adc;
-    state->adc_filtered = new_adc_filtered;
-#if MATRIX_RT_PREDICTIVE_ENABLE
-    const int16_t velocity =
-        (int16_t)new_adc_filtered - (int16_t)previous_filtered;
-    const int16_t acceleration = velocity - state->prev_velocity;
-    state->prev_velocity = velocity;
-    state->prev_adc_filtered = (int16_t)new_adc_filtered;
-#endif
+    new_adc_filtered = state->adc_filtered;
+    const uint16_t filtered_delta =
+        new_adc_filtered > previous_filtered
+            ? (uint16_t)(new_adc_filtered - previous_filtered)
+            : (uint16_t)(previous_filtered - new_adc_filtered);
+
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
-    mode_counts[filter_mode]++;
-    if (sample_delta > max_sample_delta)
-      max_sample_delta = sample_delta;
+    if (filtered_delta > max_sample_delta)
+      max_sample_delta = filtered_delta;
+    const uint16_t sample_velocity = (uint16_t)(
+        innovation < 0.0f ? (uint16_t)(-innovation) : (uint16_t)innovation);
     if (sample_velocity > max_sample_velocity)
       max_sample_velocity = sample_velocity;
 #endif
@@ -594,12 +509,13 @@ void matrix_scan_fast(void) {
       matrix_bottom_out_threshold_dirty = true;
     }
 
-    const uint16_t filtered_delta =
-        new_adc_filtered > previous_filtered
-            ? (uint16_t)(new_adc_filtered - previous_filtered)
-            : (uint16_t)(previous_filtered - new_adc_filtered);
-    state->distance = adc_to_distance(new_adc_filtered, state->adc_rest_value,
-                                      state->adc_bottom_out_value);
+    if (new_adc_filtered <=
+        state->adc_rest_value + matrix_kalman_config.noise_deadzone) {
+      state->pos = 0.0f;
+      state->distance = 0;
+    } else {
+      state->distance = (uint8_t)state->pos;
+    }
 
     const bool was_pressed = state->is_pressed;
 
@@ -615,60 +531,73 @@ void matrix_scan_fast(void) {
           actuation->continuous ? 0 : actuation->actuation_point;
       const uint8_t rt_up =
           actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
-#if MATRIX_RT_PREDICTIVE_ENABLE
-      uint8_t effective_rt_up = rt_up;
-      if (state->is_pressed && state->key_dir == KEY_DIR_DOWN &&
-          ((int32_t)velocity * (int32_t)acceleration < 0) &&
-          (acceleration > ((int16_t)MATRIX_RT_DECEL_THRESHOLD) ||
-           acceleration < -((int16_t)MATRIX_RT_DECEL_THRESHOLD))) {
-        // Sudden deceleration while pressing: arm the release threshold
-        // so the key turns off on the slightest upward movement.
-        effective_rt_up = 1;
+
+      // Only damp residual velocity at the physical rest position. Damping an
+      // inactive key throughout its stroke suppresses legitimate slow motion
+      // before the initial actuation point is reached.
+      if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
+          state->distance == 0u) {
+        state->velocity *= matrix_kalman_config.velocity_damping;
       }
-#else
-      const uint8_t effective_rt_up = rt_up;
-#endif
+
+      // Bottom-out collision detection and hold state.
+      uint8_t effective_rt_up = rt_up;
+      if (state->bottom_out_hold > 0) {
+        state->bottom_out_hold--;
+        effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
+        state->velocity *= matrix_kalman_config.velocity_damping;
+      } else if (innovation <
+                 -matrix_kalman_config.innovation_event_threshold) {
+        state->bottom_out_hold = matrix_kalman_config.bottom_out_hold_scans;
+        effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
+        state->velocity *= matrix_kalman_config.velocity_damping;
+      }
 
       switch (state->key_dir) {
       case KEY_DIR_INACTIVE:
-        if (state->distance > actuation->actuation_point) {
-          // Pressed down past actuation point
-          state->extremum = state->distance;
+        if (state->pos > actuation->actuation_point) {
+          // Initial actuation is position-based so arbitrarily slow valid
+          // strokes are not rejected by a per-scan velocity threshold.
+          state->extremum = (uint8_t)state->pos;
           state->key_dir = KEY_DIR_DOWN;
           state->is_pressed = true;
         }
         break;
 
       case KEY_DIR_DOWN:
-        if (state->distance <= reset_point) {
+        if (state->pos <= reset_point) {
           // Released past reset point
-          state->extremum = state->distance;
+          state->extremum = (uint8_t)state->pos;
           state->key_dir = KEY_DIR_INACTIVE;
           state->is_pressed = false;
-        } else if (state->distance + effective_rt_up < state->extremum) {
-          // Released by Rapid Trigger
-          state->extremum = state->distance;
+        } else if (state->pos + effective_rt_up < state->extremum) {
+          // The displacement from the down extremum already establishes the
+          // release direction and provides spatial noise hysteresis.
+          state->extremum = (uint8_t)state->pos;
           state->key_dir = KEY_DIR_UP;
           state->is_pressed = false;
-        } else if (state->distance > state->extremum)
+        } else if (state->pos > state->extremum) {
           // Pressed down further
-          state->extremum = state->distance;
+          state->extremum = (uint8_t)state->pos;
+        }
         break;
 
       case KEY_DIR_UP:
-        if (state->distance <= reset_point) {
+        if (state->pos <= reset_point) {
           // Released past reset point
-          state->extremum = state->distance;
+          state->extremum = (uint8_t)state->pos;
           state->key_dir = KEY_DIR_INACTIVE;
           state->is_pressed = false;
-        } else if (state->extremum + actuation->rt_down < state->distance) {
-          // Pressed by Rapid Trigger
-          state->extremum = state->distance;
+        } else if (state->extremum + actuation->rt_down < state->pos) {
+          // The displacement from the up extremum establishes the press
+          // direction without rejecting slow re-presses.
+          state->extremum = (uint8_t)state->pos;
           state->key_dir = KEY_DIR_DOWN;
           state->is_pressed = true;
-        } else if (state->distance < state->extremum)
+        } else if (state->pos < state->extremum) {
           // Released further
-          state->extremum = state->distance;
+          state->extremum = (uint8_t)state->pos;
+        }
         break;
 
       default:
@@ -699,19 +628,15 @@ void matrix_scan_fast(void) {
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
   matrix_scan_diagnostics.max_sample_delta = max_sample_delta;
   matrix_scan_diagnostics.max_sample_velocity = max_sample_velocity;
-  memcpy(matrix_scan_diagnostics.last_mode_counts, mode_counts,
-         sizeof(mode_counts));
-  matrix_scan_diagnostics.idle_keys_detected =
-      (uint16_t)mode_counts[MATRIX_FILTER_MODE_IDLE];
-  matrix_scan_diagnostics.active_keys_detected =
-      (uint16_t)(mode_counts[MATRIX_FILTER_MODE_TRACK] +
-                 mode_counts[MATRIX_FILTER_MODE_FAST] +
-                 mode_counts[MATRIX_FILTER_MODE_BURST]);
+  memset(matrix_scan_diagnostics.reserved_filter_mode, 0,
+         sizeof(matrix_scan_diagnostics.reserved_filter_mode));
+  matrix_scan_diagnostics.idle_keys_detected = 0u;
+  matrix_scan_diagnostics.active_keys_detected = 0u;
 #else
   matrix_scan_diagnostics.max_sample_delta = 0u;
   matrix_scan_diagnostics.max_sample_velocity = 0u;
-  memset(matrix_scan_diagnostics.last_mode_counts, 0,
-         sizeof(matrix_scan_diagnostics.last_mode_counts));
+  memset(matrix_scan_diagnostics.reserved_filter_mode, 0,
+         sizeof(matrix_scan_diagnostics.reserved_filter_mode));
   matrix_scan_diagnostics.idle_keys_detected = 0u;
   matrix_scan_diagnostics.active_keys_detected = 0u;
 #endif

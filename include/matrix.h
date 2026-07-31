@@ -26,94 +26,65 @@
 #define MATRIX_CALIBRATION_DURATION 500
 #endif
 
-#if !defined(MATRIX_EMA_ALPHA_EXPONENT)
-// Exponent of the alpha parameter of the exponential moving average (EMA)
-// filter used to smooth the ADC values. Higher values will result in smoother
-// but slower changes in the filtered ADC values. The alpha parameter is used in
-// the formula: y_n = alpha * x_n + (1 - alpha) * y_{n-1}
-#define MATRIX_EMA_ALPHA_EXPONENT 4
+#if !defined(MATRIX_KALMAN_POSITION_GAIN)
+// Position gain applied to the Kalman filter innovation term. This controls
+// how quickly the estimated position follows the raw ADC value. Higher values
+// improve responsiveness but pass more noise through.
+#define MATRIX_KALMAN_POSITION_GAIN 0.35f
 #endif
 
-#if !defined(MATRIX_EMA_TRACK_ALPHA_EXPONENT)
-// Intermediate EMA used for smaller movements, especially while hovering near
-// the rest position or actuation threshold.
-#define MATRIX_EMA_TRACK_ALPHA_EXPONENT 3
+#if !defined(MATRIX_KALMAN_VELOCITY_GAIN)
+// Velocity gain applied to the Kalman filter innovation term. This controls
+// how quickly the estimated velocity follows observed changes. Lower values
+// produce smoother velocity estimates at the cost of tracking delay.
+#define MATRIX_KALMAN_VELOCITY_GAIN 0.05f
 #endif
 
-#if !defined(MATRIX_EMA_FAST_ALPHA_EXPONENT)
-// Faster EMA used while a key is actively moving or the sampled ADC delta is
-// large enough that smoothing would noticeably hurt responsiveness.
-#define MATRIX_EMA_FAST_ALPHA_EXPONENT 2
+#if !defined(MATRIX_KALMAN_VELOCITY_DAMPING)
+// Multiplier applied to the estimated velocity when the key is at rest or when a
+// bottom-out event is held. This reduces drift in the velocity estimate from
+// sensor noise and prevents the release velocity threshold from being met by
+// residual jitter.
+#define MATRIX_KALMAN_VELOCITY_DAMPING 0.90f
 #endif
 
-#if !defined(MATRIX_EMA_BURST_ALPHA_EXPONENT)
-// Fastest EMA used for large step changes where filter lag would dominate.
-#define MATRIX_EMA_BURST_ALPHA_EXPONENT 1
+#if !defined(MATRIX_RT_DOWN_MIN_VELOCITY)
+// Minimum downward velocity (distance units per scan) required to arm a Rapid
+// Trigger press or re-press. Filtering out very slow drift prevents accidental
+// actuations near the actuation point.
+#define MATRIX_RT_DOWN_MIN_VELOCITY 0.3f
 #endif
 
-#if !defined(MATRIX_EMA_TRACK_DELTA)
-// Minimum raw-vs-filtered ADC delta required to leave the idle EMA path.
-#define MATRIX_EMA_TRACK_DELTA 6
+#if !defined(MATRIX_RT_UP_MIN_VELOCITY)
+// Minimum upward velocity (distance units per scan, positive magnitude) required
+// to arm a Rapid Trigger release. Filtering out very slow drift prevents
+// accidental releases when the finger is resting near the bottom-out point.
+#define MATRIX_RT_UP_MIN_VELOCITY 0.3f
 #endif
 
-#if !defined(MATRIX_EMA_FAST_DELTA)
-// Minimum ADC delta required to switch to the faster EMA path.
-#define MATRIX_EMA_FAST_DELTA 16
+#if !defined(MATRIX_INNOVATION_EVENT_THRESHOLD)
+// Fixed innovation threshold (distance units) used to detect a bottom-out
+// collision. When the key slams into the plate the prediction overshoots and the
+// innovation becomes a large negative spike.
+#define MATRIX_INNOVATION_EVENT_THRESHOLD 5.0f
 #endif
 
-#if !defined(MATRIX_EMA_BURST_DELTA)
-// Minimum ADC delta required to switch to the fastest EMA path.
-#define MATRIX_EMA_BURST_DELTA 48
+#if !defined(MATRIX_BOTTOM_OUT_HOLD_SCANS)
+// Number of scans after a bottom-out event during which the release threshold is
+// temporarily reduced and velocity is damped.
+#define MATRIX_BOTTOM_OUT_HOLD_SCANS 4
 #endif
 
-#if !defined(MATRIX_EMA_TRACK_VELOCITY)
-// Minimum per-scan raw ADC movement required to leave the idle EMA path.
-#define MATRIX_EMA_TRACK_VELOCITY 4
+#if !defined(MATRIX_BOTTOM_OUT_RT_UP)
+// Reduced Rapid Trigger release distance used while a bottom-out hold is active.
+#define MATRIX_BOTTOM_OUT_RT_UP 5
 #endif
 
-#if !defined(MATRIX_EMA_FAST_VELOCITY)
-// Minimum per-scan raw ADC movement required to switch to the fast EMA path.
-#define MATRIX_EMA_FAST_VELOCITY 12
-#endif
-
-#if !defined(MATRIX_EMA_BURST_VELOCITY)
-// Minimum per-scan raw ADC movement required to switch to the burst EMA path.
-#define MATRIX_EMA_BURST_VELOCITY 32
-#endif
-
-#if !defined(MATRIX_EMA_REST_WINDOW)
-// Distance window near rest where the filter should stay more responsive.
-#define MATRIX_EMA_REST_WINDOW 8
-#endif
-
-#if !defined(MATRIX_EMA_ACTUATION_WINDOW)
-// Distance window near the actuation threshold where responsiveness matters.
-#define MATRIX_EMA_ACTUATION_WINDOW 16
-#endif
-
-#if !defined(MATRIX_EMA_MODE_DECAY_SCANS)
-// Number of consecutive calmer samples required before decaying one filter
-// stage.
-#define MATRIX_EMA_MODE_DECAY_SCANS 2
-#endif
-
-_Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
-               "MATRIX_EMA_MODE_DECAY_SCANS must fit in key_state_t.filter_decay");
-
-#if !defined(MATRIX_RT_PREDICTIVE_ENABLE)
-// Enable predictive Rapid Trigger release by monitoring key deceleration.
-// When the key is being pressed down but suddenly decelerates, the release
-// threshold is temporarily tightened to the minimum (1 distance unit) so the
-// key releases as soon as the user begins to let go.
-#define MATRIX_RT_PREDICTIVE_ENABLE 0
-#endif
-
-#if !defined(MATRIX_RT_DECEL_THRESHOLD)
-// Minimum per-scan deceleration magnitude (in ADC units) required to trigger
-// the predictive release threshold. The sign of the acceleration is compared
-// against the current velocity so that deceleration is detected regardless of
-// whether pressing increases or decreases the raw ADC value.
-#define MATRIX_RT_DECEL_THRESHOLD 15
+#if !defined(MATRIX_NOISE_DEADZONE)
+// ADC units above the rest value that are treated as noise floor and clamped
+// to zero distance. Used to prevent small sensor noise near rest from creating
+// non-zero distance readings.
+#define MATRIX_NOISE_DEADZONE 2
 #endif
 
 #if !defined(MATRIX_CALIBRATION_EPSILON)
@@ -188,11 +159,6 @@ _Static_assert(MATRIX_EMA_MODE_DECAY_SCANS <= UINT8_MAX,
 #define MATRIX_DETAILED_SCAN_DIAGNOSTICS 0
 #endif
 
-#if !defined(MATRIX_IDLE_EMA_FAST_PATH)
-// Bypass filter-mode resolution for keys that are fully idle at rest.
-#define MATRIX_IDLE_EMA_FAST_PATH 0
-#endif
-
 #if !defined(MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS)
 // Update matrix scan-rate timing diagnostics during every matrix fast scan.
 #define MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS 1
@@ -208,6 +174,55 @@ _Static_assert(MATRIX_PROCESSING_DIVIDER > 0,
 _Static_assert(MATRIX_SCHEDULER_MAX_CATCHUP_SCANS > 0,
                "MATRIX_SCHEDULER_MAX_CATCHUP_SCANS must be greater than zero");
 
+#if !defined(DEFAULT_KALMAN_CONFIG)
+// Default runtime Kalman filter configuration. The values are taken from the
+// compile-time macros so board-specific tuning can still override defaults.
+#define DEFAULT_KALMAN_CONFIG                                                  \
+  {                                                                            \
+      .position_gain = MATRIX_KALMAN_POSITION_GAIN,                            \
+      .velocity_gain = MATRIX_KALMAN_VELOCITY_GAIN,                            \
+      .velocity_damping = MATRIX_KALMAN_VELOCITY_DAMPING,                      \
+      .rt_down_min_velocity = MATRIX_RT_DOWN_MIN_VELOCITY,                     \
+      .rt_up_min_velocity = MATRIX_RT_UP_MIN_VELOCITY,                         \
+      .innovation_event_threshold = MATRIX_INNOVATION_EVENT_THRESHOLD,         \
+      .bottom_out_hold_scans = MATRIX_BOTTOM_OUT_HOLD_SCANS,                   \
+      .bottom_out_rt_up = MATRIX_BOTTOM_OUT_RT_UP,                             \
+      .noise_deadzone = MATRIX_NOISE_DEADZONE,                                 \
+  }
+#endif
+
+//--------------------------------------------------------------------+
+// Kalman Filter Configuration
+//--------------------------------------------------------------------+
+
+typedef struct __attribute__((packed)) {
+  // Position gain applied to the Kalman filter innovation term (0.0-1.0)
+  float position_gain;
+  // Velocity gain applied to the Kalman filter innovation term (0.0-1.0)
+  float velocity_gain;
+  // Multiplier applied to the estimated velocity while at rest or holding a
+  // bottom-out event. Values in the range [0.0, 1.0] reduce drift.
+  float velocity_damping;
+  // Legacy compatibility field. RT press and re-press are position-based, so
+  // this value is retained in the persisted/wire format but is not used for
+  // event gating.
+  float rt_down_min_velocity;
+  // Legacy compatibility field. RT release direction is established by
+  // displacement from the tracked extremum, so this value is not used for
+  // event gating.
+  float rt_up_min_velocity;
+  // Fixed innovation threshold (distance units) used to detect a bottom-out
+  // collision
+  float innovation_event_threshold;
+  // Number of scans after a bottom-out event during which the release threshold
+  // is temporarily reduced and velocity is damped
+  uint16_t bottom_out_hold_scans;
+  // Reduced Rapid Trigger release distance used while a bottom-out hold is active
+  uint8_t bottom_out_rt_up;
+  // ADC units above rest treated as noise floor and clamped to zero distance
+  uint16_t noise_deadzone;
+} kalman_config_t;
+
 //--------------------------------------------------------------------+
 // Key Matrix
 //--------------------------------------------------------------------+
@@ -217,14 +232,6 @@ typedef enum {
   KEY_DIR_DOWN,
   KEY_DIR_UP,
 } key_dir_t;
-
-typedef enum {
-  MATRIX_FILTER_MODE_IDLE = 0,
-  MATRIX_FILTER_MODE_TRACK,
-  MATRIX_FILTER_MODE_FAST,
-  MATRIX_FILTER_MODE_BURST,
-  MATRIX_FILTER_MODE_COUNT,
-} matrix_filter_mode_t;
 
 // Key state
 typedef struct {
@@ -236,15 +243,12 @@ typedef struct {
   uint16_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
-  // Filtered ADC value from the previous scan (for velocity calculation)
-  int16_t prev_adc_filtered;
-  // Velocity (signed per-scan ADC delta) from the previous scan
-  int16_t prev_velocity;
-  // Current dynamic EMA stage (matrix_filter_mode_t)
-  uint8_t filter_mode;
-  // Consecutive calmer samples seen while decaying the filter stage
-  uint8_t filter_decay;
-
+  // Estimated position from the Kalman filter (distance units, 0-255)
+  float pos;
+  // Estimated velocity from the Kalman filter (distance units per scan)
+  float velocity;
+  // Most recent innovation term (measurement - prediction, distance units)
+  float innovation;
   // Key travel distance (0-255)
   uint8_t distance;
   // Last extremum point of the key travel distance (0-255)
@@ -257,6 +261,8 @@ typedef struct {
   uint32_t rest_stable_since;
   // Timestamp when is_pressed last changed (used for event ordering)
   uint32_t event_time;
+  // Scans remaining in the bottom-out hold state
+  uint16_t bottom_out_hold;
 } key_state_t;
 
 // Key matrix
@@ -270,7 +276,7 @@ typedef struct {
   uint32_t max_scan_us;
   uint16_t max_sample_delta;
   uint16_t max_sample_velocity;
-  uint16_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint16_t reserved_filter_mode[4];
   uint16_t idle_keys_detected;
   uint16_t active_keys_detected;
   uint32_t raw_scan_hz;
@@ -405,3 +411,21 @@ const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void);
  * @return None
  */
 void matrix_reset_scan_diagnostics(void);
+
+/**
+ * @brief Get the current runtime Kalman filter configuration
+ *
+ * @return Pointer to the current Kalman filter configuration
+ */
+const kalman_config_t *matrix_get_kalman_config(void);
+
+/**
+ * @brief Set the runtime Kalman filter configuration and persist it
+ *
+ * Invalid values are rejected without modifying the runtime state or flash.
+ *
+ * @param config New Kalman filter configuration
+ *
+ * @return `true` if the configuration was accepted and persisted
+ */
+bool matrix_set_kalman_config(const kalman_config_t *config);

@@ -26,6 +26,11 @@
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_BOTTOM_OUT + 2)
 #define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY               \
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32 + 2)
+#define MIGRATION_GLOBAL_CONFIG_SIZE_V1_14                                      \
+  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY + 18)
+#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG                         \
+  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY +                  \
+   sizeof(kalman_config_t))
 
 #define MIGRATION_PROFILE_BASE_SIZE(advanced_key_size)                          \
   (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                       \
@@ -166,6 +171,12 @@ static bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static bool v1_13_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_13_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+static bool v1_14_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_14_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+static bool v1_15_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_15_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
                                      uint32_t old_size, uint32_t new_size);
@@ -318,6 +329,20 @@ static const migration_t migrations[] = {
         .global_config_func = v1_13_global_config_func,
         .profile_config_func = v1_13_profile_config_func,
     },
+    {
+        .version = 0x0114,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_V1_14,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
+        .global_config_func = v1_14_global_config_func,
+        .profile_config_func = v1_14_profile_config_func,
+    },
+    {
+        .version = 0x0115,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
+        .global_config_func = v1_15_global_config_func,
+        .profile_config_func = v1_15_profile_config_func,
+    },
 };
 
 bool migration_try_migrate(void) {
@@ -416,6 +441,7 @@ static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
 
 MAKE_MIGRATION_ASSIGN(uint8_t)
 MAKE_MIGRATION_ASSIGN(uint16_t)
+MAKE_MIGRATION_ASSIGN(float)
 
 #if defined(RGB_ENABLED)
 static void migration_assign_rgb_color(uint8_t **dst, rgb_color_t color) {
@@ -993,6 +1019,90 @@ bool v1_13_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_13_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.13 -> v1.14 Migration
+//--------------------------------------------------------------------+
+
+bool v1_14_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0113)
+    return false;
+
+  // Copy everything up to and including mux_sample_delay_us, then insert the
+  // new Kalman config, and finally preserve current_profile and
+  // last_non_default_profile.
+  migration_memcpy(&dst, &src,
+                   MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY -
+                       2);
+  migration_assign_float(&dst, MATRIX_KALMAN_POSITION_GAIN);
+  migration_assign_float(&dst, MATRIX_KALMAN_VELOCITY_GAIN);
+  // The old speed-proportional bottom-out fields are obsolete; write neutral
+  // placeholders that will be replaced by the v1.15 expanded Kalman config.
+  migration_assign_float(&dst, 1.0f);
+  migration_assign_float(&dst, MATRIX_INNOVATION_EVENT_THRESHOLD);
+  migration_assign_uint16_t(&dst, MATRIX_NOISE_DEADZONE);
+  migration_memcpy(&dst, &src, 2);
+  return true;
+}
+
+bool v1_14_profile_config_func(uint8_t profile, uint8_t *dst,
+                                const uint8_t *src) {
+  (void)profile;
+
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.14 -> v1.15 Migration
+//--------------------------------------------------------------------+
+
+bool v1_15_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0114)
+    return false;
+
+  // Copy everything before the old 18-byte Kalman config (this leaves
+  // current_profile and last_non_default_profile in the source untouched).
+  migration_memcpy(&dst, &src,
+                   MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY -
+                       2);
+
+  // Read the old 18-byte Kalman config. Only position_gain, velocity_gain,
+  // and noise_deadzone are preserved; the new fields use compile-time defaults.
+  float old_position_gain;
+  float old_velocity_gain;
+  uint16_t old_noise_deadzone;
+  memcpy(&old_position_gain, src, sizeof(old_position_gain));
+  src += sizeof(old_position_gain);
+  memcpy(&old_velocity_gain, src, sizeof(old_velocity_gain));
+  src += sizeof(old_velocity_gain);
+  src += 8; // Skip old bottom_out_arm_speed_factor and bottom_out_arm_min_threshold
+  memcpy(&old_noise_deadzone, src, sizeof(old_noise_deadzone));
+  src += sizeof(old_noise_deadzone);
+
+  // Write the new 29-byte Kalman config.
+  migration_assign_float(&dst, old_position_gain);
+  migration_assign_float(&dst, old_velocity_gain);
+  migration_assign_float(&dst, MATRIX_KALMAN_VELOCITY_DAMPING);
+  migration_assign_float(&dst, MATRIX_RT_DOWN_MIN_VELOCITY);
+  migration_assign_float(&dst, MATRIX_RT_UP_MIN_VELOCITY);
+  migration_assign_float(&dst, MATRIX_INNOVATION_EVENT_THRESHOLD);
+  migration_assign_uint16_t(&dst, MATRIX_BOTTOM_OUT_HOLD_SCANS);
+  migration_assign_uint8_t(&dst, MATRIX_BOTTOM_OUT_RT_UP);
+  migration_assign_uint16_t(&dst, old_noise_deadzone);
+
+  // Copy current_profile and last_non_default_profile.
+  migration_memcpy(&dst, &src, 2);
+  return true;
+}
+
+bool v1_15_profile_config_func(uint8_t profile, uint8_t *dst,
                                const uint8_t *src) {
   (void)profile;
 

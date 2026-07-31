@@ -42,6 +42,10 @@ static analog_scan_diagnostics_t mock_analog_diag;
 static uint16_t mock_analog_mux_sample_delay_us;
 static bool analog_set_mux_sample_delay_result;
 static uint32_t analog_set_mux_sample_delay_count;
+static kalman_config_t mock_kalman_config;
+static kalman_config_t mock_kalman_config_set;
+static bool matrix_set_kalman_config_result;
+static uint32_t matrix_set_kalman_config_count;
 
 #if defined(RGB_ENABLED)
 static rgb_config_t mock_rgb_config;
@@ -80,6 +84,17 @@ const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
 void matrix_reset_scan_diagnostics(void) {
   memset(&mock_matrix_diag, 0, sizeof(mock_matrix_diag));
   matrix_diag_reset_count++;
+}
+
+const kalman_config_t *matrix_get_kalman_config(void) {
+  return &mock_kalman_config;
+}
+
+bool matrix_set_kalman_config(const kalman_config_t *config) {
+  matrix_set_kalman_config_count++;
+  if (config != NULL)
+    mock_kalman_config_set = *config;
+  return matrix_set_kalman_config_result;
 }
 
 const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
@@ -252,6 +267,10 @@ void setUp(void) {
   mock_analog_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
   analog_set_mux_sample_delay_result = true;
   analog_set_mux_sample_delay_count = 0;
+  memset(&mock_kalman_config, 0, sizeof(mock_kalman_config));
+  memset(&mock_kalman_config_set, 0, sizeof(mock_kalman_config_set));
+  matrix_set_kalman_config_result = true;
+  matrix_set_kalman_config_count = 0;
 #if defined(RGB_ENABLED)
   memset(&mock_rgb_config, 0, sizeof(mock_rgb_config));
 #endif
@@ -382,10 +401,10 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
   mock_matrix_diag.max_scan_us = 42u;
   mock_matrix_diag.max_sample_delta = 55u;
   mock_matrix_diag.max_sample_velocity = 34u;
-  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_IDLE] = 12u;
-  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_TRACK] = 7u;
-  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_FAST] = 2u;
-  mock_matrix_diag.last_mode_counts[MATRIX_FILTER_MODE_BURST] = 1u;
+  mock_matrix_diag.reserved_filter_mode[0] = 12u;
+  mock_matrix_diag.reserved_filter_mode[1] = 7u;
+  mock_matrix_diag.reserved_filter_mode[2] = 2u;
+  mock_matrix_diag.reserved_filter_mode[3] = 1u;
   mock_matrix_diag.raw_scan_hz = 28750u;
   mock_matrix_diag.last_raw_scan_us = 30u;
   mock_matrix_diag.max_raw_scan_us = 44u;
@@ -588,6 +607,101 @@ void test_command_set_analog_scan_config_rejects_invalid_value_without_write(voi
   TEST_ASSERT_EQUAL_UINT32(0u, wear_leveling_write_count);
 }
 
+void test_command_get_kalman_config_returns_current_value(void) {
+  command_in_buffer_t get_config = {
+      .command_id = COMMAND_GET_KALMAN_CONFIG,
+  };
+
+  mock_kalman_config = (kalman_config_t){
+      .position_gain = 0.12f,
+      .velocity_gain = 0.34f,
+      .velocity_damping = 0.56f,
+      .rt_down_min_velocity = 0.78f,
+      .rt_up_min_velocity = 0.91f,
+      .innovation_event_threshold = 1.23f,
+      .bottom_out_hold_scans = 7,
+      .bottom_out_rt_up = 4,
+      .noise_deadzone = 9u,
+  };
+
+  command_send_and_flush(&get_config);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_KALMAN_CONFIG, raw_hid_reports[0][0]);
+
+  command_out_buffer_t out = {0};
+  memcpy(&out, raw_hid_reports[0], sizeof(out));
+  TEST_ASSERT_EQUAL_FLOAT(0.12f, out.kalman_config.position_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.34f, out.kalman_config.velocity_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.56f, out.kalman_config.velocity_damping);
+  TEST_ASSERT_EQUAL_FLOAT(0.78f, out.kalman_config.rt_down_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(0.91f, out.kalman_config.rt_up_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(1.23f, out.kalman_config.innovation_event_threshold);
+  TEST_ASSERT_EQUAL_UINT16(7u, out.kalman_config.bottom_out_hold_scans);
+  TEST_ASSERT_EQUAL_UINT8(4u, out.kalman_config.bottom_out_rt_up);
+  TEST_ASSERT_EQUAL_UINT16(9u, out.kalman_config.noise_deadzone);
+}
+
+void test_command_set_kalman_config_updates_runtime_and_persists(void) {
+  command_in_buffer_t set_config = {
+      .command_id = COMMAND_SET_KALMAN_CONFIG,
+      .kalman_config =
+          {
+              .position_gain = 0.22f,
+              .velocity_gain = 0.44f,
+              .velocity_damping = 0.55f,
+              .rt_down_min_velocity = 0.66f,
+              .rt_up_min_velocity = 0.77f,
+              .innovation_event_threshold = 0.88f,
+              .bottom_out_hold_scans = 5,
+              .bottom_out_rt_up = 2,
+              .noise_deadzone = 3u,
+          },
+  };
+
+  command_send_and_flush(&set_config);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_KALMAN_CONFIG, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(1u, matrix_set_kalman_config_count);
+  TEST_ASSERT_EQUAL_FLOAT(0.22f, mock_kalman_config_set.position_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.44f, mock_kalman_config_set.velocity_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.55f, mock_kalman_config_set.velocity_damping);
+  TEST_ASSERT_EQUAL_FLOAT(0.66f, mock_kalman_config_set.rt_down_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(0.77f, mock_kalman_config_set.rt_up_min_velocity);
+  TEST_ASSERT_EQUAL_FLOAT(0.88f,
+                          mock_kalman_config_set.innovation_event_threshold);
+  TEST_ASSERT_EQUAL_UINT16(5u, mock_kalman_config_set.bottom_out_hold_scans);
+  TEST_ASSERT_EQUAL_UINT8(2u, mock_kalman_config_set.bottom_out_rt_up);
+  TEST_ASSERT_EQUAL_UINT16(3u, mock_kalman_config_set.noise_deadzone);
+}
+
+void test_command_set_kalman_config_rejects_invalid_value_without_write(void) {
+  command_in_buffer_t set_config = {
+      .command_id = COMMAND_SET_KALMAN_CONFIG,
+      .kalman_config =
+          {
+              .position_gain = 0.22f,
+              .velocity_gain = 0.44f,
+              .velocity_damping = 0.55f,
+              .rt_down_min_velocity = 0.66f,
+              .rt_up_min_velocity = 0.77f,
+              .innovation_event_threshold = 0.88f,
+              .bottom_out_hold_scans = 5,
+              .bottom_out_rt_up = 2,
+              .noise_deadzone = 3u,
+          },
+  };
+
+  matrix_set_kalman_config_result = false;
+
+  command_send_and_flush(&set_config);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(1u, matrix_set_kalman_config_count);
+}
+
 void test_command_capture_analog_diag_baseline_requires_diag_firmware(void) {
   command_in_buffer_t capture = {
       .command_id = COMMAND_CAPTURE_ANALOG_DIAG_BASELINE,
@@ -655,6 +769,9 @@ int main(void) {
   RUN_TEST(test_command_get_analog_scan_config_returns_current_value);
   RUN_TEST(test_command_set_analog_scan_config_updates_runtime_and_persists);
   RUN_TEST(test_command_set_analog_scan_config_rejects_invalid_value_without_write);
+  RUN_TEST(test_command_get_kalman_config_returns_current_value);
+  RUN_TEST(test_command_set_kalman_config_updates_runtime_and_persists);
+  RUN_TEST(test_command_set_kalman_config_rejects_invalid_value_without_write);
   RUN_TEST(test_command_capture_analog_diag_baseline_requires_diag_firmware);
   RUN_TEST(test_command_run_analog_channel_identity_requires_diag_firmware);
 #if defined(RGB_ENABLED)

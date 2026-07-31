@@ -70,26 +70,6 @@ if __name__ == "__main__":
         "test_ignore": "*",
         "upload_protocol": "dfu",
     }
-    pio_config[f"env:{keyboard}_prt"] = {
-        "board": driver.platformio.board,
-        "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
-        "build_flags": "\n".join(
-            build_flags
-            + [
-                "-DMATRIX_RT_PREDICTIVE_ENABLE=1",
-                "-DMATRIX_RT_DECEL_THRESHOLD=15",
-            ]
-        ),
-        "build_src_filter": "${env.build_src_filter}",
-        "build_src_flags": "\n".join(build_src_flags),
-        "extra_scripts": "\n".join(extra_scripts),
-        "framework": driver.platformio.framework,
-        "custom_keyboard_name": keyboard,
-        "lib_deps": "\n".join(lib_deps),
-        "platform": driver.platformio.platform,
-        "test_ignore": "*",
-        "upload_protocol": "dfu",
-    }
     if keyboard == "mochiko40he":
         matrix_div2_base_flags = [
             "-DMATRIX_PROCESSING_DIVIDER=2",
@@ -573,6 +553,42 @@ if __name__ == "__main__":
     pio_config["env:native_test_matrix"] = native_test_env(
         "test_matrix",
         "+<matrix.c>",
+    )
+    pio_config["env:native_test_matrix_kalman_fast"] = native_test_env(
+        "test_matrix",
+        "+<matrix.c>",
+        [
+            "-DMATRIX_KALMAN_POSITION_GAIN=0.50f",
+            "-DMATRIX_KALMAN_VELOCITY_GAIN=0.10f",
+            "-DMATRIX_KALMAN_VELOCITY_DAMPING=0.85f",
+            "-DMATRIX_RT_DOWN_MIN_VELOCITY=0.5f",
+            "-DMATRIX_RT_UP_MIN_VELOCITY=0.5f",
+        ],
+    )
+    pio_config["env:native_test_matrix_kalman_slow"] = native_test_env(
+        "test_matrix",
+        "+<matrix.c>",
+        [
+            "-DMATRIX_KALMAN_POSITION_GAIN=0.20f",
+            "-DMATRIX_KALMAN_VELOCITY_GAIN=0.02f",
+            "-DMATRIX_KALMAN_VELOCITY_DAMPING=0.95f",
+            "-DMATRIX_RT_DOWN_MIN_VELOCITY=0.1f",
+            "-DMATRIX_RT_UP_MIN_VELOCITY=0.1f",
+        ],
+    )
+    pio_config["env:native_test_matrix_kalman_no_arm"] = native_test_env(
+        "test_matrix",
+        "+<matrix.c>",
+        [
+            "-DMATRIX_INNOVATION_EVENT_THRESHOLD=1000.0f",
+        ],
+    )
+    pio_config["env:native_test_matrix_kalman_deadzone"] = native_test_env(
+        "test_matrix",
+        "+<matrix.c>",
+        [
+            "-DMATRIX_NOISE_DEADZONE=5",
+        ],
     )
     pio_config["env:native_test_analog_scan"] = native_test_env(
         "test_analog_scan",

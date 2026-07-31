@@ -16,6 +16,7 @@
 #pragma once
 
 #include "common.h"
+#include "matrix.h"
 #include "wear_leveling.h"
 #include "rgb.h"
 #include "joystick.h"
@@ -94,7 +95,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0113
+#define EECONFIG_VERSION 0x0115
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -115,6 +116,8 @@ typedef struct __attribute__((packed)) {
   eeconfig_options_t options;
   // Runtime-configurable mux settle delay, in microseconds.
   uint16_t mux_sample_delay_us;
+  // Runtime-configurable Kalman filter parameters
+  kalman_config_t kalman_config;
 
   // Current profile index
   uint8_t current_profile;

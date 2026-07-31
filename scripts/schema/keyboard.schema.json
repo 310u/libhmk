@@ -383,6 +383,66 @@
         }
       }
     },
+    "kalman": {
+      "type": "object",
+      "description": "Kalman filter configuration. When omitted, compile-time defaults from matrix.h are used.",
+      "properties": {
+        "position_gain": {
+          "type": "number",
+          "description": "Position gain (alpha). Controls how quickly the estimated position follows the raw ADC value.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "velocity_gain": {
+          "type": "number",
+          "description": "Velocity gain (beta). Controls how quickly the estimated velocity follows observed changes.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "velocity_damping": {
+          "type": "number",
+          "description": "Velocity damping multiplier applied while the key is resting or holding a bottom-out event. Values in [0.0, 1.0] reduce velocity-estimate drift.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "rt_down_min_velocity": {
+          "type": "number",
+          "description": "Minimum downward velocity (distance units per scan) required to arm a Rapid Trigger press or re-press.",
+          "minimum": 0.0,
+          "maximum": 10.0
+        },
+        "rt_up_min_velocity": {
+          "type": "number",
+          "description": "Minimum upward velocity (distance units per scan) required to arm a Rapid Trigger release.",
+          "minimum": 0.0,
+          "maximum": 10.0
+        },
+        "innovation_event_threshold": {
+          "type": "number",
+          "description": "Fixed innovation threshold (distance units) used to detect a bottom-out collision. The prediction overshoots when the key slams into the plate, producing a large negative innovation.",
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "bottom_out_hold_scans": {
+          "type": "integer",
+          "description": "Number of scans after a bottom-out event during which the release threshold is temporarily reduced and velocity is damped.",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "bottom_out_rt_up": {
+          "type": "integer",
+          "description": "Reduced Rapid Trigger release distance used while a bottom-out hold is active.",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "noise_deadzone": {
+          "type": "integer",
+          "description": "ADC units above the rest value that are treated as noise floor and clamped to zero distance.",
+          "minimum": 0,
+          "maximum": 20
+        }
+      }
+    },
     "rgb": {
       "type": "object",
       "description": "RGB configuration",

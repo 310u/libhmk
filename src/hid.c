@@ -68,7 +68,7 @@ typedef struct __attribute__((packed)) {
   uint32_t max_scan_us;
   uint16_t max_sample_delta;
   uint16_t max_sample_velocity;
-  uint8_t last_mode_counts[MATRIX_FILTER_MODE_COUNT];
+  uint8_t reserved_filter_mode[4];
   uint8_t idle_keys_detected;
   uint8_t active_keys_detected;
   uint8_t reserved[2];
@@ -110,9 +110,8 @@ hid_fill_raw_hid_matrix_diagnostics(hid_raw_diagnostic_report_t *report) {
   report->matrix.max_scan_us = diag->max_scan_us;
   report->matrix.max_sample_delta = diag->max_sample_delta;
   report->matrix.max_sample_velocity = diag->max_sample_velocity;
-  for (size_t i = 0; i < MATRIX_FILTER_MODE_COUNT; i++) {
-    report->matrix.last_mode_counts[i] = (uint8_t)diag->last_mode_counts[i];
-  }
+  memset(report->matrix.reserved_filter_mode, 0,
+         sizeof(report->matrix.reserved_filter_mode));
   report->matrix.idle_keys_detected = (uint8_t)diag->idle_keys_detected;
   report->matrix.active_keys_detected = (uint8_t)diag->active_keys_detected;
   report->matrix.reserved[0] = 0;

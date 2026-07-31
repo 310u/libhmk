@@ -558,6 +558,15 @@ void command_process(const uint8_t *buf) {
     }
     break;
   }
+  case COMMAND_GET_KALMAN_CONFIG: {
+    memcpy(&out->kalman_config, matrix_get_kalman_config(),
+           sizeof(out->kalman_config));
+    break;
+  }
+  case COMMAND_SET_KALMAN_CONFIG: {
+    success = matrix_set_kalman_config(&in->kalman_config);
+    break;
+  }
   case COMMAND_CAPTURE_ANALOG_DIAG_BASELINE: {
     COMMAND_VERIFY(analog_diag_channel_identity_enabled());
     analog_diag_capture_baseline();
