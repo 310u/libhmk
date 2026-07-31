@@ -69,6 +69,12 @@
 #define MATRIX_INNOVATION_EVENT_THRESHOLD 5.0f
 #endif
 
+#if !defined(MATRIX_BOTTOM_OUT_DETECTION_MIN_POSITION)
+// Distance-space position above which a negative innovation may be treated as
+// a bottom-out collision. Position is normalized to the range 0-255.
+#define MATRIX_BOTTOM_OUT_DETECTION_MIN_POSITION 224.0f
+#endif
+
 #if !defined(MATRIX_BOTTOM_OUT_HOLD_SCANS)
 // Number of scans after a bottom-out event during which the release threshold is
 // temporarily reduced and velocity is damped.

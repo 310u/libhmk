@@ -483,6 +483,7 @@ void matrix_scan_fast(void) {
     }
 
     // Kalman filter update for active keys.
+    const float velocity_before_update = state->velocity;
     innovation = matrix_kalman_update(state, raw_adc);
     state->adc_raw = raw_adc;
     new_adc_filtered = state->adc_filtered;
@@ -542,12 +543,23 @@ void matrix_scan_fast(void) {
 
       // Bottom-out collision detection and hold state.
       uint8_t effective_rt_up = rt_up;
-      if (state->bottom_out_hold > 0) {
+      // A large negative innovation is treated as a bottom-out collision only
+      // when the key is near the bottom and was moving downward before the
+      // filter update. This prevents a fast release from being mistaken for a
+      // plate collision.
+      const bool near_bottom =
+          state->pos >= MATRIX_BOTTOM_OUT_DETECTION_MIN_POSITION;
+      const bool moving_down = velocity_before_update > 0.0f;
+      const bool large_negative_innovation =
+          innovation < -matrix_kalman_config.innovation_event_threshold;
+      const bool bottom_out_collision =
+          near_bottom && moving_down && large_negative_innovation;
+
+      if (state->bottom_out_hold > 0u) {
         state->bottom_out_hold--;
         effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
         state->velocity *= matrix_kalman_config.velocity_damping;
-      } else if (innovation <
-                 -matrix_kalman_config.innovation_event_threshold) {
+      } else if (bottom_out_collision) {
         state->bottom_out_hold = matrix_kalman_config.bottom_out_hold_scans;
         effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
         state->velocity *= matrix_kalman_config.velocity_damping;

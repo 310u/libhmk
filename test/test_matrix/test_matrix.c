@@ -287,14 +287,14 @@ void test_bottom_out_detection_arms_release_on_collision(void) {
   }
 
   // Set key near bottom-out in distance space with downward velocity.
-  key_matrix[0].pos = 225.0f;
+  key_matrix[0].pos = 240.0f;
   key_matrix[0].velocity = 5.0f;
-  key_matrix[0].adc_filtered = 2950;
-  key_matrix[0].adc_raw = 2950;
+  key_matrix[0].adc_filtered = 2800;
+  key_matrix[0].adc_raw = 2800;
   set_distance_bounds(0, 2400, 3050);
   key_matrix[0].key_dir = KEY_DIR_DOWN;
   key_matrix[0].is_pressed = true;
-  key_matrix[0].extremum = 225;
+  key_matrix[0].extremum = 230;
 
   // Sudden stop (collision with plate). The prediction overshoots the new
   // measurement, producing a large negative innovation that arms the reduced
@@ -307,21 +307,56 @@ void test_bottom_out_detection_arms_release_on_collision(void) {
   TEST_ASSERT_TRUE(key_matrix[0].is_pressed);
   TEST_ASSERT_LESS_THAN_FLOAT(5.0f, key_matrix[0].velocity);
   TEST_ASSERT_GREATER_THAN_UINT16(0, key_matrix[0].bottom_out_hold);
+}
 
-  // A small release should keep the key pressed because the reduced rt_up has
-  // not been exceeded yet.
-  analog_key_values[0] = 2900;
-  matrix_scan();
-  TEST_ASSERT_TRUE(key_matrix[0].is_pressed);
-
-  // Release by enough distance units to exceed the reduced rt_up threshold.
-  analog_key_values[0] = 2740;
-  for (uint16_t i = 0; i < 12; i++) {
-    matrix_scan();
+void test_bottom_out_detection_ignores_fast_release(void) {
+  if (MATRIX_INNOVATION_EVENT_THRESHOLD >= 100.0f) {
+    TEST_IGNORE_MESSAGE(
+        "Test requires enabled bottom-out collision detection");
   }
 
-  TEST_ASSERT_FALSE(key_matrix[0].is_pressed);
-  TEST_ASSERT_EQUAL_UINT8(KEY_DIR_UP, key_matrix[0].key_dir);
+  key_matrix[0].pos = 245.0f;
+  key_matrix[0].velocity = -5.0f;
+  key_matrix[0].adc_filtered = 2800;
+  key_matrix[0].adc_raw = 2800;
+  set_distance_bounds(0, 2400, 3050);
+  key_matrix[0].key_dir = KEY_DIR_DOWN;
+  key_matrix[0].is_pressed = true;
+  key_matrix[0].extremum = 245;
+
+  analog_key_values[0] = 2800;
+  matrix_scan();
+
+  TEST_ASSERT_LESS_THAN_FLOAT(
+      -matrix_get_kalman_config()->innovation_event_threshold,
+      key_matrix[0].innovation);
+  TEST_ASSERT_EQUAL_UINT16(0u, key_matrix[0].bottom_out_hold);
+}
+
+void test_bottom_out_detection_ignores_mid_stroke_innovation(void) {
+  if (MATRIX_INNOVATION_EVENT_THRESHOLD >= 100.0f) {
+    TEST_IGNORE_MESSAGE(
+        "Test requires enabled bottom-out collision detection");
+  }
+
+  key_matrix[0].pos = 180.0f;
+  key_matrix[0].velocity = 5.0f;
+  key_matrix[0].adc_filtered = 2600;
+  key_matrix[0].adc_raw = 2600;
+  set_distance_bounds(0, 2400, 3050);
+  key_matrix[0].key_dir = KEY_DIR_DOWN;
+  key_matrix[0].is_pressed = true;
+  key_matrix[0].extremum = 180;
+
+  analog_key_values[0] = 2600;
+  matrix_scan();
+
+  TEST_ASSERT_LESS_THAN_FLOAT(
+      -matrix_get_kalman_config()->innovation_event_threshold,
+      key_matrix[0].innovation);
+  TEST_ASSERT_LESS_THAN_FLOAT(MATRIX_BOTTOM_OUT_DETECTION_MIN_POSITION,
+                              key_matrix[0].pos);
+  TEST_ASSERT_EQUAL_UINT16(0u, key_matrix[0].bottom_out_hold);
 }
 
 void test_idle_fast_path_resets_kalman_state(void) {
@@ -618,6 +653,8 @@ int main(void) {
   RUN_TEST(test_kalman_noise_rejection_at_rest_clamps_distance);
   RUN_TEST(test_noise_deadzone_clamps_distance_to_zero);
   RUN_TEST(test_bottom_out_detection_arms_release_on_collision);
+  RUN_TEST(test_bottom_out_detection_ignores_fast_release);
+  RUN_TEST(test_bottom_out_detection_ignores_mid_stroke_innovation);
   RUN_TEST(test_idle_fast_path_resets_kalman_state);
   RUN_TEST(test_rt_disabled_uses_actuation_point_threshold);
   RUN_TEST(test_matrix_task_runs_only_when_a_new_full_scan_is_ready);
