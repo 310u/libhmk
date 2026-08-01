@@ -86,10 +86,10 @@ static micro_task_entry_t tasks[] = {
 #if HMK_ENABLE_XINPUT_TASK
     {.fn = xinput_task, .interval_us = HMK_XINPUT_TASK_INTERVAL_US, .last_run_us = 0, .enabled = true},
 #endif
-#if HMK_ENABLE_TRACKBALL_TASK && !defined(HMK_DIAG_CHANNEL_IDENTITY)
+#if HMK_ENABLE_TRACKBALL_TASK
     {.fn = trackball_task, .interval_us = HMK_TRACKBALL_TASK_INTERVAL_US, .last_run_us = 0, .enabled = true},
 #endif
-#if defined(JOYSTICK_ENABLED) && HMK_ENABLE_JOYSTICK_TASK && !defined(HMK_DIAG_CHANNEL_IDENTITY)
+#if defined(JOYSTICK_ENABLED) && HMK_ENABLE_JOYSTICK_TASK
     {.fn = joystick_task, .interval_us = HMK_JOYSTICK_TASK_INTERVAL_US, .last_run_us = 0, .enabled = true},
 #endif
 #if HMK_ENABLE_ENCODER_TASK
@@ -98,7 +98,7 @@ static micro_task_entry_t tasks[] = {
 #if HMK_ENABLE_SLIDER_TASK
     {.fn = slider_task, .interval_us = HMK_SLIDER_TASK_INTERVAL_US, .last_run_us = 0, .enabled = true},
 #endif
-#if defined(RGB_ENABLED) && HMK_ENABLE_RGB_TASK && !defined(HMK_DIAG_CHANNEL_IDENTITY)
+#if defined(RGB_ENABLED) && HMK_ENABLE_RGB_TASK
     {.fn = rgb_task, .interval_us = HMK_RGB_TASK_INTERVAL_US, .last_run_us = 0, .enabled = true},
 #endif
 #if HMK_ENABLE_COMMAND_TASK
