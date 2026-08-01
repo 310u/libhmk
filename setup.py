@@ -64,6 +64,14 @@ if __name__ == "__main__":
         "build_src_flags": "\n".join(build_src_flags),
         "extra_scripts": "\n".join(extra_scripts),
         "framework": driver.platformio.framework,
+        **(
+            {
+                "custom_diag_channel_identity": "true",
+                "custom_diag_runtime": "true",
+            }
+            if keyboard == "mochiko40he"
+            else {}
+        ),
         "custom_keyboard_name": keyboard,
         "lib_deps": "\n".join(lib_deps),
         "platform": driver.platformio.platform,

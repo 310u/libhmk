@@ -17,6 +17,7 @@
 
 #include "advanced_keys.h"
 #include "analog_scan.h"
+#include "diagnostic_mode.h"
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "joystick.h"
@@ -567,8 +568,20 @@ void command_process(const uint8_t *buf) {
     success = matrix_set_kalman_config(&in->kalman_config);
     break;
   }
+  case COMMAND_GET_DIAGNOSTIC_MODE: {
+    out->diagnostic_mode.active = diagnostic_mode_is_active();
+    break;
+  }
+  case COMMAND_SET_DIAGNOSTIC_MODE: {
+    COMMAND_VERIFY(analog_diag_channel_identity_enabled());
+    diagnostic_mode_set_active(in->diagnostic_mode.active);
+    out->diagnostic_mode.active = diagnostic_mode_is_active();
+    break;
+  }
   case COMMAND_CAPTURE_ANALOG_DIAG_BASELINE: {
     COMMAND_VERIFY(analog_diag_channel_identity_enabled());
+    COMMAND_VERIFY(diagnostic_mode_is_active());
+    diagnostic_mode_touch();
     analog_diag_capture_baseline();
     break;
   }
@@ -579,6 +592,8 @@ void command_process(const uint8_t *buf) {
         &out->analog_channel_identity_result;
     analog_channel_identity_result_t result;
 
+    COMMAND_VERIFY(diagnostic_mode_is_active());
+    diagnostic_mode_touch();
     COMMAND_VERIFY(p->expected_key < NUM_KEYS);
     COMMAND_VERIFY(analog_diag_run_channel_identity_test(
         p->expected_key, p->min_delta, p->max_secondary_ratio_percent,
@@ -606,6 +621,8 @@ void command_process(const uint8_t *buf) {
     const uint8_t lane_count = analog_diag_adc_lane_count();
 
     COMMAND_VERIFY(analog_diag_channel_identity_enabled());
+    COMMAND_VERIFY(diagnostic_mode_is_active());
+    diagnostic_mode_touch();
     COMMAND_VERIFY(p->step < analog_diag_mux_step_count());
     COMMAND_VERIFY(lane_count <= COMMAND_ANALOG_DIAG_MAX_ADC_LANES);
 

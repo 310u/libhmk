@@ -100,6 +100,16 @@ build_flags.define("USB_PRODUCT_ID", kb_json["usb"]["pid"])
 
 if diag_channel_identity:
     build_flags.define("HMK_DIAG_CHANNEL_IDENTITY", 1)
+    try:
+        if str(env.GetProjectOption("custom_diag_runtime")).lower() not in (
+            "",
+            "0",
+            "false",
+            "no",
+        ):
+            build_flags.define("HMK_DIAG_RUNTIME", 1)
+    except Exception:
+        pass
 
 # Analog Configuration
 analog = kb_json["analog"]

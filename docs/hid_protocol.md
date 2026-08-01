@@ -79,6 +79,8 @@ be dropped.
 | `159` | `COMMAND_GET_ANALOG_RAW_BY_STEP` | Returns one MUX step row of raw, baseline, and delta diagnostic data. |
 | `160` | `COMMAND_GET_KALMAN_CONFIG` | Reads the active runtime Kalman filter configuration. |
 | `161` | `COMMAND_SET_KALMAN_CONFIG` | Updates and persists the runtime Kalman filter configuration. |
+| `162` | `COMMAND_GET_DIAGNOSTIC_MODE` | Reads whether integrated diagnostic mode is active. |
+| `163` | `COMMAND_SET_DIAGNOSTIC_MODE` | Starts or stops integrated diagnostic mode. |
 
 ## Paging and Offsets
 Because the HID reports are limited to 64 bytes, bulk data (such as Keymaps, Actuation arrays, Macros, and Metadata) is split into chunks.
@@ -103,6 +105,21 @@ struct analog_scan_config {
 The firmware validates `mux_sample_delay_us` in the inclusive range `1..50`.
 For boards without a mux-scanned ADC pipeline, `GET` returns `0` and `SET`
 fails with `COMMAND_UNKNOWN`.
+
+## Integrated Diagnostic Mode
+
+Firmware advertising `diagnostics.integratedMode: true` supports runtime
+diagnostic mode without requiring a separate firmware image. Both mode commands
+use a packed one-byte boolean payload (`0` inactive, `1` active).
+
+While active, normal keyboard output and background peripherals are paused while
+USB, analog scanning, matrix processing, and diagnostic commands continue. The
+firmware returns to normal input automatically after 30 seconds without
+diagnostic traffic. Hosts should explicitly send `COMMAND_SET_DIAGNOSTIC_MODE`
+with `0` when leaving the diagnostic UI.
+
+Baseline capture, channel identity, and raw-by-step commands require diagnostic
+mode to be active on integrated firmware.
 
 ## Kalman Filter Runtime Config
 

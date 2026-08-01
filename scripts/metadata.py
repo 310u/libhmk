@@ -60,8 +60,10 @@ def ms_os_20_guid_def():
 def keyboard_metadata_def():
     diagnostic_capabilities = None
     if project_bool_option("custom_diag_channel_identity"):
+        integrated_mode = project_bool_option("custom_diag_runtime")
         diagnostic_capabilities = {
-            "debugFirmware": True,
+            "debugFirmware": not integrated_mode,
+            "integratedMode": integrated_mode,
             "diagChannelIdentity": True,
             "supportsDelaySweep": True,
             "supportsWalkingKeyTest": True,

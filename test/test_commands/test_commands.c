@@ -2,6 +2,7 @@
 
 #include "analog_scan.h"
 #include "commands.h"
+#include "diagnostic_mode.h"
 #include "hardware/analog_api.h"
 #include "layout.h"
 #include "matrix.h"
@@ -46,6 +47,16 @@ static kalman_config_t mock_kalman_config;
 static kalman_config_t mock_kalman_config_set;
 static bool matrix_set_kalman_config_result;
 static uint32_t matrix_set_kalman_config_count;
+static bool mock_diagnostic_mode_active;
+static bool mock_diag_channel_identity_enabled;
+
+void diagnostic_mode_init(void) { mock_diagnostic_mode_active = false; }
+bool diagnostic_mode_is_active(void) { return mock_diagnostic_mode_active; }
+void diagnostic_mode_set_active(bool active) {
+  mock_diagnostic_mode_active = active;
+}
+void diagnostic_mode_touch(void) {}
+void diagnostic_mode_task(void) {}
 
 #if defined(RGB_ENABLED)
 static rgb_config_t mock_rgb_config;
@@ -134,7 +145,9 @@ uint16_t analog_read_raw(uint8_t index) {
   return 0u;
 }
 
-bool analog_diag_channel_identity_enabled(void) { return false; }
+bool analog_diag_channel_identity_enabled(void) {
+  return mock_diag_channel_identity_enabled;
+}
 
 uint8_t analog_diag_mux_step_count(void) { return 0u; }
 
@@ -258,6 +271,8 @@ void setUp(void) {
   rgb_apply_count = 0;
   matrix_diag_reset_count = 0;
   analog_diag_reset_count = 0;
+  mock_diag_channel_identity_enabled = false;
+  mock_diagnostic_mode_active = false;
   host_time_synced = false;
   host_time_hours = 0;
   host_time_minutes = 0;
@@ -713,6 +728,29 @@ void test_command_capture_analog_diag_baseline_requires_diag_firmware(void) {
   TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
 }
 
+void test_command_diagnostic_mode_can_be_enabled_and_queried(void) {
+  mock_diag_channel_identity_enabled = true;
+  command_in_buffer_t enable = {
+      .command_id = COMMAND_SET_DIAGNOSTIC_MODE,
+      .diagnostic_mode = {.active = true},
+  };
+
+  command_send_and_flush(&enable);
+
+  TEST_ASSERT_TRUE(mock_diagnostic_mode_active);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_DIAGNOSTIC_MODE,
+                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT8(1u, raw_hid_reports[0][1]);
+
+  raw_hid_report_count = 0;
+  command_in_buffer_t get = {.command_id = COMMAND_GET_DIAGNOSTIC_MODE};
+  command_send_and_flush(&get);
+
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_DIAGNOSTIC_MODE,
+                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT8(1u, raw_hid_reports[0][1]);
+}
+
 void test_command_run_analog_channel_identity_requires_diag_firmware(void) {
   command_in_buffer_t run_test = {
       .command_id = COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST,
@@ -773,6 +811,7 @@ int main(void) {
   RUN_TEST(test_command_set_kalman_config_updates_runtime_and_persists);
   RUN_TEST(test_command_set_kalman_config_rejects_invalid_value_without_write);
   RUN_TEST(test_command_capture_analog_diag_baseline_requires_diag_firmware);
+  RUN_TEST(test_command_diagnostic_mode_can_be_enabled_and_queried);
   RUN_TEST(test_command_run_analog_channel_identity_requires_diag_firmware);
 #if defined(RGB_ENABLED)
   RUN_TEST(test_command_set_host_time_updates_runtime_clock_without_flash_write);

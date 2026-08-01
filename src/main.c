@@ -17,6 +17,7 @@
 #include "commands.h"
 #include "crc32.h"
 #include "deferred_actions.h"
+#include "diagnostic_mode.h"
 #include "eeconfig.h"
 #include "encoder.h"
 #include "hardware/hardware.h"
@@ -189,7 +190,7 @@ int main(void) {
   analog_init();
   main_apply_analog_scan_runtime_config();
   matrix_init();
-#if defined(RGB_ENABLED) && !defined(HMK_DIAG_CHANNEL_IDENTITY)
+#if defined(RGB_ENABLED)
   rgb_init();
 #endif
   hid_init();
@@ -198,14 +199,13 @@ int main(void) {
   xinput_init();
   layout_init();
   encoder_init();
-#if defined(JOYSTICK_ENABLED) && !defined(HMK_DIAG_CHANNEL_IDENTITY)
+#if defined(JOYSTICK_ENABLED)
   joystick_init();
 #endif
-#if !defined(HMK_DIAG_CHANNEL_IDENTITY)
   trackball_init();
-#endif
   slider_init();
   command_init();
+  diagnostic_mode_init();
   micro_scheduler_init();
 
   while (1) {
@@ -219,15 +219,16 @@ int main(void) {
     analog_task();
     matrix_task();
 
-#if defined(HMK_DIAG_CHANNEL_IDENTITY)
-    matrix_scan_housekeeping();
+    diagnostic_mode_task();
+    if (diagnostic_mode_is_active()) {
+      matrix_scan_housekeeping();
 #if HMK_ENABLE_COMMAND_TASK
-    command_task();
+      command_task();
 #endif
-#else
-    matrix_scan_housekeeping();
-    micro_scheduler_run();
-#endif
+    } else {
+      matrix_scan_housekeeping();
+      micro_scheduler_run();
+    }
   }
 
   return 0;

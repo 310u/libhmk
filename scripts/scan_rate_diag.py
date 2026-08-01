@@ -10,6 +10,7 @@ Example:
   python scripts/scan_rate_diag.py
   python scripts/scan_rate_diag.py --reset
   python scripts/scan_rate_diag.py --bootloader
+  python scripts/scan_rate_diag.py --diagnostic-mode on
 """
 
 import argparse
@@ -26,6 +27,8 @@ COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS = 149
 COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS = 150
 COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS = 151
 COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS = 152
+COMMAND_GET_DIAGNOSTIC_MODE = 162
+COMMAND_SET_DIAGNOSTIC_MODE = 163
 
 
 def find_raw_hid_device(vid: int | None, pid: int | None):
@@ -228,6 +231,11 @@ def main():
         action="store_true",
         help="Send bootloader command and exit (enter DFU mode)",
     )
+    parser.add_argument(
+        "--diagnostic-mode",
+        choices=("status", "on", "off"),
+        help="Read, start, or stop integrated diagnostic mode and exit",
+    )
     args = parser.parse_args()
 
     try:
@@ -250,6 +258,23 @@ def main():
     if args.bootloader:
         send_command(device, COMMAND_BOOTLOADER)
         print("Bootloader command sent. Device should now be in DFU mode.")
+        return
+
+    if args.diagnostic_mode:
+        if args.diagnostic_mode == "status":
+            response = send_command_and_read_response(
+                device, COMMAND_GET_DIAGNOSTIC_MODE
+            )
+        else:
+            response = send_command_and_read_response(
+                device,
+                COMMAND_SET_DIAGNOSTIC_MODE,
+                bytes([1 if args.diagnostic_mode == "on" else 0]),
+            )
+        print(
+            "Diagnostic mode is "
+            + ("active." if response[1] else "inactive.")
+        )
         return
 
     if args.reset:

@@ -109,6 +109,7 @@ def build_keyboard_metadata(kb_json: dict, driver, diagnostic_capabilities=None)
 
     diagnostics_metadata = {
         "debugFirmware": bool(diagnostic_capabilities.get("debugFirmware", False)),
+        "integratedMode": bool(diagnostic_capabilities.get("integratedMode", False)),
         "diagChannelIdentity": False,
         "rawByStep": False,
         "muxSteps": 0,
