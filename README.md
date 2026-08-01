@@ -126,7 +126,33 @@ Record and playback key sequences:
 - **XInput/HID Conflict Fix**: The HID gamepad functionality is now intelligently deactivated when XInput mode is active to prevent dual-input conflicts on Windows.
 - **Stuck Key Bug Fix**: Fixed a race condition where key release reports could be permanently lost due to USB send timeout handling.
 - **Queued Raw HID Commands**: Raw HID configuration requests are now queued out of the TinyUSB callback and processed from the main loop. Hosts should wait for each response before sending the next command.
+- **Runtime Kalman Configuration**: Position/velocity gains, damping, Rapid Trigger velocity thresholds, bottom-out handling, and the noise deadzone can be read, updated, and persisted over Raw HID.
+- **Integrated Diagnostic Mode**: The normal `mochiko40he` firmware includes channel-identity and raw-by-step diagnostics. A configurator can temporarily pause normal input, run diagnostics, and resume input without flashing a separate firmware image.
 - **Upstream Sync**: Ported STM32F446 timer adjustments and EEPROM flash wear reduction optimizations (on-demand bottom-out threshold saving).
+
+#### Integrated Diagnostic Mode (Mochiko40HE)
+
+The production `mochiko40he` environment advertises
+`diagnostics.integratedMode: true`. It starts in normal keyboard mode and
+supports these runtime commands:
+
+- `COMMAND_GET_DIAGNOSTIC_MODE`
+- `COMMAND_SET_DIAGNOSTIC_MODE`
+- `COMMAND_CAPTURE_ANALOG_DIAG_BASELINE`
+- `COMMAND_RUN_ANALOG_CHANNEL_IDENTITY_TEST`
+- `COMMAND_GET_ANALOG_RAW_BY_STEP`
+
+While diagnostic mode is active, normal keyboard output and background
+peripherals are paused so MUX/ADC measurements are not disturbed. USB command
+handling, analog scanning, and matrix processing remain active. Normal input is
+restored when the host exits diagnostic mode or after 30 seconds without
+diagnostic traffic. Entering and leaving the mode clears HID and matrix runtime
+state to avoid stuck keys or stale events.
+
+The legacy `mochiko40he_diag` environment is still generated for low-level
+development and compatibility. It starts in diagnostic mode and uses the USB
+product name `Mochiko40HE Diagnostic`; normal users should use the integrated
+production firmware instead.
 
 ## Getting Started
 
@@ -152,7 +178,7 @@ Current in-tree keyboard definitions include `he16`, `he60`, `he60-v2`,
 
 4. Wait for PlatformIO to finish initializing the environment.
 
-5. Build the firmware using either `pio run` in the PlatformIO Core CLI or through the PlatformIO IDE's "Build" option. The generated `platformio.ini` contains only the selected keyboard, its `<keyboard>_recovery` companion environment, and for mux-scanned boards a `<keyboard>_diag` diagnostic environment for channel-identity validation. Rerun `setup.py` whenever you switch targets. The firmware binaries will be generated in the `.pio/build/<YOUR_KEYBOARD>/` directory with the following files:
+5. Build the firmware using either `pio run` in the PlatformIO Core CLI or through the PlatformIO IDE's "Build" option. The generated `platformio.ini` contains only the selected keyboard, its `<keyboard>_recovery` companion environment, and for mux-scanned boards a `<keyboard>_diag` diagnostic environment for low-level validation. `mochiko40he` additionally includes integrated runtime diagnostics in its normal production environment, so users do not need to flash the `_diag` image. Rerun `setup.py` whenever you switch targets. The firmware binaries will be generated in the `.pio/build/<YOUR_KEYBOARD>/` directory with the following files:
 
    - `firmware.bin`: The binary firmware file
    - `firmware.elf`: The ELF firmware file
@@ -186,6 +212,17 @@ python scripts/run_regression.py -k mochiko40he
 ```
 
 This regenerates `platformio.ini` for the selected keyboard, runs the maintained native unit test set, and then builds `<keyboard>` plus `<keyboard>_recovery`. Mux-scanned keyboards also gain a `<keyboard>_diag` build for raw-by-step and channel-identity validation work.
+
+For direct command-line testing of an integrated firmware:
+
+```bash
+python scripts/scan_rate_diag.py --diagnostic-mode status
+python scripts/scan_rate_diag.py --diagnostic-mode on
+python scripts/scan_rate_diag.py --diagnostic-mode off
+```
+
+The recommended user-facing workflow is the Developer tab in `hmkconf`, which
+handles mode entry, keepalive traffic, measurement, and explicit exit.
 
 ### Mochiko40HE Matrix Divider Validation
 
