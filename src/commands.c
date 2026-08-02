@@ -637,6 +637,7 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS: {
+    matrix_refresh_scan_diagnostics();
     const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
     out->matrix_scan_diagnostics.matrix_scan_count = diag->scan_count;
     out->matrix_scan_diagnostics.matrix_scan_hz = diag->matrix_scan_hz;

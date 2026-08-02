@@ -101,6 +101,7 @@ static uint32_t hid_diagnostic_cpu_hz(void) {
 
 static void
 hid_fill_raw_hid_matrix_diagnostics(hid_raw_diagnostic_report_t *report) {
+  matrix_refresh_scan_diagnostics();
   const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
 
   report->matrix.scan_count = diag->scan_count;

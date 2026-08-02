@@ -104,6 +104,8 @@ const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
   return &mock_matrix_diag;
 }
 
+void matrix_refresh_scan_diagnostics(void) {}
+
 uint32_t timer_read(void) { return mock_timer++; }
 
 uint32_t board_cycle_count(void) {

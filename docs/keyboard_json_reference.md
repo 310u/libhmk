@@ -424,10 +424,10 @@ Webコンフィギュレータでのキーボードの描画方法を定義し�
 | `position_gain` | number | `0.35` | 0.0–1.0 | 位置推定の更新ゲイン（α）。高いほど raw ADC の変化に素早く追従するが、ノイズも通しやすくなる |
 | `velocity_gain` | number | `0.05` | 0.0–1.0 | 速度推定の更新ゲイン（β）。高いほど速度変化に素早く追従するが、滑らかさが減る |
 | `velocity_damping` | number | `0.90` | 0.0–1.0 | 停止時・底打ち保持中の速度減衰率。小さいほど速度推定値が素早く 0 に戻る |
-| `rt_down_min_velocity` | number | `0.3` | 0.0–10.0 | Rapid Trigger 押下・再押下に必要な最低下向き速度（distance units / scan） |
-| `rt_up_min_velocity` | number | `0.3` | 0.0–10.0 | Rapid Trigger 解放に必要な最低上向き速度（distance units / scan） |
+| `rt_down_min_velocity` | number | `0.3` | 0.0–10.0 | 後方互換用の予約値。RT押下・再押下の判定には使用されない |
+| `rt_up_min_velocity` | number | `0.3` | 0.0–10.0 | 後方互換用の予約値。RT解放の判定には使用されない |
 | `innovation_event_threshold` | number | `5.0` | 0.0–100.0 | 底打ち衝突検出の固定 innovation 閾値（distance units）。予測値に対する残差がこの値を超える負値で検出 |
-| `bottom_out_hold_scans` | integer | `4` | 0–100 | 底打ち検出後、減衰・縮小した rt_up を適用する scan 数 |
+| `bottom_out_hold_scans` | integer | `4` | 0–100 | 底打ち検出scanの後、減衰・縮小した rt_up を追加適用する scan 数 |
 | `bottom_out_rt_up` | integer | `5` | 0–255 | 底打ち保持中に一時的に使用する縮小 rt_up 値 |
 | `noise_deadzone` | integer | `2` | 0–20 | rest 値上の ADC units をノイズとして扱い、distance を 0 にクランプする |
 

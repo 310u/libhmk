@@ -270,8 +270,12 @@ void test_noise_deadzone_clamps_distance_to_zero(void) {
 
   TEST_ASSERT_EQUAL_UINT8(0, key_matrix[0].distance);
 
-  // Move just outside the deadzone; distance should become non-zero.
-  analog_key_values[0] = (uint16_t)(rest + deadzone + 3);
+  // Move outside both the deadzone and any configured idle fast-path margin;
+  // distance should become non-zero.
+  const uint16_t idle_margin = MATRIX_IDLE_RAW_FAST_PATH_MARGIN;
+  const uint16_t zero_distance_margin =
+      deadzone > idle_margin ? deadzone : idle_margin;
+  analog_key_values[0] = (uint16_t)(rest + zero_distance_margin + 3u);
   // Ramp the value gradually so the Kalman filter follows it.
   for (uint16_t i = 0; i < 8; i++) {
     matrix_scan();
@@ -390,6 +394,35 @@ void test_idle_fast_path_resets_kalman_state(void) {
   TEST_ASSERT_EQUAL_UINT16(0, key_matrix[0].bottom_out_hold);
 }
 
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
+void test_idle_fast_path_records_raw_sample_velocity(void) {
+  key_matrix[0].adc_raw = 2400u;
+  key_matrix[0].adc_filtered = 2400u;
+  set_distance_bounds(0, 2405u, 3050u);
+  analog_key_values[0] = 2405u;
+
+  matrix_scan();
+
+  const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT16(5u, diag->max_sample_velocity);
+}
+#endif
+
+#if MATRIX_IDLE_RAW_FAST_PATH_MARGIN > 0
+void test_idle_fast_path_rest_limit_saturates_at_adc_maximum(void) {
+  set_distance_bounds(0, (uint16_t)(ADC_MAX_VALUE - 2u), ADC_MAX_VALUE);
+  key_matrix[0].adc_raw = (uint16_t)(ADC_MAX_VALUE - 2u);
+  key_matrix[0].adc_filtered = (uint16_t)(ADC_MAX_VALUE - 2u);
+  key_matrix[0].innovation = 10.0f;
+  analog_key_values[0] = ADC_MAX_VALUE;
+
+  matrix_scan();
+
+  TEST_ASSERT_EQUAL_UINT16(ADC_MAX_VALUE, key_matrix[0].adc_raw);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, key_matrix[0].innovation);
+}
+#endif
+
 void test_rt_disabled_uses_actuation_point_threshold(void) {
   // Disable Rapid Trigger for key 0.
   matrix_disable_rapid_trigger(0, true);
@@ -413,6 +446,28 @@ void test_rt_disabled_uses_actuation_point_threshold(void) {
 
   // Re-enable for other tests.
   matrix_disable_rapid_trigger(0, false);
+}
+
+void test_rt_initial_actuation_includes_exact_actuation_point(void) {
+  kalman_config_t cfg = *matrix_get_kalman_config();
+  cfg.position_gain = 0.0f;
+  cfg.velocity_gain = 0.0f;
+  TEST_ASSERT_TRUE(matrix_set_kalman_config(&cfg));
+
+  key_matrix[0].pos = 100.0f;
+  key_matrix[0].distance = 100u;
+  key_matrix[0].velocity = 0.0f;
+  key_matrix[0].adc_raw = 2600u;
+  key_matrix[0].adc_filtered = 2600u;
+  key_matrix[0].key_dir = KEY_DIR_INACTIVE;
+  key_matrix[0].is_pressed = false;
+  mock_eeconfig.profiles[0].actuation_map[0].actuation_point = 100u;
+  analog_key_values[0] = 2600u;
+
+  matrix_scan();
+
+  TEST_ASSERT_TRUE(key_matrix[0].is_pressed);
+  TEST_ASSERT_EQUAL_UINT8(KEY_DIR_DOWN, key_matrix[0].key_dir);
 }
 
 void test_matrix_task_runs_only_when_a_new_full_scan_is_ready(void) {
@@ -656,7 +711,14 @@ int main(void) {
   RUN_TEST(test_bottom_out_detection_ignores_fast_release);
   RUN_TEST(test_bottom_out_detection_ignores_mid_stroke_innovation);
   RUN_TEST(test_idle_fast_path_resets_kalman_state);
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
+  RUN_TEST(test_idle_fast_path_records_raw_sample_velocity);
+#endif
+#if MATRIX_IDLE_RAW_FAST_PATH_MARGIN > 0
+  RUN_TEST(test_idle_fast_path_rest_limit_saturates_at_adc_maximum);
+#endif
   RUN_TEST(test_rt_disabled_uses_actuation_point_threshold);
+  RUN_TEST(test_rt_initial_actuation_includes_exact_actuation_point);
   RUN_TEST(test_matrix_task_runs_only_when_a_new_full_scan_is_ready);
   RUN_TEST(test_matrix_task_counts_missed_generations);
   RUN_TEST(test_matrix_set_kalman_config_rejects_null);

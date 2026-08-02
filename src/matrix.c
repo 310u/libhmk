@@ -454,12 +454,17 @@ void matrix_scan_fast(void) {
 
     // Kalman Fast Path: key is fully idle at rest.
     const uint16_t idle_fast_path_rest_limit =
-        state->adc_rest_value + MATRIX_IDLE_RAW_FAST_PATH_MARGIN;
+        (uint16_t)M_MIN((uint32_t)state->adc_rest_value +
+                            (uint32_t)MATRIX_IDLE_RAW_FAST_PATH_MARGIN,
+                        (uint32_t)ADC_MAX_VALUE);
     if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
         state->distance == 0u && raw_adc <= idle_fast_path_rest_limit) {
       const uint16_t filtered_delta =
           raw_adc > previous_filtered ? (uint16_t)(raw_adc - previous_filtered)
                                       : (uint16_t)(previous_filtered - raw_adc);
+#if MATRIX_DETAILED_SCAN_DIAGNOSTICS
+      const uint16_t previous_raw = state->adc_raw;
+#endif
       state->adc_raw = raw_adc;
       state->adc_filtered = raw_adc;
       state->pos = 0.0f;
@@ -472,8 +477,8 @@ void matrix_scan_fast(void) {
       if (filtered_delta > max_sample_delta)
         max_sample_delta = filtered_delta;
       const uint16_t sample_velocity =
-          raw_adc > state->adc_raw ? (uint16_t)(raw_adc - state->adc_raw)
-                                   : (uint16_t)(state->adc_raw - raw_adc);
+          raw_adc > previous_raw ? (uint16_t)(raw_adc - previous_raw)
+                                 : (uint16_t)(previous_raw - raw_adc);
       if (sample_velocity > max_sample_velocity)
         max_sample_velocity = sample_velocity;
 #endif
@@ -495,8 +500,12 @@ void matrix_scan_fast(void) {
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
     if (filtered_delta > max_sample_delta)
       max_sample_delta = filtered_delta;
-    const uint16_t sample_velocity = (uint16_t)(
-        innovation < 0.0f ? (uint16_t)(-innovation) : (uint16_t)innovation);
+    const float innovation_abs = innovation < 0.0f ? -innovation : innovation;
+    const uint16_t sample_velocity =
+        innovation_abs != innovation_abs ||
+                innovation_abs >= (float)UINT16_MAX
+            ? UINT16_MAX
+            : (uint16_t)innovation_abs;
     if (sample_velocity > max_sample_velocity)
       max_sample_velocity = sample_velocity;
 #endif
@@ -560,6 +569,8 @@ void matrix_scan_fast(void) {
         effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
         state->velocity *= matrix_kalman_config.velocity_damping;
       } else if (bottom_out_collision) {
+        // This counter is the number of additional scans after this collision
+        // scan for which bottom-out release hysteresis remains active.
         state->bottom_out_hold = matrix_kalman_config.bottom_out_hold_scans;
         effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
         state->velocity *= matrix_kalman_config.velocity_damping;
@@ -567,7 +578,7 @@ void matrix_scan_fast(void) {
 
       switch (state->key_dir) {
       case KEY_DIR_INACTIVE:
-        if (state->pos > actuation->actuation_point) {
+        if (state->pos >= actuation->actuation_point) {
           // Initial actuation is position-based so arbitrarily slow valid
           // strokes are not rejected by a per-scan velocity threshold.
           state->extremum = (uint8_t)state->pos;
@@ -724,7 +735,7 @@ void matrix_scan_housekeeping(void) {
 
 void matrix_scan(void) {
   matrix_scan_fast();
-  matrix_scan_housekeeping_internal(true);
+  matrix_scan_housekeeping_internal(false);
 }
 
 void matrix_task(void) {
@@ -821,7 +832,7 @@ uint32_t matrix_get_idle_time(void) {
   return timer_elapsed(matrix_last_activity_time);
 }
 
-const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
+void matrix_refresh_scan_diagnostics(void) {
   matrix_refresh_raw_scan_diagnostics();
   matrix_scan_diagnostics.missed_generation_count =
       matrix_scan_diagnostics.overload_missed_generation_count;
@@ -829,6 +840,9 @@ const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
   matrix_scan_diagnostics.matrix_scan_hz =
       matrix_scan_diagnostics.expected_matrix_scan_hz;
 #endif
+}
+
+const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
   return &matrix_scan_diagnostics;
 }
 

@@ -131,8 +131,8 @@ struct kalman_config {
   float position_gain;                // 0.0 - 1.0
   float velocity_gain;                // 0.0 - 1.0
   float velocity_damping;             // 0.0 - 1.0
-  float rt_down_min_velocity;         // >= 0.0 (distance units per scan)
-  float rt_up_min_velocity;           // >= 0.0 (distance units per scan)
+  float rt_down_min_velocity;         // Legacy reserved field; must be >= 0.0
+  float rt_up_min_velocity;           // Legacy reserved field; must be >= 0.0
   float innovation_event_threshold;   // > 0.0 (distance units)
   uint16_t bottom_out_hold_scans;     // 0 .. 65535
   uint8_t bottom_out_rt_up;             // 0 .. 255

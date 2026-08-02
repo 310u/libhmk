@@ -562,6 +562,18 @@ if __name__ == "__main__":
         "test_matrix",
         "+<matrix.c>",
     )
+    pio_config["env:native_test_matrix_diagnostics"] = native_test_env(
+        "test_matrix",
+        "+<matrix.c>",
+        [
+            "-DMATRIX_DETAILED_SCAN_DIAGNOSTICS=1",
+        ],
+    )
+    pio_config["env:native_test_matrix_fast_path_margin"] = native_test_env(
+        "test_matrix",
+        "+<matrix.c>",
+        ["-DMATRIX_IDLE_RAW_FAST_PATH_MARGIN=8"],
+    )
     pio_config["env:native_test_matrix_kalman_fast"] = native_test_env(
         "test_matrix",
         "+<matrix.c>",

@@ -220,8 +220,8 @@ typedef struct __attribute__((packed)) {
   // Fixed innovation threshold (distance units) used to detect a bottom-out
   // collision
   float innovation_event_threshold;
-  // Number of scans after a bottom-out event during which the release threshold
-  // is temporarily reduced and velocity is damped
+  // Number of additional scans after the collision-detection scan during which
+  // the release threshold is temporarily reduced and velocity is damped.
   uint16_t bottom_out_hold_scans;
   // Reduced Rapid Trigger release distance used while a bottom-out hold is active
   uint8_t bottom_out_rt_up;
@@ -399,7 +399,17 @@ void matrix_disable_rapid_trigger(uint8_t key, bool disable);
 uint32_t matrix_get_idle_time(void);
 
 /**
- * @brief Get cycle-based diagnostics for the most recent matrix scan
+ * @brief Refresh matrix diagnostics derived from the raw scan backend
+ *
+ * Call this before reading diagnostics when a current raw-scan snapshot is
+ * required. Keeping refresh separate makes the getter side-effect free.
+ *
+ * @return None
+ */
+void matrix_refresh_scan_diagnostics(void);
+
+/**
+ * @brief Get the current cycle-based matrix diagnostics snapshot
  *
  * These counters are intended for tuning high-rate analog scan pipelines
  * without changing the public event timestamp semantics.

@@ -92,6 +92,8 @@ const matrix_scan_diagnostics_t *matrix_get_scan_diagnostics(void) {
   return &mock_matrix_diag;
 }
 
+void matrix_refresh_scan_diagnostics(void) {}
+
 void matrix_reset_scan_diagnostics(void) {
   memset(&mock_matrix_diag, 0, sizeof(mock_matrix_diag));
   matrix_diag_reset_count++;
