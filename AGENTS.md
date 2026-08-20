@@ -46,7 +46,6 @@ Fork building Hall-effect keyboard firmware for AT32F405xx / STM32F446xx MCUs us
 
 ## Key quirks
 
-- `libhmk/` subdirectory is an orphaned nested git repo — do not touch.
 - **Mochiko40HE** is the primary dev target. Matrix validation builds: `mochiko40he_matrix_div4`, `mochiko40he_matrix_div2`.
 - Binary clock time sync needs `hmkconf` RGB tab open (host pushes periodically).
 - Joystick switch is key index 40 (board_def.h); raw ADC inputs use indices 41+.
