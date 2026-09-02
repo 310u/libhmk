@@ -15,6 +15,8 @@
 
 #include "matrix.h"
 
+#include <math.h>
+
 #include "analog_scan.h"
 #include "distance.h"
 #include "eeconfig.h"
@@ -26,6 +28,38 @@
 #define MATRIX_BOTTOM_OUT_SAVE_IDLE_MS 3000u
 
 static kalman_config_t matrix_kalman_config;
+
+static inline bool matrix_float_is_finite(float v) { return isfinite(v); }
+
+static inline bool matrix_float_is_nan(float v) { return isnan(v); }
+
+static bool matrix_validate_kalman_config(const kalman_config_t *config) {
+  if (config == NULL)
+    return false;
+
+  if (!matrix_float_is_finite(config->position_gain) ||
+      config->position_gain < 0.0f || config->position_gain > 1.0f)
+    return false;
+  if (!matrix_float_is_finite(config->velocity_gain) ||
+      config->velocity_gain < 0.0f || config->velocity_gain > 1.0f)
+    return false;
+  if (!matrix_float_is_finite(config->velocity_damping) ||
+      config->velocity_damping < 0.0f || config->velocity_damping > 1.0f)
+    return false;
+  if (!matrix_float_is_finite(config->rt_down_min_velocity) ||
+      config->rt_down_min_velocity < 0.0f)
+    return false;
+  if (!matrix_float_is_finite(config->rt_up_min_velocity) ||
+      config->rt_up_min_velocity < 0.0f)
+    return false;
+  if (!matrix_float_is_finite(config->innovation_event_threshold) ||
+      config->innovation_event_threshold <= 0.0f)
+    return false;
+  if (config->noise_deadzone > ADC_MAX_VALUE)
+    return false;
+
+  return true;
+}
 
 __attribute__((always_inline)) static inline float
 matrix_kalman_update(key_state_t *state, uint16_t raw_adc) {
@@ -42,6 +76,16 @@ matrix_kalman_update(key_state_t *state, uint16_t raw_adc) {
   state->pos = predicted_pos + matrix_kalman_config.position_gain * innovation;
   state->velocity += matrix_kalman_config.velocity_gain * innovation;
   state->innovation = innovation;
+
+  // If the filter produced a non-finite value, reset to a safe resting state
+  // rather than letting NaN poison downstream position casts and comparisons.
+  if (!matrix_float_is_finite(state->pos) ||
+      !matrix_float_is_finite(state->velocity) ||
+      matrix_float_is_nan(state->innovation)) {
+    state->pos = 0.0f;
+    state->velocity = 0.0f;
+    state->innovation = 0.0f;
+  }
 
   if (state->pos < 0.0f)
     state->pos = 0.0f;
@@ -312,7 +356,12 @@ static void matrix_persist_bottom_out_thresholds(void) {
 
 static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
                                          bool service_usb_during_calibration) {
-  matrix_kalman_config = eeconfig->kalman_config;
+  if (matrix_validate_kalman_config(&eeconfig->kalman_config)) {
+    matrix_kalman_config = eeconfig->kalman_config;
+  } else {
+    const kalman_config_t default_config = DEFAULT_KALMAN_CONFIG;
+    matrix_kalman_config = default_config;
+  }
 
   if (reset_bottom_out_threshold) {
     memset(matrix_bottom_out_threshold_buf, 0,
@@ -400,22 +449,7 @@ const kalman_config_t *matrix_get_kalman_config(void) {
 }
 
 bool matrix_set_kalman_config(const kalman_config_t *config) {
-  if (config == NULL)
-    return false;
-
-  if (config->position_gain < 0.0f || config->position_gain > 1.0f)
-    return false;
-  if (config->velocity_gain < 0.0f || config->velocity_gain > 1.0f)
-    return false;
-  if (config->velocity_damping < 0.0f || config->velocity_damping > 1.0f)
-    return false;
-  if (config->rt_down_min_velocity < 0.0f)
-    return false;
-  if (config->rt_up_min_velocity < 0.0f)
-    return false;
-  if (config->innovation_event_threshold <= 0.0f)
-    return false;
-  if (config->noise_deadzone > ADC_MAX_VALUE)
+  if (!matrix_validate_kalman_config(config))
     return false;
 
   matrix_kalman_config = *config;
@@ -430,6 +464,8 @@ void matrix_scan_fast(void) {
   const uint32_t scan_time = timer_read();
   const uint32_t scan_cycle_start = board_cycle_count();
   const actuation_t *actuation_map = CURRENT_PROFILE.actuation_map;
+  uint16_t idle_keys_detected = 0u;
+  uint16_t active_keys_detected = 0u;
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
   uint16_t max_sample_delta = 0;
   uint16_t max_sample_velocity = 0;
@@ -442,6 +478,7 @@ void matrix_scan_fast(void) {
     if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
         state->distance == 0u &&
         sample_version == matrix_last_sample_versions[i]) {
+
       continue;
     }
     matrix_last_sample_versions[i] = sample_version;
@@ -484,6 +521,7 @@ void matrix_scan_fast(void) {
 #endif
       if (filtered_delta >= MATRIX_CONTINUOUS_CALIBRATION_STABLE_DELTA)
         state->rest_stable_since = scan_time;
+      idle_keys_detected++;
       continue;
     }
 
@@ -522,6 +560,7 @@ void matrix_scan_fast(void) {
     if (new_adc_filtered <=
         state->adc_rest_value + matrix_kalman_config.noise_deadzone) {
       state->pos = 0.0f;
+      state->velocity = 0.0f;
       state->distance = 0;
     } else {
       state->distance = (uint8_t)state->pos;
@@ -533,6 +572,14 @@ void matrix_scan_fast(void) {
         matrix_rapid_trigger_disabled_count != 0u &&
         bitmap_get(rapid_trigger_disabled, i);
 
+    // Only damp residual velocity at the physical rest position. Damping an
+    // inactive key throughout its stroke suppresses legitimate slow motion
+    // before the initial actuation point is reached.
+    if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
+        state->distance == 0u) {
+      state->velocity *= matrix_kalman_config.velocity_damping;
+    }
+
     if (rt_disabled || actuation->rt_down == 0u) {
       state->key_dir = KEY_DIR_INACTIVE;
       state->is_pressed = (state->distance >= actuation->actuation_point);
@@ -541,14 +588,6 @@ void matrix_scan_fast(void) {
           actuation->continuous ? 0 : actuation->actuation_point;
       const uint8_t rt_up =
           actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
-
-      // Only damp residual velocity at the physical rest position. Damping an
-      // inactive key throughout its stroke suppresses legitimate slow motion
-      // before the initial actuation point is reached.
-      if (state->key_dir == KEY_DIR_INACTIVE && !state->is_pressed &&
-          state->distance == 0u) {
-        state->velocity *= matrix_kalman_config.velocity_damping;
-      }
 
       // Bottom-out collision detection and hold state.
       uint8_t effective_rt_up = rt_up;
@@ -564,14 +603,19 @@ void matrix_scan_fast(void) {
       const bool bottom_out_collision =
           near_bottom && moving_down && large_negative_innovation;
 
+      // Renew the hold on any new collision so bounce or repeated impacts
+      // keep the reduced release threshold active. The +1 accounts for the
+      // decrement performed in the same scan, preserving the original
+      // "additional scans after collision" semantics.
+      if (bottom_out_collision) {
+        state->bottom_out_hold =
+            matrix_kalman_config.bottom_out_hold_scans + 1u;
+        if (state->bottom_out_hold == 0u)
+          state->bottom_out_hold = UINT16_MAX;
+      }
+
       if (state->bottom_out_hold > 0u) {
         state->bottom_out_hold--;
-        effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
-        state->velocity *= matrix_kalman_config.velocity_damping;
-      } else if (bottom_out_collision) {
-        // This counter is the number of additional scans after this collision
-        // scan for which bottom-out release hysteresis remains active.
-        state->bottom_out_hold = matrix_kalman_config.bottom_out_hold_scans;
         effective_rt_up = matrix_kalman_config.bottom_out_rt_up;
         state->velocity *= matrix_kalman_config.velocity_damping;
       }
@@ -642,6 +686,8 @@ void matrix_scan_fast(void) {
       if (state->is_pressed)
         bitmap_set(matrix_pending_rgb_keypresses, i, true);
     }
+
+    active_keys_detected++;
   }
 
   const uint32_t scan_cycles = board_cycle_count() - scan_cycle_start;
@@ -653,16 +699,14 @@ void matrix_scan_fast(void) {
   matrix_scan_diagnostics.max_sample_velocity = max_sample_velocity;
   memset(matrix_scan_diagnostics.reserved_filter_mode, 0,
          sizeof(matrix_scan_diagnostics.reserved_filter_mode));
-  matrix_scan_diagnostics.idle_keys_detected = 0u;
-  matrix_scan_diagnostics.active_keys_detected = 0u;
 #else
   matrix_scan_diagnostics.max_sample_delta = 0u;
   matrix_scan_diagnostics.max_sample_velocity = 0u;
   memset(matrix_scan_diagnostics.reserved_filter_mode, 0,
          sizeof(matrix_scan_diagnostics.reserved_filter_mode));
-  matrix_scan_diagnostics.idle_keys_detected = 0u;
-  matrix_scan_diagnostics.active_keys_detected = 0u;
 #endif
+  matrix_scan_diagnostics.idle_keys_detected = idle_keys_detected;
+  matrix_scan_diagnostics.active_keys_detected = active_keys_detected;
   if (MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS && matrix_last_scan_start_cycle_valid) {
     matrix_scan_interval_cycles_accum +=
         (uint64_t)(scan_cycle_start - matrix_last_scan_start_cycle);
@@ -683,6 +727,7 @@ void matrix_scan_fast(void) {
   const uint32_t fast_budget_us = matrix_fast_scan_budget_us();
   if (fast_budget_us != 0u &&
       matrix_scan_diagnostics.last_scan_us > fast_budget_us) {
+
     matrix_scan_diagnostics.matrix_fast_overrun_count++;
   }
 #endif
@@ -735,7 +780,7 @@ void matrix_scan_housekeeping(void) {
 
 void matrix_scan(void) {
   matrix_scan_fast();
-  matrix_scan_housekeeping_internal(false);
+  matrix_scan_housekeeping_internal(true);
 }
 
 void matrix_task(void) {
@@ -855,6 +900,7 @@ void matrix_reset_scan_diagnostics(void) {
   matrix_last_housekeeping_start_cycle_valid = false;
   matrix_last_seen_generation = analog_scan_get_full_scan_generation();
   matrix_next_processing_generation =
+
       matrix_next_scheduled_generation_after(matrix_last_seen_generation);
   matrix_refresh_raw_scan_diagnostics();
 }
