@@ -95,6 +95,59 @@ bool command_enqueue(const uint8_t *buf, uint16_t len) {
   return true;
 }
 
+static void command_fill_matrix_scan_diagnostics(command_out_buffer_t *out) {
+  matrix_refresh_scan_diagnostics();
+  const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
+  out->matrix_scan_diagnostics.matrix_scan_count = diag->scan_count;
+  out->matrix_scan_diagnostics.matrix_scan_hz = diag->matrix_scan_hz;
+  out->matrix_scan_diagnostics.last_matrix_scan_us = diag->last_scan_us;
+  out->matrix_scan_diagnostics.max_matrix_scan_us = diag->max_scan_us;
+  out->matrix_scan_diagnostics.raw_scan_hz = diag->raw_scan_hz;
+  out->matrix_scan_diagnostics.last_raw_scan_us = diag->last_raw_scan_us;
+  out->matrix_scan_diagnostics.max_raw_scan_us = diag->max_raw_scan_us;
+  out->matrix_scan_diagnostics.full_scan_generation = diag->full_scan_generation;
+  out->matrix_scan_diagnostics.missed_generation_count =
+      diag->missed_generation_count;
+  out->matrix_scan_diagnostics.matrix_processing_divider =
+      diag->matrix_processing_divider;
+  out->matrix_scan_diagnostics.intentional_skip_count =
+      diag->intentional_skip_count;
+  out->matrix_scan_diagnostics.coalesced_generation_count =
+      diag->coalesced_generation_count;
+  out->matrix_scan_diagnostics.overload_missed_generation_count =
+      diag->overload_missed_generation_count;
+  out->matrix_scan_diagnostics.scheduler_budget_exhausted_count =
+      diag->scheduler_budget_exhausted_count;
+  out->matrix_scan_diagnostics.matrix_catchup_scan_count =
+      diag->matrix_catchup_scan_count;
+  out->matrix_scan_diagnostics.expected_matrix_scan_hz =
+      diag->expected_matrix_scan_hz > UINT16_MAX
+          ? UINT16_MAX
+          : (uint16_t)diag->expected_matrix_scan_hz;
+  out->matrix_scan_diagnostics.matrix_fast_overrun_count =
+      diag->matrix_fast_overrun_count > UINT8_MAX
+          ? UINT8_MAX
+          : (uint8_t)diag->matrix_fast_overrun_count;
+}
+
+static void command_fill_analog_scan_diagnostics(command_out_buffer_t *out) {
+  const analog_scan_diagnostics_t *diag = analog_get_scan_diagnostics();
+  out->analog_scan_diagnostics.mux_sample_delay_us = diag->mux_sample_delay_us;
+  out->analog_scan_diagnostics.mux_step_count = diag->mux_step_count;
+  out->analog_scan_diagnostics.scan_count = diag->scan_count;
+  out->analog_scan_diagnostics.last_scan_cycles = diag->last_scan_cycles;
+  out->analog_scan_diagnostics.max_scan_cycles = diag->max_scan_cycles;
+  out->analog_scan_diagnostics.last_scan_us = diag->last_scan_us;
+  out->analog_scan_diagnostics.max_scan_us = diag->max_scan_us;
+  out->analog_scan_diagnostics.estimated_scan_hz = diag->estimated_scan_hz;
+  out->analog_scan_diagnostics.bad_channel_id_count =
+      diag->bad_channel_id_count;
+  out->analog_scan_diagnostics.dma_overrun_count = diag->dma_overrun_count;
+  out->analog_scan_diagnostics.overrun_count = diag->overrun_count;
+  out->analog_scan_diagnostics.spi_error_count = diag->spi_error_count;
+  out->analog_scan_diagnostics.missed_scan_count = diag->missed_scan_count;
+}
+
 void command_process(const uint8_t *buf) {
   const command_in_buffer_t *in = (const command_in_buffer_t *)buf;
   command_out_buffer_t *out = (command_out_buffer_t *)out_buf;
@@ -637,39 +690,7 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_GET_MATRIX_SCAN_DIAGNOSTICS: {
-    matrix_refresh_scan_diagnostics();
-    const matrix_scan_diagnostics_t *diag = matrix_get_scan_diagnostics();
-    out->matrix_scan_diagnostics.matrix_scan_count = diag->scan_count;
-    out->matrix_scan_diagnostics.matrix_scan_hz = diag->matrix_scan_hz;
-    out->matrix_scan_diagnostics.last_matrix_scan_us = diag->last_scan_us;
-    out->matrix_scan_diagnostics.max_matrix_scan_us = diag->max_scan_us;
-    out->matrix_scan_diagnostics.raw_scan_hz = diag->raw_scan_hz;
-    out->matrix_scan_diagnostics.last_raw_scan_us = diag->last_raw_scan_us;
-    out->matrix_scan_diagnostics.max_raw_scan_us = diag->max_raw_scan_us;
-    out->matrix_scan_diagnostics.full_scan_generation =
-        diag->full_scan_generation;
-    out->matrix_scan_diagnostics.missed_generation_count =
-        diag->missed_generation_count;
-    out->matrix_scan_diagnostics.matrix_processing_divider =
-        diag->matrix_processing_divider;
-    out->matrix_scan_diagnostics.intentional_skip_count =
-        diag->intentional_skip_count;
-    out->matrix_scan_diagnostics.coalesced_generation_count =
-        diag->coalesced_generation_count;
-    out->matrix_scan_diagnostics.overload_missed_generation_count =
-        diag->overload_missed_generation_count;
-    out->matrix_scan_diagnostics.scheduler_budget_exhausted_count =
-        diag->scheduler_budget_exhausted_count;
-    out->matrix_scan_diagnostics.matrix_catchup_scan_count =
-        diag->matrix_catchup_scan_count;
-    out->matrix_scan_diagnostics.expected_matrix_scan_hz =
-        diag->expected_matrix_scan_hz > UINT16_MAX
-            ? UINT16_MAX
-            : (uint16_t)diag->expected_matrix_scan_hz;
-    out->matrix_scan_diagnostics.matrix_fast_overrun_count =
-        diag->matrix_fast_overrun_count > UINT8_MAX
-            ? UINT8_MAX
-            : (uint8_t)diag->matrix_fast_overrun_count;
+    command_fill_matrix_scan_diagnostics(out);
     break;
   }
   case COMMAND_RESET_MATRIX_SCAN_DIAGNOSTICS: {
@@ -677,25 +698,7 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_GET_ANALOG_SCAN_DIAGNOSTICS: {
-    const analog_scan_diagnostics_t *diag = analog_get_scan_diagnostics();
-    out->analog_scan_diagnostics.mux_sample_delay_us =
-        diag->mux_sample_delay_us;
-    out->analog_scan_diagnostics.mux_step_count = diag->mux_step_count;
-    out->analog_scan_diagnostics.scan_count = diag->scan_count;
-    out->analog_scan_diagnostics.last_scan_cycles = diag->last_scan_cycles;
-    out->analog_scan_diagnostics.max_scan_cycles = diag->max_scan_cycles;
-    out->analog_scan_diagnostics.last_scan_us = diag->last_scan_us;
-    out->analog_scan_diagnostics.max_scan_us = diag->max_scan_us;
-    out->analog_scan_diagnostics.estimated_scan_hz =
-        diag->estimated_scan_hz;
-    out->analog_scan_diagnostics.bad_channel_id_count =
-        diag->bad_channel_id_count;
-    out->analog_scan_diagnostics.dma_overrun_count =
-        diag->dma_overrun_count;
-    out->analog_scan_diagnostics.overrun_count = diag->overrun_count;
-    out->analog_scan_diagnostics.spi_error_count = diag->spi_error_count;
-    out->analog_scan_diagnostics.missed_scan_count =
-        diag->missed_scan_count;
+    command_fill_analog_scan_diagnostics(out);
     break;
   }
   case COMMAND_RESET_ANALOG_SCAN_DIAGNOSTICS: {

@@ -889,8 +889,6 @@ bool v1_F_profile_config_func(uint8_t profile, uint8_t *dst,
   joystick_init_default_config(&joystick_config);
   memcpy(&joystick_config, src, MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY);
   memcpy(dst, &joystick_config, sizeof(joystick_config));
-  dst += sizeof(joystick_config);
-  src += MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY;
 #endif
 
   return true;
@@ -927,8 +925,6 @@ bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
                                       joystick_config.mouse_acceleration);
   joystick_config.active_mouse_preset = 0u;
   memcpy(dst, &joystick_config, sizeof(joystick_config));
-  dst += sizeof(joystick_config);
-  src += MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F;
 #endif
 
   return true;
