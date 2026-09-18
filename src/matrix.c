@@ -25,9 +25,9 @@
 #include "rgb.h"
 #include "usb_bootstrap.h"
 
-#define MATRIX_BOTTOM_OUT_SAVE_IDLE_MS 3000u
 
 static kalman_config_t matrix_kalman_config;
+static distance_curve_config_t matrix_distance_curve_config;
 
 static inline bool matrix_float_is_finite(float v) { return isfinite(v); }
 
@@ -61,15 +61,65 @@ static bool matrix_validate_kalman_config(const kalman_config_t *config) {
   return true;
 }
 
+static bool matrix_validate_distance_curve_config(
+    const distance_curve_config_t *config) {
+  if (config == NULL)
+    return false;
+
+  if (config->num_curves > DISTANCE_CURVE_PRESETS)
+    return false;
+
+  for (uint8_t c = 0; c < config->num_curves; c++) {
+    const distance_curve_t *curve = &config->curves[c];
+
+    if (curve->num_points > DISTANCE_CURVE_POINTS_MAX)
+      return false;
+
+    if (curve->num_points == 1)
+      return false;
+
+    if (curve->num_points >= 2) {
+      if (curve->points[0].adc != 0)
+        return false;
+      if (curve->points[curve->num_points - 1].adc != 255)
+        return false;
+      if (curve->points[0].dist != 0)
+        return false;
+      if (curve->points[curve->num_points - 1].dist != 255)
+        return false;
+    }
+
+    for (uint8_t i = 0; i + 1 < curve->num_points; i++) {
+      if (curve->points[i + 1].adc <= curve->points[i].adc)
+        return false;
+      if (curve->points[i + 1].dist < curve->points[i].dist)
+        return false;
+    }
+  }
+
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    if (config->key_curve[i] >= config->num_curves)
+      return false;
+  }
+
+  return true;
+}
+
 __attribute__((always_inline)) static inline float
-matrix_kalman_update(key_state_t *state, uint16_t raw_adc) {
+matrix_kalman_update(key_state_t *state, uint16_t raw_adc, uint8_t key) {
   // Average two 32 kHz samples to produce one 16 kHz distance-space sample.
   const uint16_t avg_adc =
       (uint16_t)(((uint32_t)raw_adc + (uint32_t)state->adc_raw) / 2u);
 
+  const uint8_t curve_index = matrix_distance_curve_config.key_curve[key];
+  const distance_curve_t *curve =
+      (curve_index < matrix_distance_curve_config.num_curves)
+          ? &matrix_distance_curve_config.curves[curve_index]
+          : NULL;
+
   const float measurement =
-      (float)adc_to_distance(avg_adc, state->adc_rest_value,
-                             state->adc_bottom_out_value);
+      (float)adc_to_distance_with_curve(avg_adc, state->adc_rest_value,
+                                        state->adc_bottom_out_value, curve);
   const float predicted_pos = state->pos + state->velocity;
   const float innovation = measurement - predicted_pos;
 
@@ -338,7 +388,7 @@ static void matrix_run_continuous_calibration_housekeeping(void) {
 static void matrix_persist_bottom_out_thresholds(void) {
   if (!matrix_bottom_out_threshold_dirty ||
       !eeconfig->options.save_bottom_out_threshold ||
-      matrix_get_idle_time() < MATRIX_BOTTOM_OUT_SAVE_IDLE_MS) {
+      matrix_get_idle_time() < MATRIX_INACTIVITY_TIMEOUT) {
     return;
   }
 
@@ -361,6 +411,18 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
   } else {
     const kalman_config_t default_config = DEFAULT_KALMAN_CONFIG;
     matrix_kalman_config = default_config;
+  }
+
+  if (matrix_validate_distance_curve_config(&eeconfig->distance_curve_config)) {
+    matrix_distance_curve_config = eeconfig->distance_curve_config;
+  } else {
+    distance_curve_config_t default_curve_config = {0};
+    default_curve_config.num_curves = 1;
+    default_curve_config.curves[0].num_points = 0;
+    default_curve_config.curves[0].total_travel_um = 4000;
+    for (uint32_t k = 0; k < NUM_KEYS; k++)
+      default_curve_config.key_curve[k] = 0;
+    matrix_distance_curve_config = default_curve_config;
   }
 
   if (reset_bottom_out_threshold) {
@@ -456,6 +518,18 @@ bool matrix_set_kalman_config(const kalman_config_t *config) {
   return EECONFIG_WRITE(kalman_config, config);
 }
 
+const distance_curve_config_t *matrix_get_distance_curve_config(void) {
+  return &matrix_distance_curve_config;
+}
+
+bool matrix_set_distance_curve_config(const distance_curve_config_t *config) {
+  if (!matrix_validate_distance_curve_config(config))
+    return false;
+
+  matrix_distance_curve_config = *config;
+  return EECONFIG_WRITE(distance_curve_config, config);
+}
+
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   matrix_recalibrate_internal(reset_bottom_out_threshold, false);
 }
@@ -527,7 +601,8 @@ void matrix_scan_fast(void) {
 
     // Kalman filter update for active keys.
     const float velocity_before_update = state->velocity;
-    innovation = matrix_kalman_update(state, raw_adc);
+    innovation = matrix_kalman_update(state, raw_adc, (uint8_t)i);
+
     state->adc_raw = raw_adc;
     new_adc_filtered = state->adc_filtered;
     const uint16_t filtered_delta =

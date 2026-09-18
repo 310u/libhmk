@@ -764,6 +764,28 @@ void test_migration_v1_14_expands_kalman_config(void) {
   TEST_ASSERT_EQUAL_UINT8(2u, written_config.last_non_default_profile);
 }
 
+void test_migration_v1_17_appends_distance_curve_config(void) {
+  build_legacy_config_v1_14(0x12345678u, 12u, 0.42f, 0.07f, 5u);
+
+  TEST_ASSERT_TRUE(migration_try_migrate());
+  TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
+
+  TEST_ASSERT_EQUAL_UINT8(1,
+                          written_config.distance_curve_config.num_curves);
+  TEST_ASSERT_EQUAL_UINT8(
+      0, written_config.distance_curve_config.curves[0].num_points);
+  TEST_ASSERT_EQUAL_UINT16(
+      4000, written_config.distance_curve_config.curves[0].total_travel_um);
+  for (uint8_t i = 0; i < NUM_KEYS; i++) {
+    TEST_ASSERT_EQUAL_UINT8(
+        0, written_config.distance_curve_config.key_curve[i]);
+  }
+
+  // Make sure the trailing profile indices were preserved.
+  TEST_ASSERT_EQUAL_UINT8(1u, written_config.current_profile);
+  TEST_ASSERT_EQUAL_UINT8(2u, written_config.last_non_default_profile);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_migration_rejects_invalid_magic);
@@ -777,5 +799,6 @@ int main(void) {
       test_migration_v1_10_appends_trigger_state_colors_without_clobbering_profile_data);
   RUN_TEST(test_migration_v1_13_appends_kalman_config_defaults);
   RUN_TEST(test_migration_v1_14_expands_kalman_config);
+  RUN_TEST(test_migration_v1_17_appends_distance_curve_config);
   return UNITY_END();
 }

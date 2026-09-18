@@ -16,6 +16,7 @@
 #pragma once
 
 #include "common.h"
+#include "distance.h"
 
 //--------------------------------------------------------------------+
 // Key Matrix Configuration
@@ -228,6 +229,31 @@ typedef struct __attribute__((packed)) {
   // ADC units above rest treated as noise floor and clamped to zero distance
   uint16_t noise_deadzone;
 } kalman_config_t;
+
+//--------------------------------------------------------------------+
+// Distance Curve Configuration
+//--------------------------------------------------------------------+
+
+#if !defined(DISTANCE_CURVE_PRESETS)
+// Number of available switch-travel curve presets. Each preset is a single
+// monotonic curve; a key selects one preset by index.
+#define DISTANCE_CURVE_PRESETS 4
+#endif
+
+typedef struct __attribute__((packed)) {
+  // Number of presets currently populated (0 means linear identity).
+  uint8_t num_curves;
+  // Switch-travel curve presets.
+  distance_curve_t curves[DISTANCE_CURVE_PRESETS];
+  // Per-key preset index. key_curve[i] selects the curve for key i.
+  uint8_t key_curve[NUM_KEYS];
+} distance_curve_config_t;
+
+// Get the currently active distance-curve configuration.
+const distance_curve_config_t *matrix_get_distance_curve_config(void);
+
+// Update the distance-curve configuration and persist it to EEPROM.
+bool matrix_set_distance_curve_config(const distance_curve_config_t *config);
 
 //--------------------------------------------------------------------+
 // Key Matrix

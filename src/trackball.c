@@ -16,8 +16,13 @@
 #include "trackball.h"
 #include "rgb.h"
 
+#include <string.h>
+
+#include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "layout.h"
+#include "lib/usqrt.h"
 
 #if defined(TRACKBALL_ENABLED)
 
@@ -84,6 +89,11 @@
 #ifndef TRACKBALL_MOTION_ACTIVE_LOW
 #define TRACKBALL_MOTION_ACTIVE_LOW 1
 #endif
+
+#define TRACKBALL_MOUSE_FP_SHIFT 8
+#define TRACKBALL_MOUSE_FP_ONE (1L << TRACKBALL_MOUSE_FP_SHIFT)
+#define TRACKBALL_MOUSE_DIVISOR 50L
+#define TRACKBALL_VECTOR_MAX 256L
 
 #ifndef TRACKBALL_MOTION_PULL_UP
 #if defined(TRACKBALL_SENSOR_PAW3395)
@@ -226,6 +236,24 @@ static trackball_state_t trackball_state = {
     .last_dx = 0,
     .last_dy = 0,
 };
+
+static trackball_config_t trackball_config_cache = {
+    .cpi = TRACKBALL_CPI_DEFAULT,
+    .enabled = true,
+    .invert_x = false,
+    .invert_y = false,
+    .swap_xy = false,
+    .mouse_speed = TRACKBALL_MOUSE_SPEED_DEFAULT,
+    .mouse_acceleration = TRACKBALL_MOUSE_ACCELERATION_DEFAULT,
+    .active_mouse_preset = 0u,
+    .smoothing = TRACKBALL_SMOOTHING_DEFAULT,
+};
+
+static int32_t trackball_mouse_accum_x = 0;
+static int32_t trackball_mouse_accum_y = 0;
+static int32_t trackball_filtered_dx = 0;
+static int32_t trackball_filtered_dy = 0;
+static uint32_t trackball_last_mouse_tick = 0;
 
 static inline void trackball_delay_cycles(uint32_t cycles) {
   const uint32_t start = board_cycle_count();
@@ -837,38 +865,136 @@ static void trackball_try_recover(uint32_t now) {
   (void)trackball_try_enable(now);
 }
 
+static int8_t trackball_clamp_i16_to_i8(int16_t value) {
+  if (value > INT8_MAX) {
+    return INT8_MAX;
+  }
+  if (value < INT8_MIN) {
+    return INT8_MIN;
+  }
+  return (int8_t)value;
+}
+
+static int8_t trackball_consume_mouse_accum(int32_t *accum) {
+  int32_t whole = *accum / TRACKBALL_MOUSE_FP_ONE;
+
+  if (whole > INT8_MAX) {
+    whole = INT8_MAX;
+  } else if (whole < INT8_MIN) {
+    whole = INT8_MIN;
+  }
+
+  *accum -= whole * TRACKBALL_MOUSE_FP_ONE;
+  return trackball_clamp_i16_to_i8((int16_t)whole);
+}
+
+static void trackball_apply_sniper_scaling(int32_t *dx_fp, int32_t *dy_fp) {
+  if (is_sniper_active) {
+    *dx_fp = (*dx_fp * (int32_t)eeconfig->options.sniper_mode_multiplier) / 255;
+    *dy_fp = (*dy_fp * (int32_t)eeconfig->options.sniper_mode_multiplier) / 255;
+  }
+}
+
+static int32_t trackball_vector_delta_fp(uint32_t magnitude, uint8_t speed,
+                                         uint8_t acceleration) {
+  const int64_t max_sq =
+      (int64_t)TRACKBALL_VECTOR_MAX * (int64_t)TRACKBALL_VECTOR_MAX;
+  const int64_t mag_sq = (int64_t)magnitude * (int64_t)magnitude;
+  const int64_t curve_term = ((int64_t)(255u - acceleration) * max_sq +
+                              (int64_t)acceleration * mag_sq) /
+                             255LL;
+  int64_t numerator = (int64_t)magnitude * curve_term;
+  numerator *= (int64_t)speed;
+  numerator *= (int64_t)TRACKBALL_MOUSE_FP_ONE;
+
+  int64_t denominator = 16384LL * (int64_t)TRACKBALL_MOUSE_DIVISOR;
+  int64_t delta_fp = numerator / denominator;
+
+  if (delta_fp > INT32_MAX) {
+    return INT32_MAX;
+  }
+  return (int32_t)delta_fp;
+}
+
+static void trackball_apply_exponential_smoothing(int32_t raw_dx, int32_t raw_dy,
+                                                  int32_t *out_dx,
+                                                  int32_t *out_dy) {
+  const uint8_t smoothing = trackball_config_cache.smoothing;
+
+  if (smoothing == 0u) {
+    *out_dx = raw_dx;
+    *out_dy = raw_dy;
+    return;
+  }
+
+  trackball_filtered_dx +=
+      (raw_dx - trackball_filtered_dx) / (1L << smoothing);
+  trackball_filtered_dy +=
+      (raw_dy - trackball_filtered_dy) / (1L << smoothing);
+  *out_dx = trackball_filtered_dx;
+  *out_dy = trackball_filtered_dy;
+}
+
 static void trackball_emit_motion(int16_t dx, int16_t dy) {
 #if TRACKBALL_SWAP_XY
-  const int16_t swapped_dx = dy;
-  dy = dx;
-  dx = swapped_dx;
+  {
+    const int16_t swapped_dx = dy;
+    dy = dx;
+    dx = swapped_dx;
+  }
 #endif
+  if (trackball_config_cache.swap_xy) {
+    const int16_t swapped_dx = dy;
+    dy = dx;
+    dx = swapped_dx;
+  }
 #if TRACKBALL_INVERT_X
   dx = (int16_t)-dx;
 #endif
+  if (trackball_config_cache.invert_x) {
+    dx = (int16_t)-dx;
+  }
 #if TRACKBALL_INVERT_Y
   dy = (int16_t)-dy;
 #endif
+  if (trackball_config_cache.invert_y) {
+    dy = (int16_t)-dy;
+  }
 
-  while (dx != 0 || dy != 0) {
-    int16_t step_x = dx;
-    int16_t step_y = dy;
+  int32_t smoothed_dx = 0;
+  int32_t smoothed_dy = 0;
+  trackball_apply_exponential_smoothing((int32_t)dx, (int32_t)dy,
+                                        &smoothed_dx, &smoothed_dy);
 
-    if (step_x > INT8_MAX) {
-      step_x = INT8_MAX;
-    } else if (step_x < INT8_MIN) {
-      step_x = INT8_MIN;
-    }
+  const int64_t mag_sq =
+      (int64_t)smoothed_dx * (int64_t)smoothed_dx +
+      (int64_t)smoothed_dy * (int64_t)smoothed_dy;
+  const uint32_t magnitude =
+      mag_sq > UINT32_MAX ? UINT32_MAX : (uint32_t)mag_sq;
 
-    if (step_y > INT8_MAX) {
-      step_y = INT8_MAX;
-    } else if (step_y < INT8_MIN) {
-      step_y = INT8_MIN;
-    }
+  if (magnitude == 0u) {
+    return;
+  }
 
-    hid_mouse_move((int8_t)step_x, (int8_t)step_y, 0u);
-    dx = (int16_t)(dx - step_x);
-    dy = (int16_t)(dy - step_y);
+  const uint32_t magnitude_len = usqrt32(magnitude);
+  const uint8_t speed = trackball_config_cache.mouse_speed;
+  const uint8_t acceleration = trackball_config_cache.mouse_acceleration;
+  const int32_t delta_fp =
+      trackball_vector_delta_fp(magnitude_len, speed, acceleration);
+
+  int32_t dx_fp = (int64_t)smoothed_dx * delta_fp / (int32_t)magnitude_len;
+  int32_t dy_fp = (int64_t)smoothed_dy * delta_fp / (int32_t)magnitude_len;
+
+  trackball_apply_sniper_scaling(&dx_fp, &dy_fp);
+
+  trackball_mouse_accum_x += dx_fp;
+  trackball_mouse_accum_y += dy_fp;
+
+  const int8_t out_x = trackball_consume_mouse_accum(&trackball_mouse_accum_x);
+  const int8_t out_y = trackball_consume_mouse_accum(&trackball_mouse_accum_y);
+
+  if (out_x != 0 || out_y != 0) {
+    hid_mouse_move(out_x, out_y, 0u);
   }
 }
 
@@ -878,6 +1004,21 @@ void trackball_init(void) {
   trackball_state.bus_config.mode = trackball_sensor_api.spi_mode;
   spi_cs_init(&trackball_state.chip_select);
   trackball_init_motion_pin();
+
+  trackball_config_t config;
+  if (eeconfig != NULL) {
+    memcpy(&config, &CURRENT_PROFILE.trackball_config, sizeof(config));
+  } else {
+    trackball_init_default_config(&config);
+  }
+  trackball_apply_config(config);
+
+  trackball_mouse_accum_x = 0;
+  trackball_mouse_accum_y = 0;
+  trackball_filtered_dx = 0;
+  trackball_filtered_dy = 0;
+  trackball_last_mouse_tick = now;
+
   trackball_state.last_recovery_attempt_ms = now;
   (void)trackball_try_enable(now);
 }
@@ -923,9 +1064,27 @@ void trackball_task(void) {
     return;
   }
 
-  trackball_emit_motion(sample.dx, sample.dy);
   trackball_state.last_dx = sample.dx;
   trackball_state.last_dy = sample.dy;
+
+  if (!trackball_config_cache.enabled) {
+    return;
+  }
+
+  trackball_emit_motion(sample.dx, sample.dy);
+}
+
+void trackball_select_mouse_preset(trackball_config_t *config, uint8_t preset) {
+  if (config == NULL) {
+    return;
+  }
+
+  *config = trackball_normalize_config(*config);
+  config->active_mouse_preset = preset % TRACKBALL_MOUSE_PRESET_COUNT;
+  config->mouse_speed =
+      config->mouse_presets[config->active_mouse_preset].mouse_speed;
+  config->mouse_acceleration =
+      config->mouse_presets[config->active_mouse_preset].mouse_acceleration;
 }
 
 void trackball_get_state(trackball_diagnostic_state_t *state) {
@@ -941,12 +1100,14 @@ void trackball_get_state(trackball_diagnostic_state_t *state) {
 static void trackball_set_cpi(uint16_t cpi) {
   const uint32_t now = timer_read();
 
+  trackball_state.current_cpi = cpi;
+  trackball_config_cache.cpi = cpi;
+
   if (!trackball_state.enabled) {
     return;
   }
   if (trackball_sensor_api.set_cpi != NULL) {
     if (trackball_sensor_api.set_cpi(cpi)) {
-      trackball_state.current_cpi = cpi;
 #if defined(RGB_ENABLED)
       rgb_flash_cpi(cpi);
 #endif
@@ -954,6 +1115,45 @@ static void trackball_set_cpi(uint16_t cpi) {
       trackball_handle_comm_error(now);
     }
   }
+}
+
+trackball_config_t trackball_get_config(void) {
+  return trackball_config_cache;
+}
+
+void trackball_apply_config(trackball_config_t config) {
+  const trackball_config_t normalized = trackball_normalize_config(config);
+  trackball_config_cache = normalized;
+  trackball_state.current_cpi = normalized.cpi;
+
+  if (trackball_state.enabled && trackball_sensor_api.set_cpi != NULL) {
+    (void)trackball_sensor_api.set_cpi(normalized.cpi);
+  }
+
+  trackball_mouse_accum_x = 0;
+  trackball_mouse_accum_y = 0;
+  trackball_filtered_dx = 0;
+  trackball_filtered_dy = 0;
+}
+
+void trackball_set_config(trackball_config_t config) {
+  const trackball_config_t normalized = trackball_normalize_config(config);
+  if (eeconfig != NULL) {
+    const uint32_t addr =
+        offsetof(eeconfig_t, profiles) +
+        eeconfig->current_profile * sizeof(eeconfig_profile_t) +
+        offsetof(eeconfig_profile_t, trackball_config);
+    (void)wear_leveling_write(addr, &normalized, sizeof(normalized));
+  }
+  trackball_apply_config(normalized);
+}
+
+void trackball_select_next_preset(void) {
+  trackball_config_t config = trackball_get_config();
+  trackball_select_mouse_preset(
+      &config, (uint8_t)((config.active_mouse_preset + 1u) %
+                         TRACKBALL_MOUSE_PRESET_COUNT));
+  trackball_set_config(config);
 }
 
 void trackball_increase_cpi(void) {
@@ -981,7 +1181,15 @@ void trackball_decrease_cpi(void) {
 void trackball_init(void) {}
 void trackball_task(void) {}
 void trackball_get_state(trackball_diagnostic_state_t *state) {}
+trackball_config_t trackball_get_config(void) {
+  trackball_config_t config;
+  trackball_init_default_config(&config);
+  return config;
+}
+void trackball_apply_config(trackball_config_t config) { (void)config; }
+void trackball_set_config(trackball_config_t config) { (void)config; }
 void trackball_increase_cpi(void) {}
 void trackball_decrease_cpi(void) {}
+void trackball_select_next_preset(void) {}
 
 #endif

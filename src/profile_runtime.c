@@ -21,6 +21,7 @@
 #include "joystick.h"
 #include "layout.h"
 #include "rgb.h"
+#include "trackball.h"
 
 void profile_runtime_apply_current(void) {
   layout_load_advanced_keys();
@@ -33,6 +34,12 @@ void profile_runtime_apply_current(void) {
   memcpy(&joystick_config, &CURRENT_PROFILE.joystick_config,
          sizeof(joystick_config));
   joystick_apply_config(joystick_config);
+#endif
+#if defined(TRACKBALL_ENABLED)
+  trackball_config_t trackball_config;
+  memcpy(&trackball_config, &CURRENT_PROFILE.trackball_config,
+         sizeof(trackball_config));
+  trackball_apply_config(trackball_config);
 #endif
 }
 

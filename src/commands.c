@@ -44,8 +44,11 @@ static volatile bool command_request_pending = false;
 static volatile bool has_pending_response = false;
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
-static bool command_validate_gamepad_options(
-    const gamepad_options_t *gamepad_options) {
+static distance_curve_config_t command_distance_curve_staging;
+static bool command_distance_curve_staged;
+
+static bool
+command_validate_gamepad_options(const gamepad_options_t *gamepad_options) {
   for (uint8_t i = 1; i < 4; i++) {
     if (gamepad_options->analog_curve[i][0] <=
         gamepad_options->analog_curve[i - 1][0])
@@ -84,6 +87,7 @@ static void command_apply_analog_scan_runtime_config(void) {
 void command_init(void) {
   command_request_pending = false;
   has_pending_response = false;
+  command_distance_curve_staged = false;
 }
 
 bool command_enqueue(const uint8_t *buf, uint16_t len) {
@@ -105,7 +109,8 @@ static void command_fill_matrix_scan_diagnostics(command_out_buffer_t *out) {
   out->matrix_scan_diagnostics.raw_scan_hz = diag->raw_scan_hz;
   out->matrix_scan_diagnostics.last_raw_scan_us = diag->last_raw_scan_us;
   out->matrix_scan_diagnostics.max_raw_scan_us = diag->max_raw_scan_us;
-  out->matrix_scan_diagnostics.full_scan_generation = diag->full_scan_generation;
+  out->matrix_scan_diagnostics.full_scan_generation =
+      diag->full_scan_generation;
   out->matrix_scan_diagnostics.missed_generation_count =
       diag->missed_generation_count;
   out->matrix_scan_diagnostics.matrix_processing_divider =
@@ -213,8 +218,8 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->offset < ADC_NUM_RAW_INPUTS);
 
-    for (uint32_t i = 0;
-         i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < ADC_NUM_RAW_INPUTS;
+    for (uint32_t i = 0; i < M_ARRAY_SIZE(out->analog_info) &&
+                         i + p->offset < ADC_NUM_RAW_INPUTS;
          i++) {
       o[i].adc_value = analog_read_raw((uint8_t)(i + p->offset));
       o[i].distance = 0u;
@@ -232,9 +237,8 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->offset < debug_frame_count);
 
-    for (uint32_t i = 0;
-         i < M_ARRAY_SIZE(out->analog_info) &&
-         i + p->offset < debug_frame_count;
+    for (uint32_t i = 0; i < M_ARRAY_SIZE(out->analog_info) &&
+                         i + p->offset < debug_frame_count;
          i++) {
       o[i].adc_value = analog_read_debug_frame((uint8_t)(i + p->offset));
       o[i].distance = 0u;
@@ -332,10 +336,10 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->keymap) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    const uint32_t field_offset = offsetof(eeconfig_profile_t, keymap) +
-                                  p->layer *
-                                      sizeof(eeconfig->profiles[0].keymap[0]) +
-                                  p->offset * sizeof(uint8_t);
+    const uint32_t field_offset =
+        offsetof(eeconfig_profile_t, keymap) +
+        p->layer * sizeof(eeconfig->profiles[0].keymap[0]) +
+        p->offset * sizeof(uint8_t);
     success = command_write_profile_bytes(p->profile, field_offset, p->keymap,
                                           sizeof(uint8_t) * p->len);
     if (success)
@@ -365,9 +369,9 @@ void command_process(const uint8_t *buf) {
 
     const uint32_t field_offset = offsetof(eeconfig_profile_t, actuation_map) +
                                   p->offset * sizeof(actuation_t);
-    success = command_write_profile_bytes(
-        p->profile, field_offset, p->actuation_map,
-        sizeof(actuation_t) * p->len);
+    success =
+        command_write_profile_bytes(p->profile, field_offset, p->actuation_map,
+                                    sizeof(actuation_t) * p->len);
     break;
   }
   case COMMAND_GET_ADVANCED_KEYS: {
@@ -393,9 +397,9 @@ void command_process(const uint8_t *buf) {
 
     const uint32_t field_offset = offsetof(eeconfig_profile_t, advanced_keys) +
                                   p->offset * sizeof(advanced_key_t);
-    success = command_write_profile_bytes(
-        p->profile, field_offset, p->advanced_keys,
-        sizeof(advanced_key_t) * p->len);
+    success =
+        command_write_profile_bytes(p->profile, field_offset, p->advanced_keys,
+                                    sizeof(advanced_key_t) * p->len);
     if (success)
       command_reload_if_current_profile(p->profile);
     break;
@@ -413,9 +417,9 @@ void command_process(const uint8_t *buf) {
 
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
 
-    success = command_write_profile_bytes(p->profile,
-                                          offsetof(eeconfig_profile_t, tick_rate),
-                                          &p->tick_rate, sizeof(p->tick_rate));
+    success = command_write_profile_bytes(
+        p->profile, offsetof(eeconfig_profile_t, tick_rate), &p->tick_rate,
+        sizeof(p->tick_rate));
     break;
   }
   case COMMAND_GET_GAMEPAD_BUTTONS: {
@@ -439,11 +443,11 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->gamepad_buttons) &&
                    p->len <= NUM_KEYS - p->offset);
 
-    const uint32_t field_offset = offsetof(eeconfig_profile_t, gamepad_buttons) +
-                                  p->offset * sizeof(uint8_t);
+    const uint32_t field_offset =
+        offsetof(eeconfig_profile_t, gamepad_buttons) +
+        p->offset * sizeof(uint8_t);
     success = command_write_profile_bytes(
-        p->profile, field_offset, p->gamepad_buttons,
-        sizeof(uint8_t) * p->len);
+        p->profile, field_offset, p->gamepad_buttons, sizeof(uint8_t) * p->len);
     if (success)
       command_reset_if_current_profile(p->profile);
     break;
@@ -475,10 +479,10 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->profile < NUM_PROFILES);
     COMMAND_VERIFY(p->offset < NUM_MACROS);
 
-    memcpy(out->macros, eeconfig->profiles[p->profile].macros + p->offset,
-           M_MIN(M_ARRAY_SIZE(out->macros),
-                 (uint32_t)(NUM_MACROS - p->offset)) *
-               sizeof(macro_t));
+    memcpy(
+        out->macros, eeconfig->profiles[p->profile].macros + p->offset,
+        M_MIN(M_ARRAY_SIZE(out->macros), (uint32_t)(NUM_MACROS - p->offset)) *
+            sizeof(macro_t));
     break;
   }
   case COMMAND_SET_MACROS: {
@@ -491,8 +495,8 @@ void command_process(const uint8_t *buf) {
 
     // EECONFIG_WRITE_N cannot be used here because the field contains variables
     // (p->profile, p->offset), which are not allowed in offsetof().
-    const uint32_t field_offset = offsetof(eeconfig_profile_t, macros) +
-                                  p->offset * sizeof(macro_t);
+    const uint32_t field_offset =
+        offsetof(eeconfig_profile_t, macros) + p->offset * sizeof(macro_t);
     success = command_write_profile_bytes(p->profile, field_offset, p->macros,
                                           sizeof(macro_t) * p->len);
     if (success)
@@ -520,8 +524,8 @@ void command_process(const uint8_t *buf) {
     COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->data) &&
                    p->len <= sizeof(rgb_config_t) - p->offset);
 
-    const uint32_t field_offset = offsetof(eeconfig_profile_t, rgb_config) +
-                                  p->offset * sizeof(uint8_t);
+    const uint32_t field_offset =
+        offsetof(eeconfig_profile_t, rgb_config) + p->offset * sizeof(uint8_t);
     success = command_write_profile_bytes(p->profile, field_offset, p->data,
                                           sizeof(uint8_t) * p->len);
 
@@ -594,6 +598,32 @@ void command_process(const uint8_t *buf) {
     out->trackball_state.last_dy = state.last_dy;
     break;
   }
+#if defined(TRACKBALL_ENABLED)
+  case COMMAND_GET_TRACKBALL_CONFIG: {
+    const command_in_trackball_config_t *p = &in->trackball_config;
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    trackball_config_t config;
+    memcpy(&config, &eeconfig->profiles[p->profile].trackball_config,
+           sizeof(config));
+    memcpy(out->trackball_config.data, &config, sizeof(trackball_config_t));
+    break;
+  }
+  case COMMAND_SET_TRACKBALL_CONFIG: {
+    const command_in_trackball_config_t *p = &in->trackball_config;
+    trackball_config_t config;
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    memcpy(&config, &p->trackball_config, sizeof(config));
+    config = trackball_normalize_config(config);
+
+    success = command_write_profile_bytes(
+        p->profile, offsetof(eeconfig_profile_t, trackball_config), &config,
+        sizeof(trackball_config_t));
+
+    if (success)
+      command_reset_if_current_profile(p->profile);
+    break;
+  }
+#endif
   case COMMAND_GET_ANALOG_SCAN_CONFIG: {
     out->analog_scan_config.mux_sample_delay_us =
         analog_get_mux_sample_delay_us();
@@ -619,6 +649,51 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_SET_KALMAN_CONFIG: {
     success = matrix_set_kalman_config(&in->kalman_config);
+    break;
+  }
+  case COMMAND_GET_DISTANCE_CURVE_CONFIG: {
+    const command_in_distance_curve_config_get_t *p =
+        &in->distance_curve_config_get;
+    const distance_curve_config_t *config = matrix_get_distance_curve_config();
+    const uint32_t config_size = (uint32_t)sizeof(*config);
+
+    COMMAND_VERIFY(p->offset < config_size);
+
+    const uint32_t remaining = config_size - p->offset;
+    out->distance_curve_config.len =
+        (uint8_t)(remaining < COMMAND_DISTANCE_CURVE_CHUNK_SIZE
+                      ? remaining
+                      : COMMAND_DISTANCE_CURVE_CHUNK_SIZE);
+    memcpy(out->distance_curve_config.data,
+           ((const uint8_t *)config) + p->offset,
+           out->distance_curve_config.len);
+    break;
+  }
+  case COMMAND_SET_DISTANCE_CURVE_CONFIG: {
+    const command_in_distance_curve_config_set_t *p =
+        &in->distance_curve_config_set;
+    const uint32_t config_size =
+        (uint32_t)sizeof(command_distance_curve_staging);
+
+    COMMAND_VERIFY(p->len <= COMMAND_DISTANCE_CURVE_CHUNK_SIZE);
+    COMMAND_VERIFY(p->offset < config_size);
+    COMMAND_VERIFY((uint32_t)p->offset + p->len <= config_size);
+
+    if (p->offset == 0u) {
+      memset(&command_distance_curve_staging, 0,
+             sizeof(command_distance_curve_staging));
+      command_distance_curve_staged = true;
+    }
+
+    COMMAND_VERIFY(command_distance_curve_staged);
+    memcpy(((uint8_t *)&command_distance_curve_staging) + p->offset, p->data,
+           p->len);
+
+    if ((uint32_t)p->offset + p->len == config_size) {
+      success =
+          matrix_set_distance_curve_config(&command_distance_curve_staging);
+      command_distance_curve_staged = false;
+    }
     break;
   }
   case COMMAND_GET_DIAGNOSTIC_MODE: {

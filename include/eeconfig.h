@@ -20,6 +20,7 @@
 #include "wear_leveling.h"
 #include "rgb.h"
 #include "joystick.h"
+#include "trackball.h"
 
 //--------------------------------------------------------------------+
 // Keyboard Persistent Configuration
@@ -90,12 +91,15 @@ typedef struct __attribute__((packed)) {
 #if defined(JOYSTICK_ENABLED)
   joystick_config_t joystick_config;
 #endif
+#if defined(TRACKBALL_ENABLED)
+  trackball_config_t trackball_config;
+#endif
 } eeconfig_profile_t;
 
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0115
+#define EECONFIG_VERSION 0x0117
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -118,6 +122,8 @@ typedef struct __attribute__((packed)) {
   uint16_t mux_sample_delay_us;
   // Runtime-configurable Kalman filter parameters
   kalman_config_t kalman_config;
+  // Runtime-configurable switch-travel distance curves
+  distance_curve_config_t distance_curve_config;
 
   // Current profile index
   uint8_t current_profile;

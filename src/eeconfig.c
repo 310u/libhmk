@@ -46,6 +46,9 @@ static bool eeconfig_write_default_profile(uint8_t profile) {
 #if defined(JOYSTICK_ENABLED)
   joystick_init_default_config(&default_profile.joystick_config);
 #endif
+#if defined(TRACKBALL_ENABLED)
+  trackball_init_default_config(&default_profile.trackball_config);
+#endif
   return EECONFIG_WRITE(profiles[profile], &default_profile);
 }
 
@@ -86,6 +89,18 @@ bool eeconfig_reset(void) {
   status &= EECONFIG_WRITE(options, &default_options);
   EECONFIG_WRITE_LOCAL(mux_sample_delay_us, default_mux_sample_delay_us);
   status &= EECONFIG_WRITE(kalman_config, &default_kalman_config);
+
+  {
+    distance_curve_config_t default_distance_curve_config = {0};
+    default_distance_curve_config.num_curves = 1;
+    default_distance_curve_config.curves[0].num_points = 0;
+    default_distance_curve_config.curves[0].total_travel_um = 4000;
+    for (uint32_t k = 0; k < NUM_KEYS; k++)
+      default_distance_curve_config.key_curve[k] = 0;
+    status &= EECONFIG_WRITE(distance_curve_config,
+                             &default_distance_curve_config);
+  }
+
   EECONFIG_WRITE_LOCAL(current_profile, 0);
   EECONFIG_WRITE_LOCAL(last_non_default_profile, M_MIN(1, NUM_PROFILES - 1));
   for (uint32_t i = 0; i < NUM_PROFILES; i++)

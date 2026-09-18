@@ -292,6 +292,12 @@ static void layout_select_next_joystick_preset(void) {
 #endif
 }
 
+static void layout_select_next_trackball_preset(void) {
+#if defined(TRACKBALL_ENABLED)
+  trackball_select_next_preset();
+#endif
+}
+
 static void layout_select_next_joystick_scroll_profile(void) {
 #if defined(JOYSTICK_ENABLED)
   joystick_config_t jc = joystick_get_config();
@@ -378,6 +384,12 @@ void layout_reset_runtime_state(void) {
   memcpy(&joystick_config, &CURRENT_PROFILE.joystick_config,
          sizeof(joystick_config));
   joystick_apply_config(joystick_config);
+#endif
+#if defined(TRACKBALL_ENABLED)
+  trackball_config_t trackball_config;
+  memcpy(&trackball_config, &CURRENT_PROFILE.trackball_config,
+         sizeof(trackball_config));
+  trackball_apply_config(trackball_config);
 #endif
 
   for (uint32_t i = 0; i < NUM_KEYS; i++)
@@ -824,6 +836,10 @@ void layout_register(uint8_t key, uint8_t keycode) {
 
   case SP_TRACKBALL_CPI_DOWN:
     trackball_decrease_cpi();
+    break;
+
+  case SP_TRACKBALL_PRESET_NEXT:
+    layout_select_next_trackball_preset();
     break;
 
   case SP_RGB_TOGGLE:

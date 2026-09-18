@@ -293,8 +293,8 @@ void test_bottom_out_detection_arms_release_on_collision(void) {
   // Set key near bottom-out in distance space with downward velocity.
   key_matrix[0].pos = 240.0f;
   key_matrix[0].velocity = 5.0f;
-  key_matrix[0].adc_filtered = 2800;
-  key_matrix[0].adc_raw = 2800;
+  key_matrix[0].adc_filtered = 3000;
+  key_matrix[0].adc_raw = 3000;
   set_distance_bounds(0, 2400, 3050);
   key_matrix[0].key_dir = KEY_DIR_DOWN;
   key_matrix[0].is_pressed = true;
@@ -303,7 +303,7 @@ void test_bottom_out_detection_arms_release_on_collision(void) {
   // Sudden stop (collision with plate). The prediction overshoots the new
   // measurement, producing a large negative innovation that arms the reduced
   // release threshold.
-  analog_key_values[0] = 2800;
+  analog_key_values[0] = 3000;
   matrix_scan();
 
   // The key should remain pressed and the collision should arm the reduced
@@ -695,6 +695,162 @@ void test_rt_release_accepts_slow_stroke_regardless_of_velocity_threshold(void) 
   TEST_ASSERT_EQUAL_UINT8(KEY_DIR_UP, key_matrix[0].key_dir);
 }
 
+void test_adc_to_distance_identity_matches_linear(void) {
+  TEST_ASSERT_EQUAL_UINT8(128, adc_to_distance(128, 0, 255));
+  TEST_ASSERT_EQUAL_UINT8(128, adc_to_distance_with_curve(128, 0, 255, NULL));
+
+  distance_curve_t identity = {0};
+  identity.num_points = 0;
+  identity.total_travel_um = 4000;
+  TEST_ASSERT_EQUAL_UINT8(128,
+                          adc_to_distance_with_curve(128, 0, 255, &identity));
+}
+
+void test_adc_to_distance_curve_linear_interpolation(void) {
+  distance_curve_t curve = {0};
+  curve.num_points = 3;
+  curve.total_travel_um = 4000;
+  curve.points[0].adc = 0;
+  curve.points[0].dist = 0;
+  curve.points[1].adc = 128;
+  curve.points[1].dist = 64;
+  curve.points[2].adc = 255;
+  curve.points[2].dist = 255;
+
+  TEST_ASSERT_EQUAL_UINT8(32,
+                          adc_to_distance_with_curve(64, 0, 255, &curve));
+  TEST_ASSERT_EQUAL_UINT8(64,
+                          adc_to_distance_with_curve(128, 0, 255, &curve));
+  // Midpoint between (128, 64) and (255, 255) rounds to 159.
+  TEST_ASSERT_EQUAL_UINT8(159,
+                          adc_to_distance_with_curve(191, 0, 255, &curve));
+}
+
+void test_adc_to_distance_curve_clamps_outside_range(void) {
+  distance_curve_t curve = {0};
+  curve.num_points = 2;
+  curve.total_travel_um = 4000;
+  curve.points[0].adc = 64;
+  curve.points[0].dist = 32;
+  curve.points[1].adc = 192;
+  curve.points[1].dist = 200;
+
+  // Below the first curve point: clamp to the first point's distance.
+  TEST_ASSERT_EQUAL_UINT8(32,
+                          adc_to_distance_with_curve(32, 0, 255, &curve));
+  // Above the last curve point: clamp to the last point's distance.
+  TEST_ASSERT_EQUAL_UINT8(200,
+                          adc_to_distance_with_curve(223, 0, 255, &curve));
+}
+
+void test_matrix_set_distance_curve_config_rejects_null(void) {
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(NULL));
+}
+
+void test_matrix_set_distance_curve_config_rejects_invalid(void) {
+  distance_curve_config_t cfg = {0};
+
+  cfg.num_curves = DISTANCE_CURVE_PRESETS + 1;
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(&cfg));
+
+  cfg.num_curves = 1;
+  cfg.key_curve[0] = 1;
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(&cfg));
+  cfg.key_curve[0] = 0;
+
+  cfg.curves[0].num_points = 2;
+  cfg.curves[0].points[0].adc = 0;
+  cfg.curves[0].points[0].dist = 0;
+  cfg.curves[0].points[1].adc = 100;
+  cfg.curves[0].points[1].dist = 255;
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(&cfg));
+
+  cfg.curves[0].points[1].adc = 255;
+  cfg.curves[0].points[1].dist = 100;
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(&cfg));
+
+  cfg.curves[0].points[0].adc = 0;
+  cfg.curves[0].points[0].dist = 0;
+  cfg.curves[0].points[1].adc = 0;
+  cfg.curves[0].points[1].dist = 255;
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(&cfg));
+
+  cfg.curves[0].points[0].adc = 0;
+  cfg.curves[0].points[0].dist = 100;
+  cfg.curves[0].points[1].adc = 255;
+  cfg.curves[0].points[1].dist = 50;
+  TEST_ASSERT_FALSE(matrix_set_distance_curve_config(&cfg));
+}
+
+void test_matrix_set_distance_curve_config_accepts_valid(void) {
+  distance_curve_config_t cfg = {0};
+  cfg.num_curves = 1;
+  cfg.curves[0].num_points = 2;
+  cfg.curves[0].total_travel_um = 4000;
+  cfg.curves[0].points[0].adc = 0;
+  cfg.curves[0].points[0].dist = 0;
+  cfg.curves[0].points[1].adc = 255;
+  cfg.curves[0].points[1].dist = 255;
+  for (uint8_t i = 0; i < NUM_KEYS; i++) {
+    cfg.key_curve[i] = 0;
+  }
+
+  TEST_ASSERT_TRUE(matrix_set_distance_curve_config(&cfg));
+  const distance_curve_config_t *runtime = matrix_get_distance_curve_config();
+  TEST_ASSERT_EQUAL_UINT8(1, runtime->num_curves);
+  TEST_ASSERT_EQUAL_UINT16(4000, runtime->curves[0].total_travel_um);
+}
+
+void test_matrix_recalibrate_loads_distance_curve_config(void) {
+  distance_curve_config_t cfg = {0};
+  cfg.num_curves = 1;
+  cfg.curves[0].num_points = 2;
+  cfg.curves[0].total_travel_um = 3500;
+  cfg.curves[0].points[0].adc = 0;
+  cfg.curves[0].points[0].dist = 0;
+  cfg.curves[0].points[1].adc = 255;
+  cfg.curves[0].points[1].dist = 255;
+  for (uint8_t i = 0; i < NUM_KEYS; i++) {
+    cfg.key_curve[i] = 0;
+  }
+  mock_eeconfig.distance_curve_config = cfg;
+
+  matrix_recalibrate(false);
+
+  const distance_curve_config_t *runtime = matrix_get_distance_curve_config();
+  TEST_ASSERT_EQUAL_UINT8(1, runtime->num_curves);
+  TEST_ASSERT_EQUAL_UINT16(3500, runtime->curves[0].total_travel_um);
+}
+
+void test_matrix_distance_curve_applies_per_key(void) {
+  distance_curve_config_t cfg = {0};
+  cfg.num_curves = 2;
+  cfg.curves[0].num_points = 0;
+  cfg.curves[0].total_travel_um = 4000;
+  cfg.curves[1].num_points = 3;
+  cfg.curves[1].total_travel_um = 4000;
+  cfg.curves[1].points[0].adc = 0;
+  cfg.curves[1].points[0].dist = 0;
+  cfg.curves[1].points[1].adc = 128;
+  cfg.curves[1].points[1].dist = 200;
+  cfg.curves[1].points[2].adc = 255;
+  cfg.curves[1].points[2].dist = 255;
+  for (uint8_t i = 0; i < NUM_KEYS; i++) {
+    cfg.key_curve[i] = (i == 0) ? 1 : 0;
+  }
+  TEST_ASSERT_TRUE(matrix_set_distance_curve_config(&cfg));
+
+  // Hold both keys at the midpoint of the ADC range.
+  analog_key_values[0] = 2725;
+  analog_key_values[1] = 2725;
+  for (uint16_t i = 0; i < 128; i++) {
+    matrix_scan();
+  }
+
+  // Key 0 uses the steeper curve, so its estimated position is larger.
+  TEST_ASSERT_GREATER_THAN(key_matrix[1].pos, key_matrix[0].pos);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_matrix_large_delta_press_and_release_stay_responsive);
@@ -725,6 +881,14 @@ int main(void) {
   RUN_TEST(test_matrix_set_kalman_config_rejects_out_of_range_gains);
   RUN_TEST(test_matrix_set_kalman_config_rejects_negative_thresholds);
   RUN_TEST(test_matrix_set_kalman_config_accepts_valid_values);
+  RUN_TEST(test_adc_to_distance_identity_matches_linear);
+  RUN_TEST(test_adc_to_distance_curve_linear_interpolation);
+  RUN_TEST(test_adc_to_distance_curve_clamps_outside_range);
+  RUN_TEST(test_matrix_set_distance_curve_config_rejects_null);
+  RUN_TEST(test_matrix_set_distance_curve_config_rejects_invalid);
+  RUN_TEST(test_matrix_set_distance_curve_config_accepts_valid);
+  RUN_TEST(test_matrix_recalibrate_loads_distance_curve_config);
+  RUN_TEST(test_matrix_distance_curve_applies_per_key);
   RUN_TEST(test_ab_filter_in_distance_space);
   RUN_TEST(test_velocity_damping_on_idle);
   RUN_TEST(test_bottom_out_hold_counter_decrements);

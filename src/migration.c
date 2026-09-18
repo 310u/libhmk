@@ -31,6 +31,9 @@
 #define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG                         \
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY +                  \
    sizeof(kalman_config_t))
+#define MIGRATION_GLOBAL_CONFIG_SIZE_V1_17                                      \
+  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG +                            \
+   sizeof(distance_curve_config_t))
 
 #define MIGRATION_PROFILE_BASE_SIZE(advanced_key_size)                          \
   (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                       \
@@ -87,6 +90,12 @@
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT 0
 #endif
 
+#if defined(TRACKBALL_ENABLED)
+#define MIGRATION_PROFILE_TRACKBALL_SIZE sizeof(trackball_config_t)
+#else
+#define MIGRATION_PROFILE_TRACKBALL_SIZE 0
+#endif
+
 #define MIGRATION_PROFILE_SIZE_V1_8_PLUS                                      \
   (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_8 + \
    MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY)
@@ -108,6 +117,9 @@
 #define MIGRATION_PROFILE_SIZE_V1_12_PLUS                                     \
   (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
    MIGRATION_PROFILE_RGB_SIZE_V1_12 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
+
+#define MIGRATION_PROFILE_SIZE_V1_13_PLUS                                     \
+  (MIGRATION_PROFILE_SIZE_V1_12_PLUS + MIGRATION_PROFILE_TRACKBALL_SIZE)
 
 static uint8_t migration_bufs[2][sizeof(eeconfig_t)];
 
@@ -177,6 +189,12 @@ static bool v1_14_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static bool v1_15_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_15_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+static bool v1_16_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_16_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+static bool v1_17_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_17_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
                                      uint32_t old_size, uint32_t new_size);
@@ -342,6 +360,20 @@ static const migration_t migrations[] = {
         .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
         .global_config_func = v1_15_global_config_func,
         .profile_config_func = v1_15_profile_config_func,
+    },
+    {
+        .version = 0x0116,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_13_PLUS,
+        .global_config_func = v1_16_global_config_func,
+        .profile_config_func = v1_16_profile_config_func,
+    },
+    {
+        .version = 0x0117,
+        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_V1_17,
+        .profile_config_size = MIGRATION_PROFILE_SIZE_V1_13_PLUS,
+        .global_config_func = v1_17_global_config_func,
+        .profile_config_func = v1_17_profile_config_func,
     },
 };
 
@@ -1103,5 +1135,70 @@ bool v1_15_profile_config_func(uint8_t profile, uint8_t *dst,
   (void)profile;
 
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.15 -> v1.16 Migration
+//--------------------------------------------------------------------+
+
+bool v1_16_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0115)
+    return false;
+
+  // Global config unchanged.
+  migration_memcpy(&dst, &src, MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG);
+  return true;
+}
+
+bool v1_16_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  // Copy the entire previous profile (unchanged up to the new trackball config).
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
+
+#if defined(TRACKBALL_ENABLED)
+  // Append a default trackball config.
+  trackball_config_t trackball_config;
+  trackball_init_default_config(&trackball_config);
+  const uint8_t *trackball_src = (const uint8_t *)&trackball_config;
+  migration_memcpy(&dst, &trackball_src, sizeof(trackball_config));
+#endif
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.16 -> v1.17 Migration
+//--------------------------------------------------------------------+
+
+bool v1_17_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0116)
+    return false;
+
+  // Copy everything before current_profile/last_non_default_profile, then
+  // insert the new distance curve config, and finally preserve the trailing
+  // profile indices.
+  migration_memcpy(&dst, &src,
+                   MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG - 2);
+
+  distance_curve_config_t default_curve_config = {0};
+  default_curve_config.num_curves = 1;
+  default_curve_config.curves[0].num_points = 0;
+  default_curve_config.curves[0].total_travel_um = 4000;
+  const uint8_t *curve_src = (const uint8_t *)&default_curve_config;
+  migration_memcpy(&dst, &curve_src, sizeof(default_curve_config));
+
+  migration_memcpy(&dst, &src, 2);
+  return true;
+}
+
+bool v1_17_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  (void)profile;
+
+  // Profile layout unchanged.
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_13_PLUS);
   return true;
 }

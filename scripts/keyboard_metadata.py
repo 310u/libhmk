@@ -15,6 +15,7 @@ def build_keyboard_metadata(kb_json: dict, driver, diagnostic_capabilities=None)
         "encoder": bool(
             features.get("encoder", False) or kb_json.get("encoder", {}).get("map", [])
         ),
+        "trackball": bool(features.get("trackball", False)),
     }
 
     analog_keys = set()

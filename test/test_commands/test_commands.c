@@ -50,6 +50,11 @@ static uint32_t matrix_set_kalman_config_count;
 static bool mock_diagnostic_mode_active;
 static bool mock_diag_channel_identity_enabled;
 
+static distance_curve_config_t mock_distance_curve_config;
+static distance_curve_config_t mock_distance_curve_config_set;
+static bool matrix_set_distance_curve_config_result;
+static uint32_t matrix_set_distance_curve_config_count;
+
 void diagnostic_mode_init(void) { mock_diagnostic_mode_active = false; }
 bool diagnostic_mode_is_active(void) { return mock_diagnostic_mode_active; }
 void diagnostic_mode_set_active(bool active) {
@@ -108,6 +113,17 @@ bool matrix_set_kalman_config(const kalman_config_t *config) {
   if (config != NULL)
     mock_kalman_config_set = *config;
   return matrix_set_kalman_config_result;
+}
+
+const distance_curve_config_t *matrix_get_distance_curve_config(void) {
+  return &mock_distance_curve_config;
+}
+
+bool matrix_set_distance_curve_config(const distance_curve_config_t *config) {
+  matrix_set_distance_curve_config_count++;
+  if (config != NULL)
+    mock_distance_curve_config_set = *config;
+  return matrix_set_distance_curve_config_result;
 }
 
 const analog_scan_diagnostics_t *analog_get_scan_diagnostics(void) {
@@ -233,8 +249,8 @@ bool tud_hid_n_ready(uint8_t instance) {
 
 bool tud_hid_n_report(uint8_t instance, uint8_t report_id, const void *report,
                       uint16_t len) {
-  if (instance == USB_ITF_RAW_HID && report_id == 0 &&
-      len == RAW_HID_EP_SIZE && raw_hid_report_count < M_ARRAY_SIZE(raw_hid_reports)) {
+  if (instance == USB_ITF_RAW_HID && report_id == 0 && len == RAW_HID_EP_SIZE &&
+      raw_hid_report_count < M_ARRAY_SIZE(raw_hid_reports)) {
     memcpy(raw_hid_reports[raw_hid_report_count], report, len);
     raw_hid_report_count++;
   }
@@ -288,6 +304,11 @@ void setUp(void) {
   memset(&mock_kalman_config_set, 0, sizeof(mock_kalman_config_set));
   matrix_set_kalman_config_result = true;
   matrix_set_kalman_config_count = 0;
+  memset(&mock_distance_curve_config, 0, sizeof(mock_distance_curve_config));
+  memset(&mock_distance_curve_config_set, 0,
+         sizeof(mock_distance_curve_config_set));
+  matrix_set_distance_curve_config_result = true;
+  matrix_set_distance_curve_config_count = 0;
 #if defined(RGB_ENABLED)
   memset(&mock_rgb_config, 0, sizeof(mock_rgb_config));
 #endif
@@ -383,7 +404,8 @@ void test_command_enqueue_defers_processing_until_task(void) {
 
   mock_eeconfig.current_profile = 3;
 
-  TEST_ASSERT_TRUE(command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
+  TEST_ASSERT_TRUE(
+      command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
   TEST_ASSERT_EQUAL_UINT32(0, raw_hid_report_count);
 
   command_task();
@@ -398,8 +420,10 @@ void test_command_enqueue_rejects_second_pending_request(void) {
       .command_id = COMMAND_GET_PROFILE,
   };
 
-  TEST_ASSERT_TRUE(command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
-  TEST_ASSERT_FALSE(command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
+  TEST_ASSERT_TRUE(
+      command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
+  TEST_ASSERT_FALSE(
+      command_enqueue((const uint8_t *)&get_profile, RAW_HID_EP_SIZE));
 
   command_task();
 
@@ -449,19 +473,18 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
   TEST_ASSERT_EQUAL_UINT32(14375u, out.matrix_scan_diagnostics.matrix_scan_hz);
   TEST_ASSERT_EQUAL_UINT32(37u,
                            out.matrix_scan_diagnostics.last_matrix_scan_us);
-  TEST_ASSERT_EQUAL_UINT32(42u,
-                           out.matrix_scan_diagnostics.max_matrix_scan_us);
+  TEST_ASSERT_EQUAL_UINT32(42u, out.matrix_scan_diagnostics.max_matrix_scan_us);
   TEST_ASSERT_EQUAL_UINT32(28750u, out.matrix_scan_diagnostics.raw_scan_hz);
   TEST_ASSERT_EQUAL_UINT32(30u, out.matrix_scan_diagnostics.last_raw_scan_us);
   TEST_ASSERT_EQUAL_UINT32(44u, out.matrix_scan_diagnostics.max_raw_scan_us);
   TEST_ASSERT_EQUAL_UINT32(99u,
                            out.matrix_scan_diagnostics.full_scan_generation);
-  TEST_ASSERT_EQUAL_UINT32(
-      2u, out.matrix_scan_diagnostics.missed_generation_count);
+  TEST_ASSERT_EQUAL_UINT32(2u,
+                           out.matrix_scan_diagnostics.missed_generation_count);
   TEST_ASSERT_EQUAL_UINT32(
       2u, out.matrix_scan_diagnostics.matrix_processing_divider);
-  TEST_ASSERT_EQUAL_UINT32(
-      11u, out.matrix_scan_diagnostics.intentional_skip_count);
+  TEST_ASSERT_EQUAL_UINT32(11u,
+                           out.matrix_scan_diagnostics.intentional_skip_count);
   TEST_ASSERT_EQUAL_UINT32(
       17u, out.matrix_scan_diagnostics.coalesced_generation_count);
   TEST_ASSERT_EQUAL_UINT32(
@@ -470,8 +493,8 @@ void test_command_get_matrix_scan_diagnostics_returns_current_snapshot(void) {
       5u, out.matrix_scan_diagnostics.scheduler_budget_exhausted_count);
   TEST_ASSERT_EQUAL_UINT32(
       13u, out.matrix_scan_diagnostics.matrix_catchup_scan_count);
-  TEST_ASSERT_EQUAL_UINT16(
-      14375u, out.matrix_scan_diagnostics.expected_matrix_scan_hz);
+  TEST_ASSERT_EQUAL_UINT16(14375u,
+                           out.matrix_scan_diagnostics.expected_matrix_scan_hz);
   TEST_ASSERT_EQUAL_UINT8(
       9u, out.matrix_scan_diagnostics.matrix_fast_overrun_count);
 }
@@ -523,18 +546,18 @@ void test_command_get_analog_scan_diagnostics_returns_current_snapshot(void) {
 
   command_out_buffer_t out = {0};
   memcpy(&out, raw_hid_reports[0], sizeof(out));
-  TEST_ASSERT_EQUAL_UINT16(10u, out.analog_scan_diagnostics.mux_sample_delay_us);
+  TEST_ASSERT_EQUAL_UINT16(10u,
+                           out.analog_scan_diagnostics.mux_sample_delay_us);
   TEST_ASSERT_EQUAL_UINT16(8u, out.analog_scan_diagnostics.mux_step_count);
   TEST_ASSERT_EQUAL_UINT32(123u, out.analog_scan_diagnostics.scan_count);
-  TEST_ASSERT_EQUAL_UINT32(8200u,
-                           out.analog_scan_diagnostics.last_scan_cycles);
-  TEST_ASSERT_EQUAL_UINT32(9100u,
-                           out.analog_scan_diagnostics.max_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(8200u, out.analog_scan_diagnostics.last_scan_cycles);
+  TEST_ASSERT_EQUAL_UINT32(9100u, out.analog_scan_diagnostics.max_scan_cycles);
   TEST_ASSERT_EQUAL_UINT32(38u, out.analog_scan_diagnostics.last_scan_us);
   TEST_ASSERT_EQUAL_UINT32(42u, out.analog_scan_diagnostics.max_scan_us);
   TEST_ASSERT_EQUAL_UINT32(12345u,
                            out.analog_scan_diagnostics.estimated_scan_hz);
-  TEST_ASSERT_EQUAL_UINT32(3u, out.analog_scan_diagnostics.bad_channel_id_count);
+  TEST_ASSERT_EQUAL_UINT32(3u,
+                           out.analog_scan_diagnostics.bad_channel_id_count);
   TEST_ASSERT_EQUAL_UINT32(4u, out.analog_scan_diagnostics.dma_overrun_count);
   TEST_ASSERT_EQUAL_UINT32(7u, out.analog_scan_diagnostics.overrun_count);
   TEST_ASSERT_EQUAL_UINT32(5u, out.analog_scan_diagnostics.spi_error_count);
@@ -607,7 +630,8 @@ void test_command_set_analog_scan_config_updates_runtime_and_persists(void) {
   TEST_ASSERT_EQUAL_UINT16(12u, written_delay_us);
 }
 
-void test_command_set_analog_scan_config_rejects_invalid_value_without_write(void) {
+void test_command_set_analog_scan_config_rejects_invalid_value_without_write(
+    void) {
   command_in_buffer_t set_config = {
       .command_id = COMMAND_SET_ANALOG_SCAN_CONFIG,
       .analog_scan_config = {.mux_sample_delay_us = 0u},
@@ -719,6 +743,242 @@ void test_command_set_kalman_config_rejects_invalid_value_without_write(void) {
   TEST_ASSERT_EQUAL_UINT32(1u, matrix_set_kalman_config_count);
 }
 
+static void send_distance_curve_set_chunk(uint16_t offset, uint8_t len,
+                                          const uint8_t *data) {
+  command_in_buffer_t cmd = {0};
+  cmd.command_id = COMMAND_SET_DISTANCE_CURVE_CONFIG;
+  cmd.distance_curve_config_set.offset = offset;
+  cmd.distance_curve_config_set.len = len;
+  if (len > 0u)
+    memcpy(cmd.distance_curve_config_set.data, data, len);
+  command_send_and_flush(&cmd);
+}
+
+static void send_distance_curve_get(uint16_t offset) {
+  command_in_buffer_t cmd = {0};
+  cmd.command_id = COMMAND_GET_DISTANCE_CURVE_CONFIG;
+  cmd.distance_curve_config_get.offset = offset;
+  command_send_and_flush(&cmd);
+}
+
+void test_command_get_distance_curve_config_returns_first_chunk(void) {
+  memset(&mock_distance_curve_config, 0, sizeof(mock_distance_curve_config));
+  mock_distance_curve_config.num_curves = 2;
+  mock_distance_curve_config.curves[0].num_points = 2;
+  mock_distance_curve_config.curves[0].total_travel_um = 4000u;
+  mock_distance_curve_config.curves[0].points[0].adc = 0u;
+  mock_distance_curve_config.curves[0].points[0].dist = 0u;
+  mock_distance_curve_config.curves[0].points[1].adc = 255u;
+  mock_distance_curve_config.curves[0].points[1].dist = 255u;
+  mock_distance_curve_config.curves[1].num_points = 1;
+  mock_distance_curve_config.curves[1].total_travel_um = 3500u;
+  mock_distance_curve_config.curves[1].points[0].adc = 128u;
+  mock_distance_curve_config.curves[1].points[0].dist = 64u;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    mock_distance_curve_config.key_curve[i] = (uint8_t)(i & 0xFFu);
+  }
+
+  send_distance_curve_get(0u);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_DISTANCE_CURVE_CONFIG,
+                          raw_hid_reports[0][0]);
+
+  command_out_buffer_t out = {0};
+  memcpy(&out, raw_hid_reports[0], sizeof(out));
+  const uint32_t config_size = sizeof(mock_distance_curve_config);
+  const uint8_t expected_len = config_size < COMMAND_DISTANCE_CURVE_CHUNK_SIZE
+                                   ? (uint8_t)config_size
+                                   : COMMAND_DISTANCE_CURVE_CHUNK_SIZE;
+  TEST_ASSERT_EQUAL_UINT8(expected_len, out.distance_curve_config.len);
+  TEST_ASSERT_EQUAL_UINT8(2u, out.distance_curve_config.data[0]);
+  TEST_ASSERT_EQUAL_UINT8(2u, out.distance_curve_config.data[1]);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)4000u, out.distance_curve_config.data[2]);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(4000u >> 8),
+                          out.distance_curve_config.data[3]);
+  TEST_ASSERT_EQUAL_UINT8(0u, out.distance_curve_config.data[4]);
+  TEST_ASSERT_EQUAL_UINT8(0u, out.distance_curve_config.data[5]);
+  TEST_ASSERT_EQUAL_UINT8(255u, out.distance_curve_config.data[6]);
+  TEST_ASSERT_EQUAL_UINT8(255u, out.distance_curve_config.data[7]);
+}
+
+void test_command_get_distance_curve_config_returns_final_chunk(void) {
+  memset(&mock_distance_curve_config, 0, sizeof(mock_distance_curve_config));
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    mock_distance_curve_config.key_curve[i] = (uint8_t)(0xA5u + i);
+  }
+
+  const uint32_t config_size = sizeof(mock_distance_curve_config);
+  const uint16_t offset = (uint16_t)(config_size - 4u);
+
+  send_distance_curve_get(offset);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_DISTANCE_CURVE_CONFIG,
+                          raw_hid_reports[0][0]);
+
+  command_out_buffer_t out = {0};
+  memcpy(&out, raw_hid_reports[0], sizeof(out));
+  TEST_ASSERT_EQUAL_UINT8(4u, out.distance_curve_config.len);
+  const uint32_t first_key_index =
+      offset - offsetof(distance_curve_config_t, key_curve);
+  for (uint32_t i = 0; i < 4u; i++) {
+    TEST_ASSERT_EQUAL_UINT8(
+        mock_distance_curve_config.key_curve[first_key_index + i],
+        out.distance_curve_config.data[i]);
+  }
+}
+
+void test_command_get_distance_curve_config_rejects_invalid_offset(void) {
+  send_distance_curve_get((uint16_t)sizeof(mock_distance_curve_config));
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+}
+
+void test_command_set_distance_curve_config_updates_runtime_and_persists(void) {
+  distance_curve_config_t expected;
+  memset(&expected, 0, sizeof(expected));
+  expected.num_curves = 1;
+  expected.curves[0].num_points = 3;
+  expected.curves[0].total_travel_um = 4200u;
+  expected.curves[0].points[0].adc = 0u;
+  expected.curves[0].points[0].dist = 10u;
+  expected.curves[0].points[1].adc = 127u;
+  expected.curves[0].points[1].dist = 128u;
+  expected.curves[0].points[2].adc = 255u;
+  expected.curves[0].points[2].dist = 250u;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    expected.key_curve[i] = (uint8_t)((i * 7u) & 0xFFu);
+  }
+
+  const uint8_t *src = (const uint8_t *)&expected;
+  const uint32_t config_size = sizeof(expected);
+  uint32_t offset = 0;
+  while (offset < config_size) {
+    uint32_t len = config_size - offset;
+    if (len > COMMAND_DISTANCE_CURVE_CHUNK_SIZE)
+      len = COMMAND_DISTANCE_CURVE_CHUNK_SIZE;
+
+    send_distance_curve_set_chunk((uint16_t)offset, (uint8_t)len, &src[offset]);
+
+    const bool is_final = (offset + len == config_size);
+    TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+    TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_DISTANCE_CURVE_CONFIG,
+                            raw_hid_reports[0][0]);
+    TEST_ASSERT_EQUAL_UINT32(is_final ? 1u : 0u,
+                             matrix_set_distance_curve_config_count);
+
+    raw_hid_report_count = 0;
+    offset += len;
+  }
+
+  TEST_ASSERT_EQUAL_UINT32(1u, matrix_set_distance_curve_config_count);
+  TEST_ASSERT_EQUAL_MEMORY(&expected, &mock_distance_curve_config_set,
+                           sizeof(expected));
+}
+
+void test_command_set_distance_curve_config_rejects_invalid_value_without_write(
+    void) {
+  distance_curve_config_t expected;
+  memset(&expected, 0, sizeof(expected));
+  expected.num_curves = 1;
+  expected.curves[0].num_points = 2;
+  expected.curves[0].total_travel_um = 3000u;
+  expected.curves[0].points[0].adc = 0u;
+  expected.curves[0].points[0].dist = 0u;
+  expected.curves[0].points[1].adc = 255u;
+  expected.curves[0].points[1].dist = 255u;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    expected.key_curve[i] = (uint8_t)i;
+  }
+
+  matrix_set_distance_curve_config_result = false;
+
+  const uint8_t *src = (const uint8_t *)&expected;
+  const uint32_t config_size = sizeof(expected);
+  uint32_t offset = 0;
+  while (offset < config_size) {
+    uint32_t len = config_size - offset;
+    if (len > COMMAND_DISTANCE_CURVE_CHUNK_SIZE)
+      len = COMMAND_DISTANCE_CURVE_CHUNK_SIZE;
+
+    send_distance_curve_set_chunk((uint16_t)offset, (uint8_t)len, &src[offset]);
+
+    offset += len;
+    if (offset < config_size)
+      raw_hid_report_count = 0;
+  }
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(1u, matrix_set_distance_curve_config_count);
+}
+
+void test_command_set_distance_curve_config_rejects_invalid_range(void) {
+  const uint8_t dummy[4] = {0x12, 0x34, 0x56, 0x78};
+
+  send_distance_curve_set_chunk(
+      (uint16_t)(sizeof(distance_curve_config_t) - 2u), 4u, dummy);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(0u, matrix_set_distance_curve_config_count);
+}
+
+void test_command_set_distance_curve_config_rejects_nonzero_first_chunk(void) {
+  const uint8_t dummy[8] = {0};
+
+  send_distance_curve_set_chunk(8u, 8u, dummy);
+
+  TEST_ASSERT_EQUAL_UINT32(1, raw_hid_report_count);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_UNKNOWN, raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT32(0u, matrix_set_distance_curve_config_count);
+}
+
+void test_command_set_distance_curve_config_resets_staging_on_offset_zero(
+    void) {
+  distance_curve_config_t expected;
+  memset(&expected, 0, sizeof(expected));
+  expected.num_curves = 1;
+  expected.curves[0].num_points = 2;
+  expected.curves[0].total_travel_um = 5000u;
+  expected.curves[0].points[0].adc = 0u;
+  expected.curves[0].points[0].dist = 0u;
+  expected.curves[0].points[1].adc = 255u;
+  expected.curves[0].points[1].dist = 255u;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    expected.key_curve[i] = (uint8_t)(0xC0u + i);
+  }
+
+  const uint8_t *src = (const uint8_t *)&expected;
+  const uint32_t config_size = sizeof(expected);
+
+  // First start with a different prefix, then restart cleanly.
+  const uint8_t dummy[4] = {0xAA, 0xBB, 0xCC, 0xDD};
+  send_distance_curve_set_chunk(0u, 4u, dummy);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_DISTANCE_CURVE_CONFIG,
+                          raw_hid_reports[0][0]);
+  raw_hid_report_count = 0;
+
+  // Restart from offset 0 with the real config.
+  uint32_t offset = 0;
+  while (offset < config_size) {
+    uint32_t len = config_size - offset;
+    if (len > COMMAND_DISTANCE_CURVE_CHUNK_SIZE)
+      len = COMMAND_DISTANCE_CURVE_CHUNK_SIZE;
+
+    send_distance_curve_set_chunk((uint16_t)offset, (uint8_t)len, &src[offset]);
+
+    raw_hid_report_count = 0;
+    offset += len;
+  }
+
+  TEST_ASSERT_EQUAL_UINT32(1u, matrix_set_distance_curve_config_count);
+  TEST_ASSERT_EQUAL_MEMORY(&expected, &mock_distance_curve_config_set,
+                           sizeof(expected));
+}
+
 void test_command_capture_analog_diag_baseline_requires_diag_firmware(void) {
   command_in_buffer_t capture = {
       .command_id = COMMAND_CAPTURE_ANALOG_DIAG_BASELINE,
@@ -740,16 +1000,14 @@ void test_command_diagnostic_mode_can_be_enabled_and_queried(void) {
   command_send_and_flush(&enable);
 
   TEST_ASSERT_TRUE(mock_diagnostic_mode_active);
-  TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_DIAGNOSTIC_MODE,
-                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_SET_DIAGNOSTIC_MODE, raw_hid_reports[0][0]);
   TEST_ASSERT_EQUAL_UINT8(1u, raw_hid_reports[0][1]);
 
   raw_hid_report_count = 0;
   command_in_buffer_t get = {.command_id = COMMAND_GET_DIAGNOSTIC_MODE};
   command_send_and_flush(&get);
 
-  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_DIAGNOSTIC_MODE,
-                          raw_hid_reports[0][0]);
+  TEST_ASSERT_EQUAL_UINT8(COMMAND_GET_DIAGNOSTIC_MODE, raw_hid_reports[0][0]);
   TEST_ASSERT_EQUAL_UINT8(1u, raw_hid_reports[0][1]);
 }
 
@@ -771,7 +1029,8 @@ void test_command_run_analog_channel_identity_requires_diag_firmware(void) {
 }
 
 #if defined(RGB_ENABLED)
-void test_command_set_host_time_updates_runtime_clock_without_flash_write(void) {
+void test_command_set_host_time_updates_runtime_clock_without_flash_write(
+    void) {
   command_in_buffer_t set_host_time = {
       .command_id = COMMAND_SET_HOST_TIME,
       .host_time =
@@ -808,15 +1067,27 @@ int main(void) {
   RUN_TEST(test_command_reset_analog_scan_diagnostics_clears_snapshot);
   RUN_TEST(test_command_get_analog_scan_config_returns_current_value);
   RUN_TEST(test_command_set_analog_scan_config_updates_runtime_and_persists);
-  RUN_TEST(test_command_set_analog_scan_config_rejects_invalid_value_without_write);
+  RUN_TEST(
+      test_command_set_analog_scan_config_rejects_invalid_value_without_write);
   RUN_TEST(test_command_get_kalman_config_returns_current_value);
   RUN_TEST(test_command_set_kalman_config_updates_runtime_and_persists);
   RUN_TEST(test_command_set_kalman_config_rejects_invalid_value_without_write);
+  RUN_TEST(test_command_get_distance_curve_config_returns_first_chunk);
+  RUN_TEST(test_command_get_distance_curve_config_returns_final_chunk);
+  RUN_TEST(test_command_get_distance_curve_config_rejects_invalid_offset);
+  RUN_TEST(test_command_set_distance_curve_config_updates_runtime_and_persists);
+  RUN_TEST(
+      test_command_set_distance_curve_config_rejects_invalid_value_without_write);
+  RUN_TEST(test_command_set_distance_curve_config_rejects_invalid_range);
+  RUN_TEST(test_command_set_distance_curve_config_rejects_nonzero_first_chunk);
+  RUN_TEST(
+      test_command_set_distance_curve_config_resets_staging_on_offset_zero);
   RUN_TEST(test_command_capture_analog_diag_baseline_requires_diag_firmware);
   RUN_TEST(test_command_diagnostic_mode_can_be_enabled_and_queried);
   RUN_TEST(test_command_run_analog_channel_identity_requires_diag_firmware);
 #if defined(RGB_ENABLED)
-  RUN_TEST(test_command_set_host_time_updates_runtime_clock_without_flash_write);
+  RUN_TEST(
+      test_command_set_host_time_updates_runtime_clock_without_flash_write);
 #endif
   return UNITY_END();
 }
