@@ -20,52 +20,53 @@
 
 #define MIGRATION_GLOBAL_CONFIG_SIZE_V1_0 12
 #define MIGRATION_GLOBAL_CONFIG_SIZE_V1_1 14
-#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_BOTTOM_OUT                             \
+#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_BOTTOM_OUT                           \
   (MIGRATION_GLOBAL_CONFIG_SIZE_V1_1 + NUM_KEYS * 2)
-#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32                             \
+#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32                            \
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_BOTTOM_OUT + 2)
-#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY               \
+#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY              \
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32 + 2)
-#define MIGRATION_GLOBAL_CONFIG_SIZE_V1_14                                      \
+#define MIGRATION_GLOBAL_CONFIG_SIZE_V1_14                                     \
   (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY + 18)
-#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG                         \
-  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY +                  \
+#define MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG                        \
+  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY +                 \
    sizeof(kalman_config_t))
-#define MIGRATION_GLOBAL_CONFIG_SIZE_V1_17                                      \
-  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG +                            \
+#define MIGRATION_GLOBAL_CONFIG_SIZE_V1_17                                     \
+  (MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG +                           \
    sizeof(distance_curve_config_t))
 
-#define MIGRATION_PROFILE_BASE_SIZE(advanced_key_size)                          \
-  (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                       \
+#define MIGRATION_PROFILE_BASE_SIZE(advanced_key_size)                         \
+  (NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +                                      \
    NUM_ADVANCED_KEYS * (advanced_key_size) + NUM_KEYS + 9 + 1)
-#define MIGRATION_PROFILE_ADVANCED_KEYS_SIZE(advanced_key_size)                 \
+#define MIGRATION_PROFILE_ADVANCED_KEYS_SIZE(advanced_key_size)                \
   (NUM_ADVANCED_KEYS * (advanced_key_size))
-#define MIGRATION_PROFILE_SIZE_WITH_MACROS(advanced_key_size)                   \
-  (MIGRATION_PROFILE_BASE_SIZE(advanced_key_size) +                             \
+#define MIGRATION_PROFILE_SIZE_WITH_MACROS(advanced_key_size)                  \
+  (MIGRATION_PROFILE_BASE_SIZE(advanced_key_size) +                            \
    NUM_MACROS * sizeof(macro_t))
-#define MIGRATION_PROFILE_TRAILING_SIZE_WITH_MACROS(advanced_key_size)          \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(advanced_key_size) -                      \
-   (NUM_LAYERS * NUM_KEYS) - (NUM_KEYS * 4) -                                   \
+#define MIGRATION_PROFILE_TRAILING_SIZE_WITH_MACROS(advanced_key_size)         \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(advanced_key_size) -                     \
+   (NUM_LAYERS * NUM_KEYS) - (NUM_KEYS * 4) -                                  \
    MIGRATION_PROFILE_ADVANCED_KEYS_SIZE(advanced_key_size))
 
 #if defined(RGB_ENABLED)
 #define MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE (3 * NUM_KEYS)
-#define MIGRATION_PROFILE_RGB_SIZE_V1_8 (7 + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
-#define MIGRATION_PROFILE_RGB_SIZE_V1_A                                      \
+#define MIGRATION_PROFILE_RGB_SIZE_V1_8                                        \
+  (7 + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
+#define MIGRATION_PROFILE_RGB_SIZE_V1_A                                        \
   (7 + 1 + 2 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
-#define MIGRATION_PROFILE_RGB_SIZE_V1_D                                      \
+#define MIGRATION_PROFILE_RGB_SIZE_V1_D                                        \
   (7 + 3 + 1 + 2 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
-#define MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE                       \
+#define MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE                        \
   (3 * RGB_TRIGGER_STATE_COLOR_COUNT)
-#define MIGRATION_PROFILE_RGB_SIZE_V1_11                                     \
-  (MIGRATION_PROFILE_RGB_SIZE_V1_D +                                          \
+#define MIGRATION_PROFILE_RGB_SIZE_V1_11                                       \
+  (MIGRATION_PROFILE_RGB_SIZE_V1_D +                                           \
    MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE)
-#define MIGRATION_PROFILE_RGB_SIZE_V1_12                                     \
+#define MIGRATION_PROFILE_RGB_SIZE_V1_12                                       \
   (MIGRATION_PROFILE_RGB_SIZE_V1_11 + sizeof(rgb_color_t))
-#define MIGRATION_PROFILE_RGB_V1_A_TAIL_SIZE                                 \
+#define MIGRATION_PROFILE_RGB_V1_A_TAIL_SIZE                                   \
   (4 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE)
-#define MIGRATION_PROFILE_RGB_V1_11_TAIL_SIZE                                \
-  (4 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE +          \
+#define MIGRATION_PROFILE_RGB_V1_11_TAIL_SIZE                                  \
+  (4 + 3 * NUM_LAYERS + MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE +            \
    MIGRATION_PROFILE_RGB_TRIGGER_STATE_COLORS_SIZE)
 #else
 #define MIGRATION_PROFILE_RGB_PER_KEY_COLORS_SIZE 0
@@ -81,7 +82,7 @@
 
 #if defined(JOYSTICK_ENABLED)
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY JOYSTICK_CONFIG_LEGACY_SIZE
-#define MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F \
+#define MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F                                   \
   offsetof(joystick_config_t, active_mouse_preset)
 #define MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT sizeof(joystick_config_t)
 #else
@@ -96,29 +97,29 @@
 #define MIGRATION_PROFILE_TRACKBALL_SIZE 0
 #endif
 
-#define MIGRATION_PROFILE_SIZE_V1_8_PLUS                                      \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_8 + \
+#define MIGRATION_PROFILE_SIZE_V1_8_PLUS                                       \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_8 +  \
    MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY)
-#define MIGRATION_PROFILE_SIZE_V1_A_PLUS                                      \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_A + \
+#define MIGRATION_PROFILE_SIZE_V1_A_PLUS                                       \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_A +  \
    MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY)
-#define MIGRATION_PROFILE_SIZE_V1_D_PLUS                                      \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D + \
+#define MIGRATION_PROFILE_SIZE_V1_D_PLUS                                       \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D +  \
    MIGRATION_PROFILE_JOYSTICK_SIZE_LEGACY)
-#define MIGRATION_PROFILE_SIZE_V1_F_PLUS                                      \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D + \
+#define MIGRATION_PROFILE_SIZE_V1_F_PLUS                                       \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D +  \
    MIGRATION_PROFILE_JOYSTICK_SIZE_V1_F)
-#define MIGRATION_PROFILE_SIZE_V1_10_PLUS                                     \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D + \
+#define MIGRATION_PROFILE_SIZE_V1_10_PLUS                                      \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_D +  \
    sizeof(joystick_config_t))
-#define MIGRATION_PROFILE_SIZE_V1_11_PLUS                                     \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
-   MIGRATION_PROFILE_RGB_SIZE_V1_11 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
-#define MIGRATION_PROFILE_SIZE_V1_12_PLUS                                     \
-  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) +                                  \
-   MIGRATION_PROFILE_RGB_SIZE_V1_12 + MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
+#define MIGRATION_PROFILE_SIZE_V1_11_PLUS                                      \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_11 + \
+   MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
+#define MIGRATION_PROFILE_SIZE_V1_12_PLUS                                      \
+  (MIGRATION_PROFILE_SIZE_WITH_MACROS(13) + MIGRATION_PROFILE_RGB_SIZE_V1_12 + \
+   MIGRATION_PROFILE_JOYSTICK_SIZE_CURRENT)
 
-#define MIGRATION_PROFILE_SIZE_V1_13_PLUS                                     \
+#define MIGRATION_PROFILE_SIZE_V1_13_PLUS                                      \
   (MIGRATION_PROFILE_SIZE_V1_12_PLUS + MIGRATION_PROFILE_TRACKBALL_SIZE)
 
 static uint8_t migration_bufs[2][sizeof(eeconfig_t)];
@@ -177,7 +178,7 @@ static bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
 static bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
-                                     const uint8_t *src);
+                                      const uint8_t *src);
 static bool v1_12_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_12_profile_config_func(uint8_t profile, uint8_t *dst,
                                       const uint8_t *src);
@@ -255,7 +256,8 @@ static const migration_t migrations[] = {
         .profile_config_func = v1_6_profile_config_func,
     },
     {
-        // v1.6 -> v1.7: Removed TAP_DANCE, added double_tap_keycode to tap_hold.
+        // v1.6 -> v1.7: Removed TAP_DANCE, added double_tap_keycode to
+        // tap_hold.
         //               Each advanced_key grew from 12 to 13 bytes.
         .version = 0x0107,
         .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_BOTTOM_OUT,
@@ -342,7 +344,8 @@ static const migration_t migrations[] = {
     },
     {
         .version = 0x0113,
-        .global_config_size = MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY,
+        .global_config_size =
+            MIGRATION_GLOBAL_CONFIG_SIZE_WITH_OPTIONS32_AND_MUX_DELAY,
         .profile_config_size = MIGRATION_PROFILE_SIZE_V1_12_PLUS,
         .global_config_func = v1_13_global_config_func,
         .profile_config_func = v1_13_profile_config_func,
@@ -484,10 +487,9 @@ static void migration_assign_rgb_color(uint8_t **dst, rgb_color_t color) {
 static void migration_append_trigger_state_colors(uint8_t **dst,
                                                   rgb_color_t solid_color,
                                                   rgb_color_t secondary_color) {
-  migration_assign_rgb_color(
-      dst, (rgb_color_t){.r = secondary_color.r >> 2,
-                         .g = secondary_color.g >> 2,
-                         .b = secondary_color.b >> 2});
+  migration_assign_rgb_color(dst, (rgb_color_t){.r = secondary_color.r >> 2,
+                                                .g = secondary_color.g >> 2,
+                                                .b = secondary_color.b >> 2});
   migration_assign_rgb_color(dst, secondary_color);
   migration_assign_rgb_color(dst, solid_color);
   migration_assign_rgb_color(dst, solid_color);
@@ -631,7 +633,7 @@ bool v1_4_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_4_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Copy the entire profile
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_BASE_SIZE(12));
 
@@ -654,7 +656,7 @@ bool v1_5_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Copy existing profile data (keymap + actuation + advanced_keys +
   // gamepad_buttons + gamepad_options + tick_rate)
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_BASE_SIZE(12));
@@ -678,7 +680,7 @@ bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Profile layout unchanged: advanced_key size is still 12 bytes
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_WITH_MACROS(12));
   return true;
@@ -698,13 +700,13 @@ bool v1_7_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Copy keymap and actuation map (unchanged)
   migration_memcpy(&dst, &src, NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4);
 
   // Expand each advanced key from 12 bytes to 13 bytes.
-  // The extra byte is double_tap_keycode (appended at the end of tap_hold data),
-  // defaulted to 0 (KC_NO).
+  // The extra byte is double_tap_keycode (appended at the end of tap_hold
+  // data), defaulted to 0 (KC_NO).
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
     // Copy 12 bytes of old entry as-is
     migration_memcpy(&dst, &src, 12);
@@ -713,8 +715,7 @@ bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
   }
 
   // Copy remaining profile data unchanged
-  migration_memcpy(
-      &dst, &src, MIGRATION_PROFILE_TRAILING_SIZE_WITH_MACROS(13));
+  migration_memcpy(&dst, &src, MIGRATION_PROFILE_TRAILING_SIZE_WITH_MACROS(13));
   return true;
 }
 
@@ -732,15 +733,17 @@ bool v1_A_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_A_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Pre-RGB stuff remains the same
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_WITH_MACROS(13));
 
 #if defined(RGB_ENABLED)
-  // At v1.9 rgb_config was: enabled(1)+brightness(1)+effect(1)+solid(3)+speed(1) = 7 bytes
+  // At v1.9 rgb_config was:
+  // enabled(1)+brightness(1)+effect(1)+solid(3)+speed(1) = 7 bytes
   migration_memcpy(&dst, &src, 7);
 
-  // New fields at v1.A: sleep_timeout(1) + layer_indicator_mode(1) + layer_indicator_key(1) + layer_colors(3*NUM_LAYERS)
+  // New fields at v1.A: sleep_timeout(1) + layer_indicator_mode(1) +
+  // layer_indicator_key(1) + layer_colors(3*NUM_LAYERS)
   migration_memset(&dst, 0, 1 + 2 + 3 * NUM_LAYERS);
 
   // Copy per_key_colors (3*NUM_KEYS)
@@ -774,7 +777,7 @@ bool v1_B_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_B_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Entire profile config size remains unchanged
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_A_PLUS);
   return true;
@@ -809,7 +812,7 @@ bool v1_C_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_C_profile_config_func(uint8_t profile, uint8_t *dst,
-                               const uint8_t *src) {
+                              const uint8_t *src) {
   // Entire profile config size remains unchanged
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_A_PLUS);
   return true;
@@ -985,8 +988,8 @@ bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
 
   const rgb_config_t *legacy_rgb =
       (const rgb_config_t *)(dst - MIGRATION_PROFILE_RGB_SIZE_V1_D);
-  migration_append_trigger_state_colors(
-      &dst, legacy_rgb->solid_color, legacy_rgb->secondary_color);
+  migration_append_trigger_state_colors(&dst, legacy_rgb->solid_color,
+                                        legacy_rgb->secondary_color);
 #endif
 
 #if defined(JOYSTICK_ENABLED)
@@ -1080,7 +1083,7 @@ bool v1_14_global_config_func(uint8_t *dst, const uint8_t *src) {
 }
 
 bool v1_14_profile_config_func(uint8_t profile, uint8_t *dst,
-                                const uint8_t *src) {
+                               const uint8_t *src) {
   (void)profile;
 
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
@@ -1110,7 +1113,8 @@ bool v1_15_global_config_func(uint8_t *dst, const uint8_t *src) {
   src += sizeof(old_position_gain);
   memcpy(&old_velocity_gain, src, sizeof(old_velocity_gain));
   src += sizeof(old_velocity_gain);
-  src += 8; // Skip old bottom_out_arm_speed_factor and bottom_out_arm_min_threshold
+  src += 8; // Skip old bottom_out_arm_speed_factor and
+            // bottom_out_arm_min_threshold
   memcpy(&old_noise_deadzone, src, sizeof(old_noise_deadzone));
   src += sizeof(old_noise_deadzone);
 
@@ -1155,7 +1159,8 @@ bool v1_16_profile_config_func(uint8_t profile, uint8_t *dst,
                                const uint8_t *src) {
   (void)profile;
 
-  // Copy the entire previous profile (unchanged up to the new trackball config).
+  // Copy the entire previous profile (unchanged up to the new trackball
+  // config).
   migration_memcpy(&dst, &src, MIGRATION_PROFILE_SIZE_V1_12_PLUS);
 
 #if defined(TRACKBALL_ENABLED)
@@ -1183,10 +1188,10 @@ bool v1_17_global_config_func(uint8_t *dst, const uint8_t *src) {
   migration_memcpy(&dst, &src,
                    MIGRATION_GLOBAL_CONFIG_SIZE_WITH_KALMAN_CONFIG - 2);
 
+  const distance_curve_t default_curve = DEFAULT_DISTANCE_CURVE;
   distance_curve_config_t default_curve_config = {0};
   default_curve_config.num_curves = 1;
-  default_curve_config.curves[0].num_points = 0;
-  default_curve_config.curves[0].total_travel_um = 4000;
+  default_curve_config.curves[0] = default_curve;
   const uint8_t *curve_src = (const uint8_t *)&default_curve_config;
   migration_memcpy(&dst, &curve_src, sizeof(default_curve_config));
 

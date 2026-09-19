@@ -25,8 +25,8 @@ static eeconfig_options_t default_options = DEFAULT_OPTIONS;
 static eeconfig_calibration_t default_calibration = DEFAULT_CALIBRATION;
 static const kalman_config_t default_kalman_config =
     (kalman_config_t)DEFAULT_KALMAN_CONFIG;
-static const uint8_t
-    default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] = DEFAULT_KEYMAPS;
+static const uint8_t default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] =
+    DEFAULT_KEYMAPS;
 #if defined(RGB_ENABLED)
 static const rgb_config_t default_rgb_config = (rgb_config_t)DEFAULT_RGB_CONFIG;
 #endif
@@ -91,14 +91,14 @@ bool eeconfig_reset(void) {
   status &= EECONFIG_WRITE(kalman_config, &default_kalman_config);
 
   {
+    const distance_curve_t default_curve = DEFAULT_DISTANCE_CURVE;
     distance_curve_config_t default_distance_curve_config = {0};
     default_distance_curve_config.num_curves = 1;
-    default_distance_curve_config.curves[0].num_points = 0;
-    default_distance_curve_config.curves[0].total_travel_um = 4000;
+    default_distance_curve_config.curves[0] = default_curve;
     for (uint32_t k = 0; k < NUM_KEYS; k++)
       default_distance_curve_config.key_curve[k] = 0;
-    status &= EECONFIG_WRITE(distance_curve_config,
-                             &default_distance_curve_config);
+    status &=
+        EECONFIG_WRITE(distance_curve_config, &default_distance_curve_config);
   }
 
   EECONFIG_WRITE_LOCAL(current_profile, 0);

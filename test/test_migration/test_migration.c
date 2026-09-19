@@ -427,8 +427,8 @@ static void build_legacy_config_v1_13(uint32_t options, uint16_t mux_delay) {
 }
 
 static void build_legacy_config_v1_14(uint32_t options, uint16_t mux_delay,
-                                       float position_gain, float velocity_gain,
-                                       uint16_t noise_deadzone) {
+                                      float position_gain, float velocity_gain,
+                                      uint16_t noise_deadzone) {
   uint8_t *dst = legacy_config;
 
   write_u32(&dst, EECONFIG_MAGIC_START);
@@ -455,22 +455,27 @@ static void build_legacy_config_v1_14(uint32_t options, uint16_t mux_delay,
 
 static void assert_rgb_per_key_color(const rgb_config_t *config, uint8_t seed,
                                      uint8_t index) {
-  TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index), config->per_key_colors[index].r);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index),
+                          config->per_key_colors[index].r);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index + 1),
                           config->per_key_colors[index].g);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)(seed + index + 2),
                           config->per_key_colors[index].b);
 }
 
-static void assert_trigger_state_defaults_from_legacy(
-    const rgb_config_t *config, rgb_color_t solid_color,
-    rgb_color_t secondary_color) {
-  TEST_ASSERT_EQUAL_UINT8(secondary_color.r >> 2,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_IDLE].r);
-  TEST_ASSERT_EQUAL_UINT8(secondary_color.g >> 2,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_IDLE].g);
-  TEST_ASSERT_EQUAL_UINT8(secondary_color.b >> 2,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_IDLE].b);
+static void
+assert_trigger_state_defaults_from_legacy(const rgb_config_t *config,
+                                          rgb_color_t solid_color,
+                                          rgb_color_t secondary_color) {
+  TEST_ASSERT_EQUAL_UINT8(
+      secondary_color.r >> 2,
+      config->trigger_state_colors[RGB_TRIGGER_STATE_IDLE].r);
+  TEST_ASSERT_EQUAL_UINT8(
+      secondary_color.g >> 2,
+      config->trigger_state_colors[RGB_TRIGGER_STATE_IDLE].g);
+  TEST_ASSERT_EQUAL_UINT8(
+      secondary_color.b >> 2,
+      config->trigger_state_colors[RGB_TRIGGER_STATE_IDLE].b);
   TEST_ASSERT_EQUAL_UINT8(
       secondary_color.r,
       config->trigger_state_colors[RGB_TRIGGER_STATE_RELEASE].r);
@@ -480,24 +485,27 @@ static void assert_trigger_state_defaults_from_legacy(
   TEST_ASSERT_EQUAL_UINT8(
       secondary_color.b,
       config->trigger_state_colors[RGB_TRIGGER_STATE_RELEASE].b);
-  TEST_ASSERT_EQUAL_UINT8(solid_color.r,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_PRESS].r);
-  TEST_ASSERT_EQUAL_UINT8(solid_color.g,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_PRESS].g);
-  TEST_ASSERT_EQUAL_UINT8(solid_color.b,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_PRESS].b);
-  TEST_ASSERT_EQUAL_UINT8(solid_color.r,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].r);
-  TEST_ASSERT_EQUAL_UINT8(solid_color.g,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].g);
-  TEST_ASSERT_EQUAL_UINT8(solid_color.b,
-                          config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].b);
+  TEST_ASSERT_EQUAL_UINT8(
+      solid_color.r, config->trigger_state_colors[RGB_TRIGGER_STATE_PRESS].r);
+  TEST_ASSERT_EQUAL_UINT8(
+      solid_color.g, config->trigger_state_colors[RGB_TRIGGER_STATE_PRESS].g);
+  TEST_ASSERT_EQUAL_UINT8(
+      solid_color.b, config->trigger_state_colors[RGB_TRIGGER_STATE_PRESS].b);
+  TEST_ASSERT_EQUAL_UINT8(
+      solid_color.r, config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].r);
+  TEST_ASSERT_EQUAL_UINT8(
+      solid_color.g, config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].g);
+  TEST_ASSERT_EQUAL_UINT8(
+      solid_color.b, config->trigger_state_colors[RGB_TRIGGER_STATE_HOLD].b);
 }
 
 static void assert_background_matches_secondary(const rgb_config_t *config) {
-  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.r, config->background_color.r);
-  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.g, config->background_color.g);
-  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.b, config->background_color.b);
+  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.r,
+                          config->background_color.r);
+  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.g,
+                          config->background_color.g);
+  TEST_ASSERT_EQUAL_UINT8(config->secondary_color.b,
+                          config->background_color.b);
 }
 
 static void assert_default_radial_boundaries(const joystick_config_t *config) {
@@ -563,16 +571,21 @@ void test_migration_v1_0_reaches_current_and_preserves_profile_data(void) {
   TEST_ASSERT_EQUAL_UINT8(30, written_config.profiles[0].tick_rate);
   TEST_ASSERT_TRUE(written_config.profiles[0].gamepad_options.keyboard_enabled);
   TEST_ASSERT_TRUE(written_config.profiles[0].gamepad_options.snappy_joystick);
-  TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].macros[0].events[0].keycode);
-  TEST_ASSERT_EQUAL_UINT8(MACRO_ACTION_END,
-                          written_config.profiles[0].macros[0].events[0].action);
-  TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.r);
-  TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.g);
-  TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.b);
+  TEST_ASSERT_EQUAL_UINT8(
+      0, written_config.profiles[0].macros[0].events[0].keycode);
+  TEST_ASSERT_EQUAL_UINT8(
+      MACRO_ACTION_END, written_config.profiles[0].macros[0].events[0].action);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.profiles[0].rgb_config.secondary_color.r);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.profiles[0].rgb_config.secondary_color.g);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.profiles[0].rgb_config.secondary_color.b);
   assert_background_matches_secondary(&written_config.profiles[0].rgb_config);
 }
 
-void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(void) {
+void test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks(
+    void) {
   build_legacy_config_v1_8();
 
   TEST_ASSERT_TRUE(migration_try_migrate());
@@ -618,20 +631,31 @@ void test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors(void) {
   TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
 
   TEST_ASSERT_EQUAL_UINT8(1, written_config.profiles[0].rgb_config.enabled);
-  TEST_ASSERT_EQUAL_UINT8(40, written_config.profiles[0].rgb_config.global_brightness);
+  TEST_ASSERT_EQUAL_UINT8(
+      40, written_config.profiles[0].rgb_config.global_brightness);
   TEST_ASSERT_EQUAL_UINT8(RGB_EFFECT_ALPHAS_MODS,
                           written_config.profiles[0].rgb_config.current_effect);
-  TEST_ASSERT_EQUAL_UINT8(10, written_config.profiles[0].rgb_config.solid_color.r);
-  TEST_ASSERT_EQUAL_UINT8(20, written_config.profiles[0].rgb_config.solid_color.g);
-  TEST_ASSERT_EQUAL_UINT8(30, written_config.profiles[0].rgb_config.solid_color.b);
-  TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.r);
-  TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.g);
-  TEST_ASSERT_EQUAL_UINT8(255, written_config.profiles[0].rgb_config.secondary_color.b);
+  TEST_ASSERT_EQUAL_UINT8(10,
+                          written_config.profiles[0].rgb_config.solid_color.r);
+  TEST_ASSERT_EQUAL_UINT8(20,
+                          written_config.profiles[0].rgb_config.solid_color.g);
+  TEST_ASSERT_EQUAL_UINT8(30,
+                          written_config.profiles[0].rgb_config.solid_color.b);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.profiles[0].rgb_config.secondary_color.r);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.profiles[0].rgb_config.secondary_color.g);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.profiles[0].rgb_config.secondary_color.b);
   assert_background_matches_secondary(&written_config.profiles[0].rgb_config);
-  TEST_ASSERT_EQUAL_UINT8(90, written_config.profiles[0].rgb_config.effect_speed);
-  TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.sleep_timeout);
-  TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.layer_indicator_mode);
-  TEST_ASSERT_EQUAL_UINT8(0, written_config.profiles[0].rgb_config.layer_indicator_key);
+  TEST_ASSERT_EQUAL_UINT8(90,
+                          written_config.profiles[0].rgb_config.effect_speed);
+  TEST_ASSERT_EQUAL_UINT8(0,
+                          written_config.profiles[0].rgb_config.sleep_timeout);
+  TEST_ASSERT_EQUAL_UINT8(
+      0, written_config.profiles[0].rgb_config.layer_indicator_mode);
+  TEST_ASSERT_EQUAL_UINT8(
+      0, written_config.profiles[0].rgb_config.layer_indicator_key);
   assert_rgb_per_key_color(&written_config.profiles[0].rgb_config, 0, 0);
   assert_rgb_per_key_color(&written_config.profiles[0].rgb_config, 0, 9);
 }
@@ -696,14 +720,14 @@ void test_migration_v1_10_appends_trigger_state_colors_without_clobbering_profil
   TEST_ASSERT_EQUAL_UINT8(111, profile->rgb_config.secondary_color.b);
   assert_background_matches_secondary(&profile->rgb_config);
   assert_trigger_state_defaults_from_legacy(
-      &profile->rgb_config,
-      (rgb_color_t){.r = 31, .g = 41, .b = 51},
+      &profile->rgb_config, (rgb_color_t){.r = 31, .g = 41, .b = 51},
       (rgb_color_t){.r = 91, .g = 101, .b = 111});
   TEST_ASSERT_EQUAL_UINT16(516, profile->joystick_config.x.min);
   TEST_ASSERT_EQUAL_UINT8(56, profile->joystick_config.mouse_speed);
-  TEST_ASSERT_EQUAL_UINT8(86, profile->joystick_config.mouse_presets[2].mouse_speed);
-  TEST_ASSERT_EQUAL_UINT8(156,
-                          profile->joystick_config.mouse_presets[2].mouse_acceleration);
+  TEST_ASSERT_EQUAL_UINT8(
+      86, profile->joystick_config.mouse_presets[2].mouse_speed);
+  TEST_ASSERT_EQUAL_UINT8(
+      156, profile->joystick_config.mouse_presets[2].mouse_acceleration);
 }
 
 void test_migration_v1_13_appends_kalman_config_defaults(void) {
@@ -723,8 +747,9 @@ void test_migration_v1_13_appends_kalman_config_defaults(void) {
                           written_config.kalman_config.rt_down_min_velocity);
   TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_UP_MIN_VELOCITY,
                           written_config.kalman_config.rt_up_min_velocity);
-  TEST_ASSERT_EQUAL_FLOAT(MATRIX_INNOVATION_EVENT_THRESHOLD,
-                          written_config.kalman_config.innovation_event_threshold);
+  TEST_ASSERT_EQUAL_FLOAT(
+      MATRIX_INNOVATION_EVENT_THRESHOLD,
+      written_config.kalman_config.innovation_event_threshold);
   TEST_ASSERT_EQUAL_UINT16(MATRIX_BOTTOM_OUT_HOLD_SCANS,
                            written_config.kalman_config.bottom_out_hold_scans);
   TEST_ASSERT_EQUAL_UINT8(MATRIX_BOTTOM_OUT_RT_UP,
@@ -742,24 +767,22 @@ void test_migration_v1_14_expands_kalman_config(void) {
   TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
   TEST_ASSERT_EQUAL_HEX32(0x12345678u, written_config.options.raw);
   TEST_ASSERT_EQUAL_UINT16(12u, written_config.mux_sample_delay_us);
-  TEST_ASSERT_EQUAL_FLOAT(0.42f,
-                          written_config.kalman_config.position_gain);
-  TEST_ASSERT_EQUAL_FLOAT(0.07f,
-                          written_config.kalman_config.velocity_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.42f, written_config.kalman_config.position_gain);
+  TEST_ASSERT_EQUAL_FLOAT(0.07f, written_config.kalman_config.velocity_gain);
   TEST_ASSERT_EQUAL_FLOAT(MATRIX_KALMAN_VELOCITY_DAMPING,
                           written_config.kalman_config.velocity_damping);
   TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_DOWN_MIN_VELOCITY,
                           written_config.kalman_config.rt_down_min_velocity);
   TEST_ASSERT_EQUAL_FLOAT(MATRIX_RT_UP_MIN_VELOCITY,
                           written_config.kalman_config.rt_up_min_velocity);
-  TEST_ASSERT_EQUAL_FLOAT(MATRIX_INNOVATION_EVENT_THRESHOLD,
-                          written_config.kalman_config.innovation_event_threshold);
+  TEST_ASSERT_EQUAL_FLOAT(
+      MATRIX_INNOVATION_EVENT_THRESHOLD,
+      written_config.kalman_config.innovation_event_threshold);
   TEST_ASSERT_EQUAL_UINT16(MATRIX_BOTTOM_OUT_HOLD_SCANS,
                            written_config.kalman_config.bottom_out_hold_scans);
   TEST_ASSERT_EQUAL_UINT8(MATRIX_BOTTOM_OUT_RT_UP,
                           written_config.kalman_config.bottom_out_rt_up);
-  TEST_ASSERT_EQUAL_UINT16(5u,
-                           written_config.kalman_config.noise_deadzone);
+  TEST_ASSERT_EQUAL_UINT16(5u, written_config.kalman_config.noise_deadzone);
   TEST_ASSERT_EQUAL_UINT8(1u, written_config.current_profile);
   TEST_ASSERT_EQUAL_UINT8(2u, written_config.last_non_default_profile);
 }
@@ -770,15 +793,26 @@ void test_migration_v1_17_appends_distance_curve_config(void) {
   TEST_ASSERT_TRUE(migration_try_migrate());
   TEST_ASSERT_EQUAL_HEX16(EECONFIG_VERSION, written_config.version);
 
-  TEST_ASSERT_EQUAL_UINT8(1,
-                          written_config.distance_curve_config.num_curves);
+  TEST_ASSERT_EQUAL_UINT8(1, written_config.distance_curve_config.num_curves);
   TEST_ASSERT_EQUAL_UINT8(
-      0, written_config.distance_curve_config.curves[0].num_points);
+      9, written_config.distance_curve_config.curves[0].num_points);
   TEST_ASSERT_EQUAL_UINT16(
       4000, written_config.distance_curve_config.curves[0].total_travel_um);
+  TEST_ASSERT_EQUAL_UINT8(
+      0, written_config.distance_curve_config.curves[0].points[0].adc);
+  TEST_ASSERT_EQUAL_UINT8(
+      0, written_config.distance_curve_config.curves[0].points[0].dist);
+  TEST_ASSERT_EQUAL_UINT8(
+      128, written_config.distance_curve_config.curves[0].points[4].adc);
+  TEST_ASSERT_EQUAL_UINT8(
+      188, written_config.distance_curve_config.curves[0].points[4].dist);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.distance_curve_config.curves[0].points[8].adc);
+  TEST_ASSERT_EQUAL_UINT8(
+      255, written_config.distance_curve_config.curves[0].points[8].dist);
   for (uint8_t i = 0; i < NUM_KEYS; i++) {
-    TEST_ASSERT_EQUAL_UINT8(
-        0, written_config.distance_curve_config.key_curve[i]);
+    TEST_ASSERT_EQUAL_UINT8(0,
+                            written_config.distance_curve_config.key_curve[i]);
   }
 
   // Make sure the trailing profile indices were preserved.
@@ -790,7 +824,8 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_migration_rejects_invalid_magic);
   RUN_TEST(test_migration_v1_0_reaches_current_and_preserves_profile_data);
-  RUN_TEST(test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks);
+  RUN_TEST(
+      test_migration_v1_8_null_migration_preserves_rgb_and_joystick_blocks);
   RUN_TEST(test_migration_v1_9_preserves_rgb_base_fields_and_per_key_colors);
   RUN_TEST(test_migration_v1_B_promotes_options_and_preserves_layer_colors);
   RUN_TEST(

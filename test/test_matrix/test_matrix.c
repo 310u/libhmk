@@ -105,6 +105,12 @@ void setUp(void) {
   mock_eeconfig.options.continuous_calibration = false;
   mock_eeconfig.options.save_bottom_out_threshold = false;
   mock_eeconfig.kalman_config = (kalman_config_t)DEFAULT_KALMAN_CONFIG;
+  // Tests assert identity distance mapping unless a test overrides the curve.
+  mock_eeconfig.distance_curve_config.num_curves = 1;
+  mock_eeconfig.distance_curve_config.curves[0].num_points = 0;
+  mock_eeconfig.distance_curve_config.curves[0].total_travel_um = 4000;
+  for (uint32_t k = 0; k < NUM_KEYS; k++)
+    mock_eeconfig.distance_curve_config.key_curve[k] = 0;
   mock_eeconfig.version = EECONFIG_VERSION;
   matrix_recalibrate(false);
   mock_timer = 0;
@@ -142,8 +148,7 @@ void test_matrix_clips_bottom_out_value_to_adc_maximum(void) {
   key_matrix[0].adc_raw = ADC_MAX_VALUE;
   key_matrix[0].adc_filtered = ADC_MAX_VALUE;
   set_distance_bounds(0, key_matrix[0].adc_rest_value,
-                      (uint16_t)(ADC_MAX_VALUE -
-                                 MATRIX_CALIBRATION_EPSILON));
+                      (uint16_t)(ADC_MAX_VALUE - MATRIX_CALIBRATION_EPSILON));
   analog_key_values[0] = UINT16_MAX;
 
   matrix_scan();
@@ -167,7 +172,8 @@ void test_matrix_continuous_calibration_tracks_small_rest_drift(void) {
   key_matrix[0].pos = 0.0f;
   key_matrix[0].velocity = 0.0f;
   // Use the averaged ADC value so the filtered delta is zero and the key is
-  // considered stable; the raw ADC value is 2410 so the 2-sample average is 2405.
+  // considered stable; the raw ADC value is 2410 so the 2-sample average is
+  // 2405.
   key_matrix[0].adc_filtered = 2405;
   key_matrix[0].adc_raw = 2400;
   set_distance_bounds(0, 2400, 3050);
@@ -197,7 +203,8 @@ void test_matrix_continuous_calibration_ignores_large_rest_drift(void) {
   TEST_ASSERT_EQUAL_UINT16(3050, key_matrix[0].adc_bottom_out_value);
 }
 
-void test_matrix_continuous_calibration_ignores_unstable_keystroke_motion(void) {
+void test_matrix_continuous_calibration_ignores_unstable_keystroke_motion(
+    void) {
   mock_eeconfig.options.continuous_calibration = true;
   key_matrix[0].pos = 2408.0f;
   key_matrix[0].velocity = 0.0f;
@@ -286,8 +293,7 @@ void test_noise_deadzone_clamps_distance_to_zero(void) {
 
 void test_bottom_out_detection_arms_release_on_collision(void) {
   if (MATRIX_INNOVATION_EVENT_THRESHOLD >= 100.0f) {
-    TEST_IGNORE_MESSAGE(
-        "Test requires enabled bottom-out collision detection");
+    TEST_IGNORE_MESSAGE("Test requires enabled bottom-out collision detection");
   }
 
   // Set key near bottom-out in distance space with downward velocity.
@@ -315,8 +321,7 @@ void test_bottom_out_detection_arms_release_on_collision(void) {
 
 void test_bottom_out_detection_ignores_fast_release(void) {
   if (MATRIX_INNOVATION_EVENT_THRESHOLD >= 100.0f) {
-    TEST_IGNORE_MESSAGE(
-        "Test requires enabled bottom-out collision detection");
+    TEST_IGNORE_MESSAGE("Test requires enabled bottom-out collision detection");
   }
 
   key_matrix[0].pos = 245.0f;
@@ -339,8 +344,7 @@ void test_bottom_out_detection_ignores_fast_release(void) {
 
 void test_bottom_out_detection_ignores_mid_stroke_innovation(void) {
   if (MATRIX_INNOVATION_EVENT_THRESHOLD >= 100.0f) {
-    TEST_IGNORE_MESSAGE(
-        "Test requires enabled bottom-out collision detection");
+    TEST_IGNORE_MESSAGE("Test requires enabled bottom-out collision detection");
   }
 
   key_matrix[0].pos = 180.0f;
@@ -591,9 +595,8 @@ void test_ab_filter_in_distance_space(void) {
   }
 
   // Position and distance should settle near the distance mapped from 2700.
-  const uint8_t expected_distance =
-      adc_to_distance(2700, key_matrix[0].adc_rest_value,
-                      key_matrix[0].adc_bottom_out_value);
+  const uint8_t expected_distance = adc_to_distance(
+      2700, key_matrix[0].adc_rest_value, key_matrix[0].adc_bottom_out_value);
   TEST_ASSERT_UINT8_WITHIN(3, expected_distance, key_matrix[0].distance);
   TEST_ASSERT_FLOAT_WITHIN(3.0f, (float)expected_distance, key_matrix[0].pos);
   TEST_ASSERT_FLOAT_WITHIN(2.0f, 0.0f, key_matrix[0].velocity);
@@ -672,7 +675,8 @@ void test_rt_press_accepts_slow_stroke_regardless_of_velocity_threshold(void) {
   TEST_ASSERT_EQUAL_UINT8(KEY_DIR_DOWN, key_matrix[0].key_dir);
 }
 
-void test_rt_release_accepts_slow_stroke_regardless_of_velocity_threshold(void) {
+void test_rt_release_accepts_slow_stroke_regardless_of_velocity_threshold(
+    void) {
   // Press the key with a fast stroke.
   analog_key_values[0] = 3000;
   for (uint16_t i = 0; i < 8; i++) {
@@ -717,13 +721,10 @@ void test_adc_to_distance_curve_linear_interpolation(void) {
   curve.points[2].adc = 255;
   curve.points[2].dist = 255;
 
-  TEST_ASSERT_EQUAL_UINT8(32,
-                          adc_to_distance_with_curve(64, 0, 255, &curve));
-  TEST_ASSERT_EQUAL_UINT8(64,
-                          adc_to_distance_with_curve(128, 0, 255, &curve));
+  TEST_ASSERT_EQUAL_UINT8(32, adc_to_distance_with_curve(64, 0, 255, &curve));
+  TEST_ASSERT_EQUAL_UINT8(64, adc_to_distance_with_curve(128, 0, 255, &curve));
   // Midpoint between (128, 64) and (255, 255) rounds to 159.
-  TEST_ASSERT_EQUAL_UINT8(159,
-                          adc_to_distance_with_curve(191, 0, 255, &curve));
+  TEST_ASSERT_EQUAL_UINT8(159, adc_to_distance_with_curve(191, 0, 255, &curve));
 }
 
 void test_adc_to_distance_curve_clamps_outside_range(void) {
@@ -736,11 +737,9 @@ void test_adc_to_distance_curve_clamps_outside_range(void) {
   curve.points[1].dist = 200;
 
   // Below the first curve point: clamp to the first point's distance.
-  TEST_ASSERT_EQUAL_UINT8(32,
-                          adc_to_distance_with_curve(32, 0, 255, &curve));
+  TEST_ASSERT_EQUAL_UINT8(32, adc_to_distance_with_curve(32, 0, 255, &curve));
   // Above the last curve point: clamp to the last point's distance.
-  TEST_ASSERT_EQUAL_UINT8(200,
-                          adc_to_distance_with_curve(223, 0, 255, &curve));
+  TEST_ASSERT_EQUAL_UINT8(200, adc_to_distance_with_curve(223, 0, 255, &curve));
 }
 
 void test_matrix_set_distance_curve_config_rejects_null(void) {
@@ -851,6 +850,25 @@ void test_matrix_distance_curve_applies_per_key(void) {
   TEST_ASSERT_GREATER_THAN(key_matrix[1].pos, key_matrix[0].pos);
 }
 
+void test_matrix_recalibrate_falls_back_to_default_distance_curve(void) {
+  // An invalid (zeroed) persisted config must fall back to the built-in
+  // default.
+  mock_eeconfig.distance_curve_config = (distance_curve_config_t){0};
+
+  matrix_recalibrate(false);
+
+  const distance_curve_config_t *runtime = matrix_get_distance_curve_config();
+  TEST_ASSERT_EQUAL_UINT8(1, runtime->num_curves);
+  TEST_ASSERT_EQUAL_UINT8(9, runtime->curves[0].num_points);
+  TEST_ASSERT_EQUAL_UINT8(0, runtime->curves[0].points[0].adc);
+  TEST_ASSERT_EQUAL_UINT8(128, runtime->curves[0].points[4].adc);
+  TEST_ASSERT_EQUAL_UINT8(188, runtime->curves[0].points[4].dist);
+  TEST_ASSERT_EQUAL_UINT8(255, runtime->curves[0].points[8].dist);
+  for (uint8_t i = 0; i < NUM_KEYS; i++) {
+    TEST_ASSERT_EQUAL_UINT8(0, runtime->key_curve[i]);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_matrix_large_delta_press_and_release_stay_responsive);
@@ -858,7 +876,8 @@ int main(void) {
   RUN_TEST(test_matrix_records_large_scan_intervals_in_microseconds);
   RUN_TEST(test_matrix_continuous_calibration_tracks_small_rest_drift);
   RUN_TEST(test_matrix_continuous_calibration_ignores_large_rest_drift);
-  RUN_TEST(test_matrix_continuous_calibration_ignores_unstable_keystroke_motion);
+  RUN_TEST(
+      test_matrix_continuous_calibration_ignores_unstable_keystroke_motion);
   RUN_TEST(test_kalman_step_response_converges_to_new_setpoint);
   RUN_TEST(test_kalman_ramp_response_tracks_constant_velocity);
   RUN_TEST(test_kalman_noise_rejection_at_rest_clamps_distance);
@@ -889,11 +908,13 @@ int main(void) {
   RUN_TEST(test_matrix_set_distance_curve_config_accepts_valid);
   RUN_TEST(test_matrix_recalibrate_loads_distance_curve_config);
   RUN_TEST(test_matrix_distance_curve_applies_per_key);
+  RUN_TEST(test_matrix_recalibrate_falls_back_to_default_distance_curve);
   RUN_TEST(test_ab_filter_in_distance_space);
   RUN_TEST(test_velocity_damping_on_idle);
   RUN_TEST(test_bottom_out_hold_counter_decrements);
   RUN_TEST(test_bottom_out_hold_uses_reduced_rt_up);
   RUN_TEST(test_rt_press_accepts_slow_stroke_regardless_of_velocity_threshold);
-  RUN_TEST(test_rt_release_accepts_slow_stroke_regardless_of_velocity_threshold);
+  RUN_TEST(
+      test_rt_release_accepts_slow_stroke_regardless_of_velocity_threshold);
   return UNITY_END();
 }

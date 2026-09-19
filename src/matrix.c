@@ -25,7 +25,6 @@
 #include "rgb.h"
 #include "usb_bootstrap.h"
 
-
 static kalman_config_t matrix_kalman_config;
 static distance_curve_config_t matrix_distance_curve_config;
 
@@ -61,8 +60,8 @@ static bool matrix_validate_kalman_config(const kalman_config_t *config) {
   return true;
 }
 
-static bool matrix_validate_distance_curve_config(
-    const distance_curve_config_t *config) {
+static bool
+matrix_validate_distance_curve_config(const distance_curve_config_t *config) {
   if (config == NULL)
     return false;
 
@@ -117,9 +116,8 @@ matrix_kalman_update(key_state_t *state, uint16_t raw_adc, uint8_t key) {
           ? &matrix_distance_curve_config.curves[curve_index]
           : NULL;
 
-  const float measurement =
-      (float)adc_to_distance_with_curve(avg_adc, state->adc_rest_value,
-                                        state->adc_bottom_out_value, curve);
+  const float measurement = (float)adc_to_distance_with_curve(
+      avg_adc, state->adc_rest_value, state->adc_bottom_out_value, curve);
   const float predicted_pos = state->pos + state->velocity;
   const float innovation = measurement - predicted_pos;
 
@@ -158,7 +156,7 @@ matrix_analog_read(uint8_t key) {
   uint16_t value = 0u;
 
 #if DIGITAL_NUM_INPUTS == 0
-#if defined(JOYSTICK_SW_KEY_INDEX) && defined(JOYSTICK_SW_PIN) &&               \
+#if defined(JOYSTICK_SW_KEY_INDEX) && defined(JOYSTICK_SW_PIN) &&              \
     defined(JOYSTICK_SW_PORT)
   value = key == JOYSTICK_SW_KEY_INDEX ? analog_read(key)
                                        : analog_scan_peek_key(key);
@@ -188,8 +186,7 @@ __attribute__((always_inline)) static inline void
 matrix_apply_continuous_calibration(uint8_t key, uint16_t sample) {
   key_state_t *state = &key_matrix[key];
   const int32_t diff = (int32_t)sample - (int32_t)state->adc_rest_value;
-  const uint16_t diff_abs =
-      diff >= 0 ? (uint16_t)diff : (uint16_t)(-diff);
+  const uint16_t diff_abs = diff >= 0 ? (uint16_t)diff : (uint16_t)(-diff);
 
   if (diff_abs < MATRIX_CALIBRATION_EPSILON ||
       diff_abs >= MATRIX_CONTINUOUS_CALIBRATION_RANGE)
@@ -256,8 +253,8 @@ matrix_cycles_to_us(uint32_t cycles) {
   const uint64_t remaining_cycles = (uint64_t)cycles % cpu_hz;
   // Split the conversion so larger cycle deltas do not have to multiply by
   // 1,000,000 before dividing by F_CPU.
-  const uint64_t micros = whole_seconds * 1000000ull +
-                          (remaining_cycles * 1000000ull) / cpu_hz;
+  const uint64_t micros =
+      whole_seconds * 1000000ull + (remaining_cycles * 1000000ull) / cpu_hz;
   return micros > UINT32_MAX ? UINT32_MAX : (uint32_t)micros;
 #endif
 #else
@@ -288,8 +285,7 @@ static void matrix_refresh_raw_scan_diagnostics(void) {
   matrix_scan_diagnostics.max_raw_scan_us = analog_diag->max_scan_us;
   matrix_scan_diagnostics.full_scan_generation =
       analog_scan_get_full_scan_generation();
-  matrix_scan_diagnostics.matrix_processing_divider =
-      MATRIX_PROCESSING_DIVIDER;
+  matrix_scan_diagnostics.matrix_processing_divider = MATRIX_PROCESSING_DIVIDER;
   matrix_scan_diagnostics.expected_matrix_scan_hz = matrix_expected_scan_hz();
 }
 
@@ -312,8 +308,8 @@ static uint32_t matrix_next_scheduled_generation_after(uint32_t generation) {
              : next_generation + (MATRIX_PROCESSING_DIVIDER - remainder);
 }
 
-static uint32_t matrix_latest_scheduled_generation_at_or_before(
-    uint32_t generation) {
+static uint32_t
+matrix_latest_scheduled_generation_at_or_before(uint32_t generation) {
   return generation - (generation % MATRIX_PROCESSING_DIVIDER);
 }
 
@@ -347,9 +343,8 @@ static void matrix_account_generation_progress(uint32_t current_generation) {
 
   const uint32_t generation_delta =
       current_generation - matrix_last_seen_generation;
-  const uint32_t scheduled_generations =
-      matrix_count_generation_matches(matrix_last_seen_generation,
-                                      current_generation);
+  const uint32_t scheduled_generations = matrix_count_generation_matches(
+      matrix_last_seen_generation, current_generation);
 
   matrix_scan_diagnostics.intentional_skip_count +=
       generation_delta - scheduled_generations;
@@ -405,7 +400,7 @@ static void matrix_persist_bottom_out_thresholds(void) {
 }
 
 static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
-                                         bool service_usb_during_calibration) {
+                                        bool service_usb_during_calibration) {
   if (matrix_validate_kalman_config(&eeconfig->kalman_config)) {
     matrix_kalman_config = eeconfig->kalman_config;
   } else {
@@ -416,10 +411,10 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
   if (matrix_validate_distance_curve_config(&eeconfig->distance_curve_config)) {
     matrix_distance_curve_config = eeconfig->distance_curve_config;
   } else {
+    const distance_curve_t default_curve = DEFAULT_DISTANCE_CURVE;
     distance_curve_config_t default_curve_config = {0};
     default_curve_config.num_curves = 1;
-    default_curve_config.curves[0].num_points = 0;
-    default_curve_config.curves[0].total_travel_um = 4000;
+    default_curve_config.curves[0] = default_curve;
     for (uint32_t k = 0; k < NUM_KEYS; k++)
       default_curve_config.key_curve[k] = 0;
     matrix_distance_curve_config = default_curve_config;
@@ -432,7 +427,8 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
   }
 
   memset(rapid_trigger_disabled, 0, sizeof(rapid_trigger_disabled));
-  memset(matrix_pending_rgb_keypresses, 0, sizeof(matrix_pending_rgb_keypresses));
+  memset(matrix_pending_rgb_keypresses, 0,
+         sizeof(matrix_pending_rgb_keypresses));
   memset(&matrix_scan_diagnostics, 0, sizeof(matrix_scan_diagnostics));
   matrix_rapid_trigger_disabled_count = 0u;
   memset(matrix_last_sample_versions, 0, sizeof(matrix_last_sample_versions));
@@ -448,8 +444,8 @@ static void matrix_recalibrate_internal(bool reset_bottom_out_threshold,
     key_matrix[i].adc_raw = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_filtered = eeconfig->calibration.initial_rest_value;
     key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
-    key_matrix[i].adc_bottom_out_value = matrix_bottom_out_value(
-        i, eeconfig->calibration.initial_rest_value);
+    key_matrix[i].adc_bottom_out_value =
+        matrix_bottom_out_value(i, eeconfig->calibration.initial_rest_value);
     key_matrix[i].pos = 0.0f;
     key_matrix[i].velocity = 0.0f;
     key_matrix[i].innovation = 0.0f;
@@ -587,9 +583,9 @@ void matrix_scan_fast(void) {
 #if MATRIX_DETAILED_SCAN_DIAGNOSTICS
       if (filtered_delta > max_sample_delta)
         max_sample_delta = filtered_delta;
-      const uint16_t sample_velocity =
-          raw_adc > previous_raw ? (uint16_t)(raw_adc - previous_raw)
-                                 : (uint16_t)(previous_raw - raw_adc);
+      const uint16_t sample_velocity = raw_adc > previous_raw
+                                           ? (uint16_t)(raw_adc - previous_raw)
+                                           : (uint16_t)(previous_raw - raw_adc);
       if (sample_velocity > max_sample_velocity)
         max_sample_velocity = sample_velocity;
 #endif
@@ -615,8 +611,7 @@ void matrix_scan_fast(void) {
       max_sample_delta = filtered_delta;
     const float innovation_abs = innovation < 0.0f ? -innovation : innovation;
     const uint16_t sample_velocity =
-        innovation_abs != innovation_abs ||
-                innovation_abs >= (float)UINT16_MAX
+        innovation_abs != innovation_abs || innovation_abs >= (float)UINT16_MAX
             ? UINT16_MAX
             : (uint16_t)innovation_abs;
     if (sample_velocity > max_sample_velocity)
@@ -643,9 +638,8 @@ void matrix_scan_fast(void) {
 
     const bool was_pressed = state->is_pressed;
 
-    const bool rt_disabled =
-        matrix_rapid_trigger_disabled_count != 0u &&
-        bitmap_get(rapid_trigger_disabled, i);
+    const bool rt_disabled = matrix_rapid_trigger_disabled_count != 0u &&
+                             bitmap_get(rapid_trigger_disabled, i);
 
     // Only damp residual velocity at the physical rest position. Damping an
     // inactive key throughout its stroke suppresses legitimate slow motion
@@ -782,15 +776,15 @@ void matrix_scan_fast(void) {
 #endif
   matrix_scan_diagnostics.idle_keys_detected = idle_keys_detected;
   matrix_scan_diagnostics.active_keys_detected = active_keys_detected;
-  if (MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS && matrix_last_scan_start_cycle_valid) {
+  if (MATRIX_LIVE_SCAN_TIMING_DIAGNOSTICS &&
+      matrix_last_scan_start_cycle_valid) {
     matrix_scan_interval_cycles_accum +=
         (uint64_t)(scan_cycle_start - matrix_last_scan_start_cycle);
     if (matrix_scan_interval_count < UINT32_MAX)
       matrix_scan_interval_count++;
     if (matrix_scan_interval_cycles_accum != 0u) {
       matrix_scan_diagnostics.matrix_scan_hz =
-          (uint32_t)((((uint64_t)F_CPU *
-                       (uint64_t)matrix_scan_interval_count) +
+          (uint32_t)((((uint64_t)F_CPU * (uint64_t)matrix_scan_interval_count) +
                       (matrix_scan_interval_cycles_accum / 2ull)) /
                      matrix_scan_interval_cycles_accum);
     }
@@ -831,11 +825,9 @@ static void matrix_scan_housekeeping_internal(bool force) {
       board_cycle_count() - housekeeping_cycle_start;
   matrix_scan_diagnostics.last_housekeeping_us =
       matrix_cycles_to_us(housekeeping_cycles);
-  if (housekeeping_cycles > 0u &&
-      matrix_last_housekeeping_start_cycle_valid) {
-    matrix_scan_diagnostics.matrix_housekeeping_hz =
-        matrix_cycles_to_hz(housekeeping_cycle_start -
-                            matrix_last_housekeeping_start_cycle);
+  if (housekeeping_cycles > 0u && matrix_last_housekeeping_start_cycle_valid) {
+    matrix_scan_diagnostics.matrix_housekeeping_hz = matrix_cycles_to_hz(
+        housekeeping_cycle_start - matrix_last_housekeeping_start_cycle);
   }
   if (matrix_scan_diagnostics.last_housekeeping_us >
       matrix_scan_diagnostics.max_housekeeping_us) {
@@ -889,8 +881,7 @@ void matrix_task(void) {
   const uint32_t coalesced_generations = current_generation - due_generation;
 
   if (coalesced_generations != 0u)
-    matrix_scan_diagnostics.coalesced_generation_count +=
-        coalesced_generations;
+    matrix_scan_diagnostics.coalesced_generation_count += coalesced_generations;
 
   if (scheduled_due_count > 1u) {
     matrix_scan_diagnostics.overload_missed_generation_count +=
