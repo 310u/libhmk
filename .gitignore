@@ -17,3 +17,6 @@ keyboards/mochiko40he-rev2/board_def.h
 keyboards/mochiko40he-tb/board_def.h
 keyboards/mochiko40he-tb2/board_def.h
 keyboards/ads7953_ref/board_def.h
+
+# Local AI tooling config
+opencode.json
