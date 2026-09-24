@@ -17,6 +17,16 @@
         "rgb": true,
         "joystick": true
     },
+    "matrix": {
+        "processing_divider": 2,
+        "scheduler_max_catchup_scans": 4,
+        "scheduler_budget_us": 63,
+        "adc_sample_delay_default": 1,
+        "analog_scan_key_version_delta": 0,
+        "detailed_scan_diagnostics": 0,
+        "idle_raw_fast_path_margin": 24,
+        "live_scan_timing_diagnostics": 0
+    },
     "kalman": {
         "position_gain": 0.35,
         "velocity_gain": 0.07,
@@ -82,11 +92,73 @@
             39,
             30,
             31
-        ]
+        ],
+        "hardware": {
+            "num_leds": 40,
+            "data_pin": "A10",
+            "data_pin_source": "GPIO_PINS_SOURCE10",
+            "data_pin_mux": "GPIO_MUX_1",
+            "timer": "TMR1",
+            "timer_channel": "TMR_SELECT_CHANNEL_3",
+            "timer_dma_request": "TMR_OVERFLOW_DMA_REQUEST",
+            "timer_dmamux_request": "DMAMUX_DMAREQ_ID_TMR1_OVERFLOW",
+            "dma_channel": "DMA1_CHANNEL2",
+            "dma_mux_channel": "DMA1MUX_CHANNEL2",
+            "dma_transfer_flag": "DMA1_FDT2_FLAG",
+            "dma_clear_flag": "DMA1_GL2_FLAG",
+            "reset_time_ns": 300000,
+            "dma_frame_repeats": 2,
+            "bitbang_frame_repeats": 2
+        }
     },
     "hardware": {
         "hse_value": 12000000,
-        "driver": "at32f405xx"
+        "driver": "at32f405xx",
+        "timings": {
+            "usb": {
+                "interval": 8,
+                "phase": 0
+            },
+            "layout": {
+                "interval": 64,
+                "phase": 0
+            },
+            "xinput": {
+                "interval": 64,
+                "phase": 16
+            },
+            "command": {
+                "interval": 128,
+                "phase": 8
+            },
+            "trackball": {
+                "interval": 128,
+                "phase": 4
+            },
+            "joystick": {
+                "interval": 128,
+                "phase": 20
+            },
+            "encoder": {
+                "interval": 128,
+                "phase": 36
+            },
+            "slider": {
+                "interval": 128,
+                "phase": 52
+            },
+            "rgb": {
+                "interval": 256,
+                "phase": 28
+            }
+        }
+    },
+    "joystick": {
+        "enabled": true,
+        "sw_pin": "A9",
+        "x_adc_index": 0,
+        "y_adc_index": 1,
+        "sw_key_index": 40
     },
     "memory_budget": {
         "min_flash_headroom": 32768,

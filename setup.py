@@ -5,6 +5,7 @@ sys.path.append("scripts")
 import argparse
 import configparser
 import os
+import scripts.generate_board_def as generate_board_def
 import scripts.utils as utils
 
 
@@ -27,6 +28,11 @@ if __name__ == "__main__":
 
     keyboard: str = args.keyboard
     kb_json = utils.get_kb_json(keyboard)
+
+    # Generate board_def.h from keyboard.json so keyboard definitions stay in
+    # a single JSON file.  The generated header is consumed by scripts/make.py.
+    generate_board_def.write_board_def(keyboard)
+
     driver = utils.get_driver(keyboard)
     cpu_hz = kb_json["hardware"].get("cpu_hz")
     native_sanitizers_enabled = env_flag_enabled("LIBHMK_NATIVE_SANITIZERS")

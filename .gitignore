@@ -7,3 +7,13 @@ cppcheck.txt
 
 # Metadata header file
 include/metadata.h
+
+# Generated RGB coordinate header
+include/rgb_coords.h
+
+# Generated board_def.h for keyboards migrated to JSON-only configuration
+keyboards/mochiko40he/board_def.h
+keyboards/mochiko40he-rev2/board_def.h
+keyboards/mochiko40he-tb/board_def.h
+keyboards/mochiko40he-tb2/board_def.h
+keyboards/ads7953_ref/board_def.h

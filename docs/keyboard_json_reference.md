@@ -2,6 +2,9 @@
 
 `keyboard.json` はキーボードのファームウェアビルドおよびWebコンフィギュレータで使用される設定ファイルです。各キーボードの `keyboards/<keyboard_name>/keyboard.json` に配置します。
 
+> [!IMPORTANT]
+> 2026年9月より、ハードウェア関連の設定はすべて `keyboard.json` で定義します。`board_def.h` は `setup.py` が `keyboard.json` の内容から自動生成するため、手動で作成・編集する必要はありません。
+
 ---
 
 ## 全体構造
@@ -450,92 +453,491 @@ Webコンフィギュレータでのキーボードの描画方法を定義し�
 
 ---
 
-## `board_def.h` — ハードウェア定義ヘッダー {#board_def}
+## `hardware.spi` — SPI バス設定（オプション）
 
-`keyboards/<keyboard_name>/board_def.h` はオプションです。RGB、ジョイスティック、ロータリーエンコーダー、スライダーなどの追加ハードウェア機能を使う場合や、ボード固有の compile-time macro が必要な場合にのみ作成します。
+トラックボールセンサーなど、SPI ペリフェラルを使用するデバイスの共通設定です。
 
-### RGB LED 有効時
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `buses` | object[] | — | SPI バス定義の配列 |
 
-#### STM32F446xx
+### `hardware.spi.buses[]` — SPI バス定義
 
-```c
-#define RGB_ENABLED 1
-#define RGB_DATA_PIN GPIO_PIN_8
-#define RGB_DATA_PORT GPIOA
-```
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `instance` | string | ✅ | SPI ペリフェラル名（例: `"SPI3"`） |
+| `clock_hz` | integer | ✅ | SPI ペリフェラルへの入力クロック周波数（Hz） |
+| `sck_pin` | string | ✅ | SCK ピン名（例: `"C10"`） |
+| `miso_pin` | string | — | MISO ピン名（例: `"C11"`） |
+| `mosi_pin` | string | — | MOSI ピン名（例: `"C12"`） |
+| `pin_mux` | string | — | GPIO ミューティング（AT32 のみ）。例: `"GPIO_MUX_6"` |
+| `pin_af` | string | — | GPIO アルタネートファンクション（STM32 のみ） |
 
-STM32F446xx のRGB driverは現在 bitbang 実装です。`RGB_DATA_PIN` と `RGB_DATA_PORT` を定義すれば動作します。
-
-#### AT32F405xx
-
-```c
-#define RGB_ENABLED 1
-#define RGB_DATA_PIN GPIO_PINS_10
-#define RGB_DATA_PORT GPIOA
-#define RGB_DATA_PIN_SOURCE GPIO_PINS_SOURCE10
-#define RGB_DATA_PIN_MUX GPIO_MUX_1
-#define RGB_TIMER TMR1
-#define RGB_TIMER_CLOCK CRM_TMR1_PERIPH_CLOCK
-#define RGB_TIMER_CHANNEL TMR_SELECT_CHANNEL_3
-#define RGB_TIMER_DMA_REQUEST TMR_OVERFLOW_DMA_REQUEST
-#define RGB_TIMER_DMAMUX_REQUEST DMAMUX_DMAREQ_ID_TMR1_OVERFLOW
-#define RGB_DMA_CHANNEL DMA1_CHANNEL2
-#define RGB_DMA_MUX_CHANNEL DMA1MUX_CHANNEL2
-#define RGB_DMA_TRANSFER_FLAG DMA1_FDT2_FLAG
-#define RGB_DMA_CLEAR_FLAG DMA1_GL2_FLAG
-```
-
-AT32F405xx は標準で DMA/PWM RGB driver を使用します。
-
-### ジョイスティック有効時
-
-```c
-#define JOYSTICK_ENABLED 1
-#define JOYSTICK_SW_PIN GPIO_PINS_9      // スイッチ（押し込み）のGPIOピン
-#define JOYSTICK_SW_PORT GPIOA           // スイッチのGPIOポート
-
-#define JOYSTICK_X_ADC_INDEX 0           // analog.raw の入力インデックス（X軸）
-#define JOYSTICK_Y_ADC_INDEX 1           // analog.raw の入力インデックス（Y軸）
-#define JOYSTICK_SW_KEY_INDEX 40         // スイッチに対応する0-basedキーインデックス
+```json
+"hardware": {
+  "spi": {
+    "buses": [
+      {
+        "instance": "SPI3",
+        "clock_hz": 108000000,
+        "sck_pin": "C10",
+        "miso_pin": "C11",
+        "mosi_pin": "C12",
+        "pin_mux": "GPIO_MUX_6"
+      }
+    ]
+  }
+}
 ```
 
 > [!NOTE]
-> ジョイスティックのアナログ軸は `analog.raw` セクションで設定されたADC入力を使用します。`JOYSTICK_X_ADC_INDEX` / `JOYSTICK_Y_ADC_INDEX` は `analog.raw.input` 配列のインデックスを指します。
+> AT32 は `pin_mux`、STM32 は `pin_af` を使用します。
 
-> [!TIP]
-> `JOYSTICK_SW_KEY_INDEX` はオプションです。定義した場合、押し込みスイッチは通常キーとして公開され、自動マウスクリックは送信されません。定義しない場合はマウス/スクロールモード中のクリック用スイッチとして扱われます。
+---
 
-### スライダー有効時
+## `hardware.clock` — クロック/PLL オーバーライド（オプション）
 
-```c
-#define SLIDER_KEY_INDEX 39              // スライダーに対応する0-basedキーインデックス
+ボード固有の PLL 設定やバス分周比を上書きします。省略時は MCU のデフォルト値が使用されます。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `pll_ns` | integer | PLL 倍率（N 値） |
+| `pll_ms` | integer | PLL 倍率（M 値） |
+| `pll_fp` | string | PLL FOUT ポスト分周比（例: `"CRM_PLL_FP_4"`） |
+| `pll_fu` | string | PLL FOUT フレックション設定（例: `"CRM_PLL_FU_12"`） |
+| `apb2_div` | string | APB2 バス分周比（例: `"CRM_APB2_DIV_1"`） |
+| `apb1_div` | string | APB1 バス分周比（例: `"CRM_APB1_DIV_2"`） |
+
+```json
+"hardware": {
+  "clock": {
+    "pll_ns": 48,
+    "pll_ms": 1,
+    "pll_fp": "CRM_PLL_FP_4",
+    "pll_fu": "CRM_PLL_FU_12",
+    "apb2_div": "CRM_APB2_DIV_1",
+    "apb1_div": "CRM_APB1_DIV_2"
+  }
+}
 ```
-
-### ロータリーエンコーダー有効時
-
-```c
-#define ENCODER_NUM 1
-#define ENCODER_A_PORTS {GPIOA}
-#define ENCODER_A_PINS {GPIO_PINS_0}
-#define ENCODER_B_PORTS {GPIOA}
-#define ENCODER_B_PINS {GPIO_PINS_1}
-```
-
-| マクロ | 説明 |
-|---|---|
-| `ENCODER_NUM` | エンコーダー数 |
-| `ENCODER_A_PORTS` / `ENCODER_A_PINS` | 各エンコーダーの A 相 GPIO |
-| `ENCODER_B_PORTS` / `ENCODER_B_PINS` | 各エンコーダーの B 相 GPIO |
 
 > [!CAUTION]
-> ロータリーエンコーダー対応はファームウェアに実装済みですが、まだ実機での動作確認はしていません。GPIO 割り当て、回転方向、プル設定は実機で確認してください。
+> PLL 設定を誤るとシステムクロックが不安定になります。 MCU データシートと一致させ、変更後は必ず動作確認してください。
+
+---
+
+## `hardware.timings` — バックグラウンドタスクスケジューラ（オプション）
+
+協調型スケジューラによる各バックグラウンドタスクの実行間隔（interval）と位相（phase）を設定します。省略時はファームウェアのデフォルト値が使用されます。
+
+| タスク名 | 説明 |
+|---|---|
+| `usb` | USB ポーリング |
+| `layout` | レイアウト処理 |
+| `xinput` | XInput ゲームパッド |
+| `command` | コマンド処理 |
+| `trackball` | トラックボール polling |
+| `joystick` | ジョイスティック入力 |
+| `encoder` | エンコーダー入力 |
+| `slider` | スライダー入力 |
+| `rgb` | RGB LED アップデート |
+
+各タスクは `{ "interval": <μs>, "phase": <μs> }` の形式で設定します。
+
+- `interval`: タスクの実行間隔（マイクロ秒）
+- `phase`: タスクの開始位相（マイクロ秒）。複数タスクの実行タイミングをずらすために使用
+
+```json
+"hardware": {
+  "timings": {
+    "usb":       { "interval":   8, "phase":  0 },
+    "layout":    { "interval":  64, "phase":  0 },
+    "xinput":    { "interval":  64, "phase": 16 },
+    "command":   { "interval": 128, "phase":  8 },
+    "trackball": { "interval": 128, "phase":  4 },
+    "joystick":  { "interval": 128, "phase": 20 },
+    "encoder":   { "interval": 128, "phase": 36 },
+    "slider":    { "interval": 128, "phase": 52 },
+    "rgb":       { "interval": 256, "phase": 28 }
+  }
+}
+```
 
 > [!TIP]
-> `hmkconf` から変更できるようにするには、回転方向の割り当てを `keyboard.json` の `encoder.map` で定義してください。固定の compile-time 出力にしたい場合は、代わりに `ENCODER_CW_KEYCODES` / `ENCODER_CCW_KEYCODES` を `board_def.h` に定義する旧来モードも使えますが、その場合は `hmkconf` から変更できません。回転方向が逆なら A/B 相を入れ替えるか CW/CCW の割り当てを入れ替えてください。
+> USB タスクは最優先で実行されるため、`interval` を小さくしてポーリングレートを上げられます。他のタスクは `phase` をずらして CPU 負荷を分散させます。
+
+---
+
+## `rgb.hardware` — RGB LED ハードウェア設定（オプション）
+
+RGB LED を有効にする場合、`rgb.hardware` で LED ドライバーのピン、タイマー、DMA 設定を指定します。このセクションを記述すると、自動生成される `board_def.h` に対応するマクロが生成されます。
+
+### AT32F405xx（DMA/PWM ドライバー）
+
+```json
+"rgb": {
+  "led_map": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "hardware": {
+    "num_leds": 10,
+    "data_pin": "A10",
+    "data_pin_source": "GPIO_PINS_SOURCE10",
+    "data_pin_mux": "GPIO_MUX_1",
+    "timer": "TMR1",
+    "timer_channel": "TMR_SELECT_CHANNEL_3",
+    "timer_dma_request": "TMR_OVERFLOW_DMA_REQUEST",
+    "timer_dmamux_request": "DMAMUX_DMAREQ_ID_TMR1_OVERFLOW",
+    "dma_channel": "DMA1_CHANNEL2",
+    "dma_mux_channel": "DMA1MUX_CHANNEL2",
+    "dma_transfer_flag": "DMA1_FDT2_FLAG",
+    "dma_clear_flag": "DMA1_GL2_FLAG",
+    "reset_time_ns": 300000,
+    "dma_frame_repeats": 2,
+    "bitbang_frame_repeats": 2
+  }
+}
+```
+
+### STM32F446xx（bitbang ドライバー）
+
+```json
+"rgb": {
+  "led_map": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "hardware": {
+    "num_leds": 10,
+    "data_pin": "A8",
+    "timer": "TIM1",
+    "timer_channel": "TIM_CHANNEL_1",
+    "dma_channel": "DMA1_Channel2",
+    "reset_time_ns": 300000,
+    "dma_frame_repeats": 2,
+    "bitbang_frame_repeats": 2
+  }
+}
+```
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `num_leds` | integer | ✅ | RGB LED の総数 |
+| `data_pin` | string | ✅ | RGB データ線の GPIO ピン名 |
+| `data_pin_source` | string | — | GPIO ピンソース（AT32 のみ） |
+| `data_pin_mux` | string | — | GPIO ミューティング（AT32 のみ） |
+| `timer` | string | ✅ | 使用するハードウェアタイマー |
+| `timer_channel` | string | ✅ | タイマーチャンネル |
+| `timer_dma_request` | string | — | DMA リクエストソース（AT32 のみ） |
+| `timer_dmamux_request` | string | — | DMAMUX リクエスト（AT32 のみ） |
+| `dma_channel` | string | ✅ | DMA チャンネル |
+| `dma_mux_channel` | string | — | DMAMUX チャンネル（AT32 のみ） |
+| `dma_transfer_flag` | string | — | DMA 転送完了フラグ |
+| `dma_clear_flag` | string | — | DMA グローバルクリアフラグ |
+| `reset_time_ns` | integer | — | RGB リセット時間（ナノ秒） |
+| `dma_frame_repeats` | integer | — | DMA フレームの繰り返し回数 |
+| `bitbang_frame_repeats` | integer | — | bitbang フレームの繰り返し回数 |
+
+> [!NOTE]
+> MCU ドライバーに応じて必要なフィールドが異なります。AT32 は DMA/M マルチプレクサ関連のフィールドが必要で、STM32 は最小限の設定で動作します。
+
+---
+
+## `joystick` — ジョイスティックハードウェア設定（オプション）
+
+アナログジョイスティックのハードウェア設定です。`features.joystick: true` と組み合わせて使用します。
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `enabled` | boolean | ✅ | ジョイスティックを有効化 |
+| `sw_pin` | string | ✅ | スイッチ（押し込み）の GPIO ピン名 |
+| `x_adc_index` | integer | ✅ | X 軸の ADC 入力インデックス |
+| `y_adc_index` | integer | ✅ | Y 軸の ADC 入力インデックス |
+| `sw_key_index` | integer | ✅ | スイッチに対応する 0-based キーインデックス |
+
+```json
+"joystick": {
+  "enabled": true,
+  "sw_pin": "A9",
+  "x_adc_index": 0,
+  "y_adc_index": 1,
+  "sw_key_index": 40
+}
+```
+
+> [!NOTE]
+> ジョイスティックのアナログ軸は `analog.raw` セクションで設定されたADC入力を使用します。`x_adc_index` / `y_adc_index` は `analog.raw.input` 配列のインデックスを指します。
+
+> [!TIP]
+> `sw_key_index` はオプションです。定義した場合、押し込みスイッチは通常キーとして公開され、自動マウスクリックは送信されません。定義しない場合はマウス/スクロールモード中のクリック用スイッチとして扱われます。
+
+---
+
+## `trackball` — トラックボールハードウェア設定（オプション）
+
+トラックボールセンサーの SPI と GPIO 設定です。`features.trackball: true` と `hardware.spi` と組み合わせて使用します。
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `enabled` | boolean | ✅ | トラックボールを有効化 |
+| `sensor` | string | ✅ | センサー名（例: `"PAW3395"`） |
+| `spi_bus` | integer | ✅ | 使用する SPI バスのインデックス |
+| `cs_pin` | string | ✅ | チップセレクトの GPIO ピン名 |
+| `motion_pin` | string | ✅ | モーション割り込みの GPIO ピン名 |
+| `spi_frequency_hz` | integer | — | SPI クロック周波数（Hz）。省略時は 8MHz |
+| `cpi_default` | integer | — | デフォルト CPI 設定。省略時はセンサーのデフォルト値 |
+| `spi_hold_time_us` | integer | — | SPI トランザクション間の CS 高レベル保持時間（μs） |
+
+```json
+"trackball": {
+  "enabled": true,
+  "sensor": "PAW3395",
+  "spi_bus": 0,
+  "cs_pin": "A15",
+  "motion_pin": "D2",
+  "spi_frequency_hz": 8000000,
+  "cpi_default": 1600
+}
+```
+
+> [!TIP]
+> `spi_bus` の値は `hardware.spi.buses` 配列のインデックスです。
+
+---
+
+## `encoder.hardware` — ロータリーエンコーダー GPIO 設定（オプション）
+
+ロータリーエンコーダーの GPIO ピンとプル設定です。`encoder.map` と組み合わせて使用します。
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `a_pins` | string[] | ✅ | 各エンコーダーの A 相 GPIO ピン名 |
+| `b_pins` | string[] | ✅ | 各エンコーダーの B 相 GPIO ピン名 |
+| `invert_directions` | integer[] | — | エンコーダーごとの回転方向反転フラグ（0 or 1） |
+| `pullup` | boolean | — | 内部プルアップを有効化（省略時は `true`） |
+
+```json
+"encoder": {
+  "map": [
+    { "label": "Scroll", "cw": 42, "ccw": 43 }
+  ],
+  "hardware": {
+    "a_pins": ["B7"],
+    "b_pins": ["B6"],
+    "invert_directions": [0],
+    "pullup": true
+  }
+}
+```
+
+> [!TIP]
+> 回転方向が逆の場合、`invert_directions` に `1` を指定するか、A/B 相のピンを入れ替えてください。
+
+---
+
+## `analog.spi` — 外部 SPI ADC 設定（オプション）
+
+外部 SPI ADC（ADS7953）を使用する場合の設定です。`analog.backend: "spi_adc"` と組み合わせて使用します。
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `driver` | string | ✅ | ADC ドライバー名（現状 `"ads7953"` のみ） |
+| `frequency_hz` | integer | — | SPI クロック周波数（Hz）。省略時は 20MHz |
+| `range` | string | — | 入力レンジ。`"vref"`（0-Vref）または `"2xvref"`（0-2×Vref） |
+| `buses` | object[] | ✅ | SPI ADC バス定義の配列 |
+
+### `analog.spi.buses[]` — SPI ADC バス定義
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `bus` | integer | ✅ | SPI バス番号 |
+| `gpio` | object | — | 通常の SPI バス定義と GPIO が異なる場合のオーバーライド |
+| `devices` | object[] | ✅ | バスに接続されたデバイスの配列 |
+
+### `analog.spi.buses[].devices[]` — ADS7953 デバイス定義
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `cs` | string | ✅ | チップセレクトの GPIO ピン名 |
+| `map` | integer[] | ✅ | 16 チャンネルの物理キー番号マッピング |
+
+```json
+"analog": {
+  "backend": "spi_adc",
+  "spi": {
+    "driver": "ads7953",
+    "frequency_hz": 1000000,
+    "buses": [
+      {
+        "bus": 0,
+        "gpio": {
+          "sck_pin": "A0",
+          "miso_pin": "A1",
+          "mosi_pin": "C3"
+        },
+        "devices": [
+          {
+            "cs": "C1",
+            "map": [6, 7, 8, 9, 10, 16, 17, 18, 19, 20, 0, 0, 0, 0, 0, 0]
+          },
+          {
+            "cs": "C2",
+            "map": [26, 27, 28, 29, 30, 32, 35, 36, 38, 40, 0, 0, 0, 0, 0, 0]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+> [!NOTE]
+> `map` の値は 1-based の物理キー番号です。`0` は未接続を意味します。
+
+---
+
+## `board_def.h` — 自動生成ハードウェア定義ヘッダー {#board_def}
+
+`keyboards/<keyboard_name>/board_def.h` は `setup.py` が `keyboard.json` の内容から**自動生成**するため、手動で作成・編集する必要はありません。
+
+### 生成されるマクロ
+
+以下のセクションが `keyboard.json` に記述されると、対応する C マクロが `board_def.h` に生成されます:
+
+| JSON セクション | 生成されるマクロ |
+|---|---|
+| `rgb.hardware` | `RGB_ENABLED`, `RGB_DATA_PIN`, `RGB_DATA_PORT`, `RGB_TIMER`, `RGB_DMA_CHANNEL`, など |
+| `joystick` | `JOYSTICK_ENABLED`, `JOYSTICK_SW_PIN`, `JOYSTICK_X_ADC_INDEX`, など |
+| `encoder.hardware` | `ENCODER_NUM`, `ENCODER_A_PORTS`, `ENCODER_A_PINS`, など |
+| `trackball` | `TRACKBALL_ENABLED`, `TRACKBALL_SENSOR_*`, など |
+| `hardware.spi` | `SPI_*_INSTANCE`, `SPI_*_SCK_PIN`, など |
+| `analog.spi` | `SPI_ADC_*`, など |
+
+### 生成の確認
+
+`setup.py` を実行すると、`keyboards/<keyboard_name>/board_def.h` が自動生成されます:
+
+```bash
+python setup.py -k mochiko40he
+```
+
+> [!IMPORTANT]
+> 生成された `board_def.h` は `.gitignore` に追加されているため、Git にコミットされません。再生成は `setup.py` の実行のみで可能です。
+
+### 旧来の手動 board_def.h
+
+移行が完了していないレガシーキーボードでは、従来通り手動で `board_def.h` を作成する必要があります。その場合、`keyboard.json` にハードウェアセクションを記述しないでください。
 
 ---
 
 ## 完全な設定例
+
+### Mochiko40HE Trackball（RGB + トラックボール + エンコーダー）
+
+```json
+{
+  "name": "Mochiko40HE Trackball",
+  "manufacturer": "Lady Tortie",
+  "maintainer": "satoyu",
+  "usb": {
+    "vid": "0x0108",
+    "pid": "0x0112",
+    "port": "hs"
+  },
+  "keyboard": {
+    "num_profiles": 4,
+    "num_layers": 4,
+    "num_keys": 44,
+    "num_advanced_keys": 32
+  },
+  "features": {
+    "rgb": true,
+    "encoder": true
+  },
+  "rgb": {
+    "led_map": [38, 36, 32, 33, 34, 35, 37, 39, 29, 28],
+    "hardware": {
+      "num_leds": 40,
+      "data_pin": "A10",
+      "data_pin_source": "GPIO_PINS_SOURCE10",
+      "data_pin_mux": "GPIO_MUX_1",
+      "timer": "TMR1",
+      "timer_channel": "TMR_SELECT_CHANNEL_3",
+      "timer_dma_request": "TMR_OVERFLOW_DMA_REQUEST",
+      "timer_dmamux_request": "DMAMUX_DMAREQ_ID_TMR1_OVERFLOW",
+      "dma_channel": "DMA1_CHANNEL2",
+      "dma_mux_channel": "DMA1MUX_CHANNEL2",
+      "dma_transfer_flag": "DMA1_FDT2_FLAG",
+      "dma_clear_flag": "DMA1_GL2_FLAG",
+      "reset_time_ns": 300000,
+      "dma_frame_repeats": 2,
+      "bitbang_frame_repeats": 2
+    }
+  },
+  "hardware": {
+    "hse_value": 12000000,
+    "driver": "at32f405xx",
+    "spi": {
+      "buses": [
+        {
+          "instance": "SPI3",
+          "clock_hz": 108000000,
+          "sck_pin": "C10",
+          "miso_pin": "C11",
+          "mosi_pin": "C12",
+          "pin_mux": "GPIO_MUX_6"
+        }
+      ]
+    }
+  },
+  "analog": {
+    "backend": "spi_adc",
+    "spi": {
+      "driver": "ads7953",
+      "buses": [
+        {
+          "bus": 0,
+          "gpio": { "sck_pin": "A0", "miso_pin": "A1", "mosi_pin": "C3" },
+          "devices": [
+            { "cs": "C1", "map": [6,7,8,9,10,16,17,18,19,20,0,0,0,0,0,0] },
+            { "cs": "C2", "map": [26,27,28,29,30,32,35,36,38,40,0,0,0,0,0,0] }
+          ]
+        }
+      ]
+    }
+  },
+  "digital": {
+    "input": ["A2", "A9"],
+    "vector": [41, 42]
+  },
+  "trackball": {
+    "enabled": true,
+    "sensor": "PAW3395",
+    "spi_bus": 0,
+    "cs_pin": "A15",
+    "motion_pin": "D2",
+    "spi_frequency_hz": 8000000,
+    "cpi_default": 1600
+  },
+  "encoder": {
+    "map": [
+      { "label": "Scroll", "cw": 42, "ccw": 43 }
+    ],
+    "hardware": {
+      "a_pins": ["B7"],
+      "b_pins": ["B6"],
+      "invert_directions": [0],
+      "pullup": true
+    }
+  },
+  "calibration": {
+    "initial_rest_value": 2400,
+    "initial_bottom_out_threshold": 650
+  },
+  "layout": {
+    "keymap": [ ... ]
+  },
+  "keymap": [
+    ["KC_Q", "KC_W", ...],
+    ...
+  ]
+}
+```
 
 ### Mochiko40HE（RGB + ジョイスティック搭載）
 

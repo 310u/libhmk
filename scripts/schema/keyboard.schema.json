@@ -25,6 +25,17 @@
       },
       "required": ["vid", "pid", "port"]
     },
+    "features": {
+      "type": "object",
+      "description": "Feature flags for firmware and configurator",
+      "properties": {
+        "rgb": { "type": "boolean" },
+        "joystick": { "type": "boolean" },
+        "encoder": { "type": "boolean" },
+        "slider": { "type": "boolean" },
+        "trackball": { "type": "boolean" }
+      }
+    },
     "keyboard": {
       "type": "object",
       "description": "Keyboard configuration",
@@ -73,6 +84,142 @@
         "driver": {
           "type": "string",
           "description": "Keyboard driver name"
+        },
+        "timings": {
+          "type": "object",
+          "description": "Background task scheduler intervals and phases",
+          "properties": {
+            "usb": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "layout": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "xinput": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "command": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "trackball": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "joystick": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "encoder": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "slider": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            },
+            "rgb": {
+              "type": "object",
+              "properties": {
+                "interval": { "type": "integer", "minimum": 1 },
+                "phase": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["interval", "phase"]
+            }
+          }
+        },
+        "spi": {
+          "type": "object",
+          "description": "General SPI bus configuration for peripherals such as trackball sensors",
+          "properties": {
+            "buses": {
+              "type": "array",
+              "description": "Array of SPI bus definitions",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "instance": {
+                    "type": "string",
+                    "description": "SPI peripheral instance, e.g. SPI1, SPI2, SPI3"
+                  },
+                  "clock_hz": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Input clock frequency for the SPI peripheral in Hz"
+                  },
+                  "sck_pin": {
+                    "type": "string",
+                    "description": "GPIO pin name for SCK (e.g. \"C10\")"
+                  },
+                  "miso_pin": {
+                    "type": "string",
+                    "description": "GPIO pin name for MISO (e.g. \"C11\")"
+                  },
+                  "mosi_pin": {
+                    "type": "string",
+                    "description": "GPIO pin name for MOSI (e.g. \"C12\")"
+                  },
+                  "pin_mux": {
+                    "type": "string",
+                    "description": "GPIO mux value for AT32 (e.g. GPIO_MUX_6)"
+                  },
+                  "pin_af": {
+                    "type": "string",
+                    "description": "GPIO alternate function for STM32"
+                  }
+                },
+                "required": ["instance", "clock_hz", "sck_pin"]
+              }
+            }
+          },
+          "required": ["buses"]
+        },
+        "clock": {
+          "type": "object",
+          "description": "Optional board-specific clock/PLL overrides",
+          "properties": {
+            "pll_ns": { "type": "integer", "minimum": 1 },
+            "pll_ms": { "type": "integer", "minimum": 1 },
+            "pll_fp": { "type": "string" },
+            "pll_fu": { "type": "string" },
+            "apb2_div": { "type": "string" },
+            "apb1_div": { "type": "string" }
+          }
         }
       },
       "required": ["hse_value", "driver"]
@@ -171,6 +318,16 @@
                     "maximum": 3,
                     "description": "SPI bus index defined by board_def.h"
                   },
+                  "gpio": {
+                    "type": "object",
+                    "description": "GPIO pins used for this SPI ADC bus when they differ from the general SPI bus definition",
+                    "properties": {
+                      "sck_pin": { "type": "string" },
+                      "miso_pin": { "type": "string" },
+                      "mosi_pin": { "type": "string" }
+                    },
+                    "required": ["sck_pin", "miso_pin", "mosi_pin"]
+                  },
                   "devices": {
                     "type": "array",
                     "minItems": 1,
@@ -202,6 +359,55 @@
             }
           },
           "required": ["driver", "buses"]
+        }
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "description": "Matrix scanning and scheduler configuration",
+      "properties": {
+        "processing_divider": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Matrix processing divider. Lower values yield higher scan rates."
+        },
+        "scheduler_max_catchup_scans": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of catch-up scans the scheduler may perform in one iteration."
+        },
+        "scheduler_budget_us": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Soft diagnostic budget for one matrix processing interval in microseconds."
+        },
+        "adc_sample_delay_default": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Default multiplexer settle delay in microseconds."
+        },
+        "analog_scan_key_version_delta": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Key version delta threshold for analog scan."
+        },
+        "detailed_scan_diagnostics": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Enable detailed per-key scan diagnostics."
+        },
+        "idle_raw_fast_path_margin": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "ADC margin used for the idle-key fast path."
+        },
+        "live_scan_timing_diagnostics": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Enable live scan timing diagnostics."
         }
       }
     },
@@ -257,9 +463,108 @@
             },
             "required": ["cw", "ccw"]
           }
+        },
+        "hardware": {
+          "type": "object",
+          "description": "Rotary encoder GPIO and direction configuration",
+          "properties": {
+            "a_pins": {
+              "type": "array",
+              "description": "GPIO pin names for the encoder A signals",
+              "items": { "type": "string" }
+            },
+            "b_pins": {
+              "type": "array",
+              "description": "GPIO pin names for the encoder B signals",
+              "items": { "type": "string" }
+            },
+            "invert_directions": {
+              "type": "array",
+              "description": "Per-encoder direction inversion flags (0 or 1)",
+              "items": { "type": "integer", "minimum": 0, "maximum": 1 }
+            },
+            "pullup": {
+              "type": "boolean",
+              "description": "Enable internal pull-up on encoder GPIO inputs"
+            }
+          },
+          "required": ["a_pins", "b_pins"]
         }
       },
       "required": ["map"]
+    },
+    "joystick": {
+      "type": "object",
+      "description": "Joystick hardware configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable joystick input"
+        },
+        "sw_pin": {
+          "type": "string",
+          "description": "GPIO pin name for the joystick switch (e.g. \"A9\")"
+        },
+        "x_adc_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "ADC input index for the X axis"
+        },
+        "y_adc_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "ADC input index for the Y axis"
+        },
+        "sw_key_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Key index mapped to the joystick switch"
+        }
+      },
+      "required": ["enabled", "sw_pin", "x_adc_index", "y_adc_index", "sw_key_index"]
+    },
+    "trackball": {
+      "type": "object",
+      "description": "Trackball sensor hardware configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable trackball input"
+        },
+        "sensor": {
+          "type": "string",
+          "description": "Sensor driver name, e.g. PAW3395"
+        },
+        "spi_bus": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index into hardware.spi.buses used for the sensor"
+        },
+        "cs_pin": {
+          "type": "string",
+          "description": "GPIO pin name used as chip select"
+        },
+        "motion_pin": {
+          "type": "string",
+          "description": "GPIO pin name connected to the sensor motion interrupt"
+        },
+        "spi_frequency_hz": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "SPI clock frequency used for the sensor"
+        },
+        "cpi_default": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Default CPI setting"
+        },
+        "spi_hold_time_us": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum CS high time between SPI transactions in microseconds"
+        }
+      },
+      "required": ["enabled", "sensor", "spi_bus", "cs_pin", "motion_pin"]
     },
     "calibration": {
       "type": "object",
@@ -455,6 +760,61 @@
           "type": "array",
           "description": "Key indices that should be treated as modifiers in ALPHAS_MODS.",
           "items": { "type": "integer", "minimum": 0 }
+        },
+        "hardware": {
+          "type": "object",
+          "description": "RGB hardware configuration. When omitted, RGB compile-time macros must be provided by a generated or manual board_def.h.",
+          "properties": {
+            "num_leds": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of RGB LEDs"
+            },
+            "data_pin": {
+              "type": "string",
+              "description": "GPIO pin name for the RGB data line (e.g. \"A10\")"
+            },
+            "timer": {
+              "type": "string",
+              "description": "Hardware timer used for RGB PWM/DMA (e.g. \"TMR1\")"
+            },
+            "timer_channel": {
+              "type": "string",
+              "description": "Timer channel used for RGB (e.g. \"TMR_SELECT_CHANNEL_3\")"
+            },
+            "dma_channel": {
+              "type": "string",
+              "description": "DMA channel used for RGB (e.g. \"DMA1_CHANNEL2\")"
+            },
+            "dma_mux_channel": {
+              "type": "string",
+              "description": "DMAMUX channel used for RGB (driver-specific)"
+            },
+            "dma_transfer_flag": {
+              "type": "string",
+              "description": "DMA transfer complete flag (driver-specific)"
+            },
+            "dma_clear_flag": {
+              "type": "string",
+              "description": "DMA global clear flag (driver-specific)"
+            },
+            "reset_time_ns": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "RGB reset time in nanoseconds"
+            },
+            "dma_frame_repeats": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of times each RGB DMA frame is repeated"
+            },
+            "bitbang_frame_repeats": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of times each RGB bitbang frame is repeated"
+            }
+          },
+          "required": ["num_leds", "data_pin", "timer", "timer_channel", "dma_channel"]
         }
       },
       "required": ["led_map"]

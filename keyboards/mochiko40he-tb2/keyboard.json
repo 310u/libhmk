@@ -72,11 +72,49 @@
             39,
             30,
             31
-        ]
+        ],
+        "hardware": {
+            "num_leds": 40,
+            "data_pin": "A10",
+            "data_pin_source": "GPIO_PINS_SOURCE10",
+            "data_pin_mux": "GPIO_MUX_1",
+            "timer": "TMR1",
+            "timer_channel": "TMR_SELECT_CHANNEL_3",
+            "timer_dma_request": "TMR_OVERFLOW_DMA_REQUEST",
+            "timer_dmamux_request": "DMAMUX_DMAREQ_ID_TMR1_OVERFLOW",
+            "dma_channel": "DMA1_CHANNEL2",
+            "dma_mux_channel": "DMA1MUX_CHANNEL2",
+            "dma_transfer_flag": "DMA1_FDT2_FLAG",
+            "dma_clear_flag": "DMA1_GL2_FLAG",
+            "reset_time_ns": 300000,
+            "dma_frame_repeats": 2,
+            "bitbang_frame_repeats": 2
+        }
     },
     "hardware": {
         "hse_value": 12000000,
-        "driver": "at32f405xx"
+        "driver": "at32f405xx",
+        "spi": {
+            "buses": [
+                {
+                    "instance": "SPI3",
+                    "clock_hz": 108000000,
+                    "sck_pin": "C10",
+                    "miso_pin": "C11",
+                    "mosi_pin": "C12",
+                    "pin_mux": "GPIO_MUX_6"
+                }
+            ]
+        }
+    },
+    "matrix": {
+        "processing_divider": 3,
+        "scheduler_max_catchup_scans": 4,
+        "scheduler_budget_us": 1000,
+        "analog_scan_key_version_delta": 0,
+        "detailed_scan_diagnostics": 0,
+        "idle_raw_fast_path_margin": 24,
+        "live_scan_timing_diagnostics": 0
     },
     "memory_budget": {
         "min_flash_headroom": 32768,
@@ -160,6 +198,15 @@
             41
         ]
     },
+    "trackball": {
+        "enabled": true,
+        "sensor": "PAW3395",
+        "spi_bus": 0,
+        "cs_pin": "B6",
+        "motion_pin": "B7",
+        "spi_frequency_hz": 8000000,
+        "cpi_default": 1600
+    },
     "encoder": {
         "map": [
             {
@@ -167,7 +214,19 @@
                 "cw": 42,
                 "ccw": 43
             }
-        ]
+        ],
+        "hardware": {
+            "a_pins": [
+                "B10"
+            ],
+            "b_pins": [
+                "B12"
+            ],
+            "invert_directions": [
+                0
+            ],
+            "pullup": true
+        }
     },
     "calibration": {
         "initial_rest_value": 2400,

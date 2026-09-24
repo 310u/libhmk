@@ -16,7 +16,35 @@
   "hardware": {
     "cpu_hz": 144000000,
     "hse_value": 12000000,
-    "driver": "at32f405xx"
+    "driver": "at32f405xx",
+    "clock": {
+      "pll_ns": 48,
+      "pll_ms": 1,
+      "pll_fp": "CRM_PLL_FP_4",
+      "pll_fu": "CRM_PLL_FU_12",
+      "apb2_div": "CRM_APB2_DIV_1",
+      "apb1_div": "CRM_APB1_DIV_2"
+    },
+    "spi": {
+      "buses": [
+        {
+          "instance": "SPI1",
+          "clock_hz": 144000000,
+          "sck_pin": "A5",
+          "miso_pin": "A6",
+          "mosi_pin": "A7",
+          "pin_mux": "GPIO_MUX_5"
+        },
+        {
+          "instance": "SPI2",
+          "clock_hz": 72000000,
+          "sck_pin": "B13",
+          "miso_pin": "B14",
+          "mosi_pin": "B15",
+          "pin_mux": "GPIO_MUX_5"
+        }
+      ]
+    }
   },
   "analog": {
     "backend": "spi_adc",
@@ -27,6 +55,11 @@
       "buses": [
         {
           "bus": 0,
+          "gpio": {
+            "sck_pin": "A5",
+            "miso_pin": "A6",
+            "mosi_pin": "A7"
+          },
           "devices": [
             {
               "cs": "B0",
@@ -40,6 +73,11 @@
         },
         {
           "bus": 1,
+          "gpio": {
+            "sck_pin": "B13",
+            "miso_pin": "B14",
+            "mosi_pin": "B15"
+          },
           "devices": [
             {
               "cs": "C0",
