@@ -470,8 +470,8 @@ static void migration_copy_unchanged(uint8_t *dst, const uint8_t *src,
 
 #define MAKE_MIGRATION_ASSIGN(type)                                            \
   static void migration_assign_##type(uint8_t **dst, type value) {             \
-    *(type *)(*dst) = value;                                                   \
-    *dst = (uint8_t *)((type *)(*dst) + 1);                                    \
+    memcpy(*dst, &value, sizeof(type));                                        \
+    *dst += sizeof(type);                                                      \
   }
 
 MAKE_MIGRATION_ASSIGN(uint8_t)
@@ -594,7 +594,8 @@ bool v1_3_global_config_func(uint8_t *dst, const uint8_t *src) {
   // Copy `magic_start` to `bottom_out_threshold`
   migration_memcpy(&dst, &src, 10 + NUM_KEYS * 2);
   // Keep `save_bottom_out_threshold` disabled by default for migrated configs.
-  uint16_t options = *((uint16_t *)src);
+  uint16_t options;
+  memcpy(&options, src, sizeof(options));
   migration_assign_uint16_t(&dst, options);
   src += sizeof(options);
   // Copy `current_profile` to `last_non_default_profile`
@@ -623,7 +624,9 @@ bool v1_4_global_config_func(uint8_t *dst, const uint8_t *src) {
   // Copy `magic_start` to `bottom_out_threshold`
   migration_memcpy(&dst, &src, 10 + NUM_KEYS * 2);
   // Default `high_polling_rate_enabled` to true
-  uint16_t options = *((uint16_t *)src) | (1 << 2);
+  uint16_t options;
+  memcpy(&options, src, sizeof(options));
+  options |= (1 << 2);
   migration_assign_uint16_t(&dst, options);
   src += sizeof(options);
   // Copy `current_profile` to `last_non_default_profile`
