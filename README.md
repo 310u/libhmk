@@ -12,23 +12,27 @@ The source tree is shared across multiple keyboard definitions under `keyboards/
 
 ## Changes from Upstream / フォーク元からの変更点
 
-This fork is **116 commits ahead** of upstream, adding major feature sets, architectural improvements, a native test suite, and 6 custom keyboard definitions.
+This fork extends [peppapighs/libhmk](https://github.com/peppapighs/libhmk) from a Hall-effect keyboard firmware library into complete, production-ready firmware for self-built keyboards. It adds major feature sets (RGB lighting, input devices, advanced keys), architectural improvements (cooperative microsecond scheduler, queue-based event pipeline, centralized profile runtime), a Unity native test suite with CI verification, and 6 fork-only keyboard definitions.
 
-本フォークは upstream から **116コミット先行** しており、大規模な機能追加・アーキテクチャ改善・ネイティブテストスイート・6機種の独自キーボード定義を追加しています。
+All changes are built on the existing driver interfaces and the schema-validated `keyboard.json` configuration system, so upstream keyboard definitions and the shared source tree keep working unchanged. The additions are summarized below.
+
+本フォークは upstream の libhmk を、ホール効果キーボードのライブラリ群から、自作キーボード向けの完成品ファームウェアへ拡張しています。大規模な機能追加（RGB バックライト、入力デバイス、高度なキー）、アーキテクチャ改善（マイクロ秒単位の協調スケジューラ、キューベースのイベントパイプライン、プロファイルランタイムの集中化）、CI 検証付きの Unity ネイティブテストスイート、フォーク独自のキーボード定義 6 機種を追加しました。
+
+変更はすべて既存のドライバインタフェースと、schema で検証される `keyboard.json` の設定体系の上に構築されており、upstream 由来のキーボード定義と共有ソースツリーはそのまま動作します。追加内容は以下のとおりです。
 
 | Category / カテゴリ | Additions / 追加内容 |
 |---|---|
-| **Input Devices / 入力デバイス** | Analog joystick (5 modes), rotary encoder, analog slider, optical trackball (PMW3360/PAW3395) |
-| **RGB Lighting / RGB バックライト** | Per-key SK6812MINI-E LED driver, 50+ effects (static/animated/reactive/ambient/utility), binary clock |
-| **Advanced Keys / 高度なキー** | Combo keys (up to 4 triggers), macro recording/playback, double-tap for tap-hold |
-| **Matrix / マトリクス** | Kalman position/velocity tracking, bottom-out collision fix, idle-key fast path, 16kHz target, predictive rapid trigger, per-key distance curve (9-point, log default) |
-| **Architecture / アーキテクチャ** | Queue-based HID commands, cooperative microsecond scheduler, extracted analog scan layer, centralized profile runtime, USB suspend/resume recovery, input routing boundary |
-| **Diagnostics / 診断** | Integrated runtime diagnostic mode (channel identity + raw-by-step), scan rate diag, USB polling rate measurement |
-| **Keyboard Defs / キーボード定義** | 6 fork-only keyboards: mochiko39he, mochiko40he, mochiko40he-rev2, mochiko40he-tb, mochiko40he-tb2, ads7953_ref |
-| **MCU Peripherals / MCU周辺機能** | SPI, I2C, timer HAL drivers for both AT32F405xx and STM32F446xx |
-| **Testing / テスト** | Unity-based native test suite (18 suites, 25 native test environments), memory budget validation, stack usage analysis, regression runner |
-| **Documentation / ドキュメント** | 12 docs files: protocol spec, architecture notes, keyboard.json reference, keyboard setup guide, SPI ADC design, etc. |
-| **Bug Fixes / バグ修正** | Stuck-key USB race condition, XInput/HID gamepad conflict, event chronological sorting, hold-tap input buffering, upstream STM32 timer + EEPROM wear reduction port |
+| **Input Devices / 入力デバイス** | Analog joystick (5 modes), rotary encoder, analog slider, optical trackball (PMW3360/PAW3395) / アナログジョイスティック（5モード）、ロータリーエンコーダ、アナログスライダー、光学トラックボール（PMW3360/PAW3395） |
+| **RGB Lighting / RGB バックライト** | Per-key SK6812MINI-E LED driver, 50+ effects (static/animated/reactive/ambient/utility), binary clock / キーごとの SK6812MINI-E LED ドライバ、50以上のエフェクト（静的/動的/リアクティブ/アンビエント/ユーティリティ）、バイナリー時計 |
+| **Advanced Keys / 高度なキー** | Combo keys (up to 4 triggers), macro recording/playback, double-tap for tap-hold / コンボキー（最大4キートリガー）、マクロ記録・再生、Tap-Hold 用ダブルタップ |
+| **Matrix / マトリクス** | Kalman position/velocity tracking, bottom-out collision fix, idle-key fast path, 16kHz target, predictive rapid trigger, per-key distance curve (9-point, log default) / カルマンフィルタによる位置・速度追跡、ボトムアウト衝突修正、待機キー高速パス、16kHz 目標、予測型ラピッドトリガー、キーごとの距離カーブ（9点、対数既定） |
+| **Architecture / アーキテクチャ** | Queue-based HID commands, cooperative microsecond scheduler, extracted analog scan layer, centralized profile runtime, USB suspend/resume recovery, input routing boundary / キューベースの HID コマンド、協調的マイクロ秒スケジューラ、アナログスキャン層の分離、プロファイルランタイムの集中化、USB サスペンド/レジューム復旧、入力ルーティング境界 |
+| **Diagnostics / 診断** | Integrated runtime diagnostic mode (channel identity + raw-by-step), scan rate diag, USB polling rate measurement / 統合ランタイム診断モード（チャンネル識別 + ステップ生値）、スキャンレート診断、USB ポーリングレート計測 |
+| **Keyboard Defs / キーボード定義** | 6 fork-only keyboards: mochiko39he, mochiko40he, mochiko40he-rev2, mochiko40he-tb, mochiko40he-tb2, ads7953_ref / フォーク独自の6機種: mochiko39he、mochiko40he、mochiko40he-rev2、mochiko40he-tb、mochiko40he-tb2、ads7953_ref |
+| **MCU Peripherals / MCU周辺機能** | SPI, I2C, timer HAL drivers for both AT32F405xx and STM32F446xx / AT32F405xx・STM32F446xx 両方の SPI・I2C・タイマー HAL ドライバ |
+| **Testing / テスト** | Unity-based native test suite (18 suites, 25 native test environments), memory budget validation, stack usage analysis, regression runner / Unity ベースのネイティブテストスイート（18スイート、25環境）、メモリ予算検証、スタック使用量解析、リグレッションランナー |
+| **Documentation / ドキュメント** | 12 docs files: protocol spec, architecture notes, keyboard.json reference, keyboard setup guide, SPI ADC design, etc. / ドキュメント12ファイル: プロトコル仕様、アーキテクチャノート、keyboard.json リファレンス、キーボード設定ガイド、SPI ADC 設計など |
+| **Bug Fixes / バグ修正** | Stuck-key USB race condition, XInput/HID gamepad conflict, event chronological sorting, hold-tap input buffering, upstream STM32 timer + EEPROM wear reduction port / キー固着の USB 競合状態、XInput/HID ゲームパッド競合、イベント時系列ソート、Hold-Tap 入力バッファリング、upstream の STM32 タイマー調整と EEPROM 摩耗軽減の移植 |
 
 ---
 
@@ -40,20 +44,20 @@ libhmk は汎用ホール効果キーボードファームウェアです。下�
 
 | Capability / 機能 | Details / 詳細 | Status / 状態 |
 |---|---|---|
-| **Analog Matrix Input / アナログマトリクス入力** | Per-key actuation point, automatic calibration, Kalman/α-β position-velocity tracking, idle-key fast path | Validated / 実機検証済 |
-| **Rapid Trigger** | Position/direction-based trigger, continuous + predictive rapid trigger | Validated / 実機検証済 |
-| **Advanced Keys / 高度なキー** | Dynamic Keystroke (4 keycodes), Tap-Hold + Double-Tap, Toggle, Null Bind (SOCD/Rappy Snappy), Combo (≤4 keys), Macro record/playback | Validated / 実機検証済 |
-| **Distance Curve / 距離カーブ** | Per-key switch-travel curve (up to 9 points, µm total travel), logarithmic default, Raw HID GET/SET (60-byte chunks), profile persistence (v1.17) | Build-tested only / ビルド検証のみ |
-| **RGB Lighting / RGB バックライト** | Per-key SK6812MINI-E, 50+ effects (static/animated/reactive/ambient/utility), depth-reactive, binary clock; AT32=DMA/PWM, STM32=bitbang | Validated / 実機検証済 |
-| **Joystick / ジョイスティック** | 5 modes (disabled/mouse/XInput sticks/scroll), deadzone, mouse speed, axis calibration | Validated / 実機検証済 |
-| **Rotary Encoder / ロータリーエンコーダ** | Multiple quadrature encoders, fixed keycode or `hmkconf`-remappable virtual key, push-button via `digital` GPIO; defined in `keyboard.json` | Build-tested only / ビルド検証のみ |
-| **Analog Slider / アナログスライダー** | On-board analog slider, Volume and Gamepad modes | Build-tested only / ビルド検証のみ |
-| **Trackball / トラックボール** | PMW3360/PAW3395 via SPI, CPI adjustment, RGB feedback, config commands + profile persistence (v1.16); available on `mochiko40he-tb` / `-tb2` | Validated / 実機検証済 |
-| **Direct GPIO Digital Inputs / デジタルGPIO直接入力** | Spare GPIO pins mapped to key indices without a matrix (encoder push-buttons, side buttons, toggles) | Validated / 実機検証済 |
-| **Gamepad / HID** | XInput (Windows) + HID gamepad fallback, NKRO with 6KRO BIOS fallback, 8kHz polling (AT32 high-speed USB) | Validated / 実機検証済 |
-| **Configurability / 設定** | Web configurator [hmkconf](https://github.com/310u/hmkconf) (no recompile), profiles × layers, EEPROM emulation, per-profile persistence | Validated / 実機検証済 |
-| **Diagnostics / 診断** | Integrated runtime diagnostic mode, scan-rate diag, USB polling-rate measurement | Validated / 実機検証済 |
-| **MCU Support / MCU対応** | AT32F405xx (ADC matrix, DMA/PWM RGB, SPI/I2C/timer), STM32F446xx (bitbang RGB, SPI/I2C/timer); analog backend `mcu_adc` (`spi_adc` reserved, not implemented) | AT32: Validated / STM32: Build-tested (drivers + native tests; no in-tree STM32 keyboard) |
+| **Analog Matrix Input / アナログマトリクス入力** | Per-key actuation point, automatic calibration, Kalman/α-β position-velocity tracking, idle-key fast path / キーごとのアクチュエーションポイント、自動キャリブレーション、カルマン/α-β 位置・速度追跡、待機キー高速パス | Validated / 実機検証済 |
+| **Rapid Trigger / ラピッドトリガー** | Position/direction-based trigger, continuous + predictive rapid trigger / 位置・方向ベースのトリガー、連続型 + 予測型ラピッドトリガー | Validated / 実機検証済 |
+| **Advanced Keys / 高度なキー** | Dynamic Keystroke (4 keycodes), Tap-Hold + Double-Tap, Toggle, Null Bind (SOCD/Rappy Snappy), Combo (≤4 keys), Macro record/playback / ダイナミックキーストローク（4キーコード）、Tap-Hold + ダブルタップ、トグル、Null Bind（SOCD/Rappy Snappy）、コンボ（最大4キー）、マクロ記録・再生 | Validated / 実機検証済 |
+| **Distance Curve / 距離カーブ** | Per-key switch-travel curve (up to 9 points, µm total travel), logarithmic default, Raw HID GET/SET (60-byte chunks), profile persistence (v1.17) / キーごとのスイッチストロークカーブ（最大9点、全ストローク μm 指定）、対数カーブ既定、Raw HID GET/SET（60バイトチャンク）、プロファイル永続化（v1.17） | Build-tested only / ビルド検証のみ |
+| **RGB Lighting / RGB バックライト** | Per-key SK6812MINI-E, 50+ effects (static/animated/reactive/ambient/utility), depth-reactive, binary clock; AT32=DMA/PWM, STM32=bitbang / キーごとの SK6812MINI-E、50以上のエフェクト（静的/動的/リアクティブ/アンビエント/ユーティリティ）、奥行きリアクティブ、バイナリー時計。AT32=DMA/PWM、STM32=ビットバンク | Validated / 実機検証済 |
+| **Joystick / ジョイスティック** | 5 modes (disabled/mouse/XInput sticks/scroll), deadzone, mouse speed, axis calibration / 5モード（無効/マウス/XInput スティック/スクロール）、デッドゾーン、マウス速度、軸キャリブレーション | Validated / 実機検証済 |
+| **Rotary Encoder / ロータリーエンコーダ** | Multiple quadrature encoders, fixed keycode or `hmkconf`-remappable virtual key, push-button via `digital` GPIO; defined in `keyboard.json` / 複数の四相エンコーダ、固定キーコードまたは `hmkconf` でリマップ可能な仮想キー、`digital` GPIO によるプッシュボタン。`keyboard.json` で定義 | Build-tested only / ビルド検証のみ |
+| **Analog Slider / アナログスライダー** | On-board analog slider, Volume and Gamepad modes / オンボードアナログスライダー、音量・ゲームパッドの2モード | Build-tested only / ビルド検証のみ |
+| **Trackball / トラックボール** | PMW3360/PAW3395 via SPI, CPI adjustment, RGB feedback, config commands + profile persistence (v1.16); available on `mochiko40he-tb` / `-tb2` / PMW3360/PAW3395 を SPI 経由で駆動、CPI 調整、RGB フィードバック、設定コマンド + プロファイル永続化（v1.16）。`mochiko40he-tb` / `-tb2` で利用可能 | Validated / 実機検証済 |
+| **Direct GPIO Digital Inputs / デジタルGPIO直接入力** | Spare GPIO pins mapped to key indices without a matrix (encoder push-buttons, side buttons, toggles) / マトリクスを使わずに空き GPIO ピンをキーインデックスへ割当（エンコーダープッシュボタン、サイドボタン、トグル） | Validated / 実機検証済 |
+| **Gamepad / HID** | XInput (Windows) + HID gamepad fallback, NKRO with 6KRO BIOS fallback, 8kHz polling (AT32 high-speed USB) / XInput（Windows）+ HID ゲームパッドフォールバック、NKRO（BIOS では 6KRO フォールバック）、8kHz ポーリング（AT32 高速 USB） | Validated / 実機検証済 |
+| **Configurability / 設定** | Web configurator [hmkconf](https://github.com/310u/hmkconf) (no recompile), profiles × layers, EEPROM emulation, per-profile persistence / Web コンフィグ [hmkconf](https://github.com/310u/hmkconf)（再コンパイル不要）、プロファイル × レイヤー、EEPROM エミュレーション、プロファイルごとの永続化 | Validated / 実機検証済 |
+| **Diagnostics / 診断** | Integrated runtime diagnostic mode, scan-rate diag, USB polling-rate measurement / 統合ランタイム診断モード、スキャンレート診断、USB ポーリングレート計測 | Validated / 実機検証済 |
+| **MCU Support / MCU対応** | AT32F405xx (ADC matrix, DMA/PWM RGB, SPI/I2C/timer), STM32F446xx (bitbang RGB, SPI/I2C/timer); analog backend `mcu_adc` (`spi_adc` reserved, not implemented) / AT32F405xx（ADC マトリクス、DMA/PWM RGB、SPI/I2C/タイマー）、STM32F446xx（ビットバンク RGB、SPI/I2C/タイマー）。アナログバックエンドは `mcu_adc`（`spi_adc` は予約済み・未実装） | AT32: Validated / STM32: Build-tested (drivers + native tests; no in-tree STM32 keyboard) / AT32: 実機検証済、STM32: ビルド検証のみ（ドライバ + ネイティブテスト。STM32 キーボード定義はなし） |
 
 ### Keyboard Definitions / キーボード定義
 
@@ -93,7 +97,7 @@ The keyboard definitions in [`keyboards/`](keyboards/) are examples created by t
 
 | Mode / モード | Description / 説明 |
 |---|---|
-| Disabled / 無効 | Joystick input is ignored |
+| Disabled / 無効 | Joystick input is ignored / ジョイスティック入力を無視 |
 | Mouse / マウス | Controls the mouse cursor / マウスカーソル操作 |
 | XInput Left Stick | Maps to left analog stick in gamepad mode / ゲームパッド左スティック |
 | XInput Right Stick | Maps to right analog stick in gamepad mode / ゲームパッド右スティック |
@@ -137,10 +141,10 @@ SK6812MINI-E によるキーごとの RGB バックライト。50以上のエフ
 | Category / カテゴリ | Effects / エフェクト |
 |---|---|
 | Static / 静的 | Solid Color, Alphas/Mods, Gradients |
-| Animated / 動的 | Breathing, Rainbow, Cycle, Spiral, Pinwheel, and more |
+| Animated / 動的 | Breathing, Rainbow, Cycle, Spiral, Pinwheel, and more / Breathing、Rainbow、Cycle、Spiral、Pinwheel など |
 | Reactive / リアクティブ | Typing Heatmap (key press depth), Reactive, Splash, Nexus |
 | Ambient / アンビエント | Digital Rain, Pixel Rain, Raindrops, Starlight, Riverflow |
-| Utility / ユーティリティ | **Binary Clock** — host-synchronized time in binary LED layout (requires `hmkconf` RGB tab open) |
+| Utility / ユーティリティ | **Binary Clock** — host-synchronized time in binary LED layout (requires `hmkconf` RGB tab open) / ホスト同期時計（バイナリ LED 配置、`hmkconf` の RGB タブを開いた状態が必要） |
 
 Many RGB effect names and animation formulas are adapted from QMK's [RGB Matrix](https://docs.qmk.fm/features/rgb_matrix) / RGB Light effect set. `ANALOG` and `PER_KEY` are libhmk-specific extensions. If you redistribute firmware derived from these effects, keep the corresponding source available and preserve attribution.
 
@@ -220,7 +224,7 @@ The legacy `mochiko40he_diag` environment is still generated for low-level devel
 
 ### Building / ビルド
 
-1. Clone the repository:
+1. Clone the repository / リポジトリのクローン:
    ```bash
    git clone https://github.com/310u/libhmk.git
    ```
@@ -233,16 +237,18 @@ The legacy `mochiko40he_diag` environment is still generated for low-level devel
    Rerun `setup.py` whenever switching keyboard targets or editing hardware fields in `keyboard.json`.
    `platformio.ini` と `<keyboard>_recovery` 環境を生成し、`keyboard.json` から [`scripts/generate_board_def.py`](scripts/generate_board_def.py) 経由で `keyboards/<keyboard>/board_def.h` を再生成します。キーボードの切り替え時、および `keyboard.json` のハードウェア項目の変更時は都度 `setup.py` を再実行してください。
 
-3. Build:
+3. Build / ビルド:
    ```bash
    pio run
    ```
-   Outputs: `.pio/build/<keyboard>/firmware.{bin,elf}`
+   Outputs / 出力: `.pio/build/<keyboard>/firmware.{bin,elf}`
 
-4. Flash via DFU (after setting `upload_protocol = dfu` in `platformio.ini`):
+4. Flash via DFU / DFU でフラッシュ:
    ```bash
    pio run --target upload
    ```
+   Set `upload_protocol = dfu` in `platformio.ini` first.
+   `platformio.ini` で `upload_protocol = dfu` を設定してください。
    Or use [WebUSB DFU](https://devanlai.github.io/webdfu/dfu-util/) (recommended).
    または [WebUSB DFU](https://devanlai.github.io/webdfu/dfu-util/) を使用（推奨）。
 
@@ -256,9 +262,9 @@ Create a directory under `keyboards/` with:
 
 `keyboards/` 配下に以下を含むディレクトリを作成:
 
-- **`keyboard.json`** (required / 必須): Single source of truth for firmware metadata, hardware (matrix, RGB, joystick, encoder, trackball, clock/timings), layout, and keymap. Schema: [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json)
-- **`board_def.h`** (generated / 自動生成): Written by `setup.py` from `keyboard.json` — do not edit by hand. Only legacy (unmigrated) keyboards or special compile-time overrides use a manual `board_def.h`.
-- **`config.h`** (optional / 任意): Additional configuration beyond `keyboard.json`
+- **`keyboard.json`** (required / 必須): Single source of truth for firmware metadata, hardware (matrix, RGB, joystick, encoder, trackball, clock/timings), layout, and keymap / ファームウェアのメタデータ、ハードウェア（マトリクス、RGB、ジョイスティック、エンコーダ、トラックボール、時計/タイミング）、レイアウト、キーマップの単一情報源。Schema: [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json)
+- **`board_def.h`** (generated / 自動生成): Written by `setup.py` from `keyboard.json` — do not edit by hand / `setup.py` が `keyboard.json` から生成するため手動編集は禁止。Only legacy (unmigrated) keyboards or special compile-time overrides use a manual `board_def.h` / 旧来（未移行）のキーボード、またはコンパイル時オーバーライドの場合のみ手動の `board_def.h` を使用。
+- **`config.h`** (optional / 任意): Additional configuration beyond `keyboard.json` / `keyboard.json` で足りない追加設定
 
 #### Key numbering / キー番号の規約
 
@@ -339,10 +345,10 @@ A complete `keyboard.json` for a hypothetical 20-key board — save it as `keybo
 | Field / フィールド | Required / 必須 | Notes / 備考 |
 |---|:---:|---|
 | `name`, `manufacturer`, `maintainer` | ✅ | USB strings / USB 文字列 |
-| `usb.vid`, `usb.pid`, `usb.port` | ✅ | `0x` + 4 hex digits; `fs` (Full Speed) or `hs` (High Speed) |
+| `usb.vid`, `usb.pid`, `usb.port` | ✅ | `0x` + 4 hex digits; `fs` (Full Speed) or `hs` (High Speed) / `0x` + 4桁16進数。`fs`（フルスピード）または `hs`（ハイスピード） |
 | `keyboard.num_profiles`, `num_layers`, `num_keys`, `num_advanced_keys` | ✅ | 1–8, 1–8, 1–256, 1–64 |
-| `hardware.hse_value`, `hardware.driver` | ✅ | Crystal frequency in Hz; `at32f405xx` or `stm32f446xx` |
-| `analog` | ✅ | `mux` (muxed ADC matrix) and/or `raw` (direct ADC pins) |
+| `hardware.hse_value`, `hardware.driver` | ✅ | Crystal frequency in Hz; `at32f405xx` or `stm32f446xx` / 水晶発振子の周波数（Hz）。`at32f405xx` または `stm32f446xx` |
+| `analog` | ✅ | `mux` (muxed ADC matrix) and/or `raw` (direct ADC pins) / `mux`（マルチプレクサ経由の ADC マトリクス）および/または `raw`（直接 ADC ピン） |
 | `calibration.initial_rest_value`, `calibration.initial_bottom_out_threshold` | ✅ | ADC counts / ADC カウント値（実測後に再調整） |
 | `layout.keymap` | ✅ | Key placement for hmkconf, 0-based `key` / hmkconf 用のキー配置（0始まり） |
 | `keymap` **or** `keymaps` | ✅ | `[layers][keys]` or `[profiles][layers][keys]` of keycode strings / キーコード文字列の配列 |
@@ -430,7 +436,7 @@ python scripts/scan_rate_diag.py --diagnostic-mode off
 
 | Directory | Purpose / 用途 |
 |---|---|
-| [`hardware/`](hardware/) | MCU-specific headers (`config.h`, `board_def.h`) |
+| [`hardware/`](hardware/) | MCU-specific headers (`config.h`, `board_def.h`) / MCU 固有ヘッダー（`config.h`、`board_def.h`） |
 | [`include/hardware/`](include/hardware/) | Driver interface headers / ドライバインタフェース |
 | [`src/hardware/`](src/hardware/) | Driver implementations / ドライバ実装 |
 | [`linker/`](linker/) | Linker scripts / リンカスクリプト |
@@ -440,18 +446,18 @@ Supported MCUs / 対応MCU:
 
 | MCU | Peripherals / 周辺機能 |
 |---|---|
-| **AT32F405xx** | ADC matrix, joystick, encoder, DMA/PWM RGB, SPI, I2C, timer |
-| **STM32F446xx** | ADC matrix, joystick, encoder, bitbang RGB, SPI, I2C, timer |
+| **AT32F405xx** | ADC matrix, joystick, encoder, DMA/PWM RGB, SPI, I2C, timer / ADC マトリクス、ジョイスティック、エンコーダ、DMA/PWM RGB、SPI、I2C、タイマー |
+| **STM32F446xx** | ADC matrix, joystick, encoder, bitbang RGB, SPI, I2C, timer / ADC マトリクス、ジョイスティック、エンコーダ、ビットバンク RGB、SPI、I2C、タイマー |
 
 ---
 
 ## Acknowledgements / 謝辞
 
 - [peppapighs/libhmk](https://github.com/peppapighs/libhmk) — Original project this fork is based on / 本フォークのベース
-- [hathach/tinyusb](https://github.com/hathach/tinyusb) — USB stack
-- [qmk/qmk_firmware](https://github.com/qmk/qmk_firmware) — EEPROM emulation, matrix scanning, RGB Matrix / RGB Light effects
+- [hathach/tinyusb](https://github.com/hathach/tinyusb) — USB stack / USB スタック
+- [qmk/qmk_firmware](https://github.com/qmk/qmk_firmware) — EEPROM emulation, matrix scanning, RGB Matrix / RGB Light effects / EEPROM エミュレーション、マトリクススキャン、RGB Matrix / RGB Light エフェクト
 - [@riskable](https://github.com/riskable) — Pioneering custom Hall-effect keyboard firmware / ホール効果キーボードファームウェアの先駆者
 - [@heiso](https://github.com/heiso/) — [macrolev](https://github.com/heiso/macrolev) and development support / 開発支援
 - [Wooting](https://wooting.io/) — Pioneering Hall-effect gaming keyboards / ホール効果ゲーミングキーボードの先駆者
-- [GEONWORKS](https://geon.works/) — Venom 60HE PCB, inspiring the web configurator
+- [GEONWORKS](https://geon.works/) — Venom 60HE PCB, inspiring the web configurator / Venom 60HE PCB、Web コンフィグの着想源
 - [@devanlai](https://github.com/devanlai) — [WebUSB DFU](https://devanlai.github.io/webdfu/dfu-util/)
