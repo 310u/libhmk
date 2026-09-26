@@ -12,9 +12,9 @@ The source tree is shared across multiple keyboard definitions under `keyboards/
 
 ## Changes from Upstream / フォーク元からの変更点
 
-This fork is **111 commits ahead** of upstream, adding major feature sets, architectural improvements, a native test suite, and 6 custom keyboard definitions.
+This fork is **116 commits ahead** of upstream, adding major feature sets, architectural improvements, a native test suite, and 6 custom keyboard definitions.
 
-本フォークは upstream から **111コミット先行** しており、大規模な機能追加・アーキテクチャ改善・ネイティブテストスイート・6機種の独自キーボード定義を追加しています。
+本フォークは upstream から **116コミット先行** しており、大規模な機能追加・アーキテクチャ改善・ネイティブテストスイート・6機種の独自キーボード定義を追加しています。
 
 | Category / カテゴリ | Additions / 追加内容 |
 |---|---|
@@ -27,7 +27,7 @@ This fork is **111 commits ahead** of upstream, adding major feature sets, archi
 | **Keyboard Defs / キーボード定義** | 6 fork-only keyboards: mochiko39he, mochiko40he, mochiko40he-rev2, mochiko40he-tb, mochiko40he-tb2, ads7953_ref |
 | **MCU Peripherals / MCU周辺機能** | SPI, I2C, timer HAL drivers for both AT32F405xx and STM32F446xx |
 | **Testing / テスト** | Unity-based native test suite (18 suites, 25 native test environments), memory budget validation, stack usage analysis, regression runner |
-| **Documentation / ドキュメント** | 11 docs files: protocol spec, architecture notes, keyboard.json reference, keyboard setup guide, SPI ADC design, etc. |
+| **Documentation / ドキュメント** | 12 docs files: protocol spec, architecture notes, keyboard.json reference, keyboard setup guide, SPI ADC design, etc. |
 | **Bug Fixes / バグ修正** | Stuck-key USB race condition, XInput/HID gamepad conflict, event chronological sorting, hold-tap input buffering, upstream STM32 timer + EEPROM wear reduction port |
 
 ---
@@ -259,6 +259,111 @@ Create a directory under `keyboards/` with:
 - **`keyboard.json`** (required / 必須): Single source of truth for firmware metadata, hardware (matrix, RGB, joystick, encoder, trackball, clock/timings), layout, and keymap. Schema: [`scripts/schema/keyboard.schema.json`](scripts/schema/keyboard.schema.json)
 - **`board_def.h`** (generated / 自動生成): Written by `setup.py` from `keyboard.json` — do not edit by hand. Only legacy (unmigrated) keyboards or special compile-time overrides use a manual `board_def.h`.
 - **`config.h`** (optional / 任意): Additional configuration beyond `keyboard.json`
+
+#### Key numbering / キー番号の規約
+
+Physical keys are addressed with two different numbering conventions depending on the field — mixing them up is the most common setup mistake:
+
+物理キーはフィールドによって2つの番号体系が混在します（混同は設定ミスの最も多い原因です）:
+
+- **1-based physical key numbers** (`1` = first key, `0` = not connected): `analog.mux.matrix`, `analog.raw.vector`, `digital.vector`, `analog.spi.buses[].devices[].map`
+- **0-based key indices** (`0` … `num_keys - 1`): `layout.keymap[].key`, `keymap` / `keymaps` array positions, `encoder.map[].cw` / `.ccw`, `joystick.sw_key_index`
+
+- **1始まりの物理キー番号**（`1` = 最初のキー、`0` = 未接続）: `analog.mux.matrix`、`analog.raw.vector`、`digital.vector`、`analog.spi.buses[].devices[].map`
+- **0始まりのキーインデックス**（`0` 〜 `num_keys - 1`）: `layout.keymap[].key`、`keymap` / `keymaps` の配列位置、`encoder.map[].cw` / `.ccw`、`joystick.sw_key_index`
+
+#### Minimal complete example / 最小構成例（20キー）
+
+A complete `keyboard.json` for a hypothetical 20-key board — save it as `keyboards/example20/keyboard.json`:
+
+仮想の20キー用の完全な `keyboard.json` です。`keyboards/example20/keyboard.json` として保存してください:
+
+> [!WARNING]
+> Pin names (`C1`–`C3`, `A3`–`A5`), `usb.vid` / `usb.pid`, and calibration values are placeholders — replace them with the pins from your PCB schematic, a VID/PID pair you own, and values measured from your sensors.
+> ピン名（`C1`–`C3`、`A3`–`A5`）、`usb.vid` / `usb.pid`、キャリブレーション値はすべて仮値です。PCB 回路図のピン、所有する VID/PID、センサー実測値に置き換えてください。
+
+```json
+{
+  "name": "Example20",
+  "manufacturer": "Example",
+  "maintainer": "you",
+  "usb": {
+    "vid": "0x1209",
+    "pid": "0x0020",
+    "port": "hs"
+  },
+  "keyboard": {
+    "num_profiles": 1,
+    "num_layers": 2,
+    "num_keys": 20,
+    "num_advanced_keys": 32
+  },
+  "hardware": {
+    "hse_value": 12000000,
+    "driver": "at32f405xx"
+  },
+  "analog": {
+    "mux": {
+      "select": ["C1", "C2", "C3"],
+      "input": ["A3", "A4", "A5"],
+      "matrix": [
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        [9, 10, 11, 12, 13, 14, 15, 16],
+        [17, 18, 19, 20, 0, 0, 0, 0]
+      ]
+    }
+  },
+  "calibration": {
+    "initial_rest_value": 2400,
+    "initial_bottom_out_threshold": 700
+  },
+  "layout": {
+    "keymap": [
+      [{ "key": 0 }, { "key": 1 }, { "key": 2 }, { "key": 3 }, { "key": 4 }],
+      [{ "key": 5 }, { "key": 6 }, { "key": 7 }, { "key": 8 }, { "key": 9 }],
+      [{ "key": 10 }, { "key": 11 }, { "key": 12 }, { "key": 13 }, { "key": 14 }],
+      [{ "key": 15 }, { "key": 16 }, { "key": 17 }, { "key": 18 }, { "key": 19 }]
+    ]
+  },
+  "keymap": [
+    ["KC_Q", "KC_W", "KC_E", "KC_R", "KC_T", "KC_Y", "KC_U", "KC_I", "KC_O", "KC_P",
+     "KC_A", "KC_S", "KC_D", "KC_F", "KC_G", "KC_H", "KC_J", "KC_K", "KC_L", "MO(1)"],
+    ["KC_F1", "KC_F2", "KC_F3", "KC_F4", "KC_F5", "KC_F6", "KC_F7", "KC_F8", "KC_F9", "KC_F10",
+     "KC_F11", "KC_F12", "KC_TRNS", "KC_TRNS", "KC_TRNS", "KC_TRNS", "KC_TRNS", "KC_TRNS", "KC_TRNS", "KC_TRNS"]
+  ]
+}
+```
+
+#### Field reference / フィールド参照
+
+| Field / フィールド | Required / 必須 | Notes / 備考 |
+|---|:---:|---|
+| `name`, `manufacturer`, `maintainer` | ✅ | USB strings / USB 文字列 |
+| `usb.vid`, `usb.pid`, `usb.port` | ✅ | `0x` + 4 hex digits; `fs` (Full Speed) or `hs` (High Speed) |
+| `keyboard.num_profiles`, `num_layers`, `num_keys`, `num_advanced_keys` | ✅ | 1–8, 1–8, 1–256, 1–64 |
+| `hardware.hse_value`, `hardware.driver` | ✅ | Crystal frequency in Hz; `at32f405xx` or `stm32f446xx` |
+| `analog` | ✅ | `mux` (muxed ADC matrix) and/or `raw` (direct ADC pins) |
+| `calibration.initial_rest_value`, `calibration.initial_bottom_out_threshold` | ✅ | ADC counts / ADC カウント値（実測後に再調整） |
+| `layout.keymap` | ✅ | Key placement for hmkconf, 0-based `key` / hmkconf 用のキー配置（0始まり） |
+| `keymap` **or** `keymaps` | ✅ | `[layers][keys]` or `[profiles][layers][keys]` of keycode strings / キーコード文字列の配列 |
+| `features`, `rgb`, `digital`, `encoder`, `joystick`, `trackball`, `matrix`, `kalman`, `actuation`, `wear_leveling`, `memory_budget`, `hardware.timings`, `hardware.spi`, `hardware.clock`, `config.h` | — | Optional / 任意 |
+
+#### Verification / 検証
+
+```bash
+# Generate platformio.ini + board_def.h / platformio.ini と board_def.h を生成
+python setup.py -k example20
+
+# Build (keyboard.json schema/keymap validation runs as a pre-build step) / ビルド（事前ステップで keyboard.json を検証）
+pio run -e example20
+
+# Native test suite (optional) / ネイティブテスト（任意）
+pio test
+```
+
+After flashing, run the initial calibration with [hmkconf](https://github.com/310u/hmkconf) — see [Calibration and Verification](docs/new_keyboard_setup.md#5-calibration-and-verification).
+
+書き込み後は hmkconf で初期キャリブレーションを実施してください（[Calibration and Verification](docs/new_keyboard_setup.md#5-calibration-and-verification) 参照）。
 
 See [New Keyboard Setup Guide / 新規キーボード設定ガイド](docs/new_keyboard_setup.md) for step-by-step instructions, and [keyboard.json Reference / keyboard.json リファレンス](docs/keyboard_json_reference.md) for every schema section.
 
