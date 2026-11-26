@@ -1,1 +1,35 @@
-IyBUaGlzIHByb2dyYW0gaXMgZnJlZSBzb2Z0d2FyZTogeW91IGNhbiByZWRpc3RyaWJ1dGUgaXQgYW5kL29yIG1vZGlmeSBpdCB1bmRlcgojIHRoZSB0ZXJtcyBvZiB0aGUgR05VIEdlbmVyYWwgUHVibGljIExpY2Vuc2UgYXMgcHVibGlzaGVkIGJ5IHRoZSBGcmVlIFNvZnR3YXJlCiMgRm91bmRhdGlvbiwgZWl0aGVyIHZlcnNpb24gMyBvZiB0aGUgTGljZW5zZSwgb3IgKGF0IHlvdXIgb3B0aW9uKSBhbnkgbGF0ZXIKIyB2ZXJzaW9uLgojCiMgVGhpcyBwcm9ncmFtIGlzIGRpc3RyaWJ1dGVkIGluIHRoZSBob3BlIHRoYXQgaXQgd2lsbCBiZSB1c2VmdWwsIGJ1dCBXSVRIT1VUCiMgQU5ZIFdBUlJBTlRZOyB3aXRob3V0IGV2ZW4gdGhlIGltcGxpZWQgd2FycmFudHkgb2YgTUVSQ0hBTlRBQklMSVRZIG9yIEZJVE5FU1MKIyBGT1IgQSBQQVJUSUNVTEFSIFBVUlBPU0UuIFNlZSB0aGUgR05VIEdlbmVyYWwgUHVibGljIExpY2Vuc2UgZm9yIG1vcmUKIyBkZXRhaWxzLgojCiMgWW91IHNob3VsZCBoYXZlIHJlY2VpdmVkIGEgY29weSBvZiB0aGUgR05VIEdlbmVyYWwgUHVibGljIExpY2Vuc2UgYWxvbmcgd2l0aAojIHRoaXMgcHJvZ3JhbS4gSWYgbm90LCBzZWUgPGh0dHBzOi8vd3d3LmdudS5vcmcvbGljZW5zZXMvPi4KCmltcG9ydCB1dGlscwpmcm9tIGdlbmVyYXRlX21ldGFkYXRhIGltcG9ydCB3cml0ZV9tZXRhZGF0YQoKSW1wb3J0KCJlbnYiKQoKa2V5Ym9hcmQgPSB1dGlscy5nZXRfa2V5Ym9hcmRfbmFtZShlbnYpCgoKZGVmIHByb2plY3RfYm9vbF9vcHRpb24obmFtZTogc3RyKSAtPiBib29sOgogICAgdHJ5OgogICAgICAgIHZhbHVlID0gZW52LkdldFByb2plY3RPcHRpb24obmFtZSkKICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgcmV0dXJuIEZhbHNlCgogICAgcmV0dXJuIHN0cih2YWx1ZSkubG93ZXIoKSBub3QgaW4gKCIiLCAiMCIsICJmYWxzZSIsICJubyIpCgoKd3JpdGVfbWV0YWRhdGEoCiAgICBrZXlib2FyZCwKICAgIGRpYWdfY2hhbm5lbF9pZGVudGl0eT1wcm9qZWN0X2Jvb2xfb3B0aW9uKCJjdXN0b21fZGlhZ19jaGFubmVsX2lkZW50aXR5IiksCiAgICBkaWFnX3J1bnRpbWU9cHJvamVjdF9ib29sX29wdGlvbigiY3VzdG9tX2RpYWdfcnVudGltZSIpLAopCg==
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+import utils
+from generate_metadata import write_metadata
+
+Import("env")
+
+keyboard = utils.get_keyboard_name(env)
+
+
+def project_bool_option(name: str) -> bool:
+    try:
+        value = env.GetProjectOption(name)
+    except Exception:
+        return False
+
+    return str(value).lower() not in ("", "0", "false", "no")
+
+
+write_metadata(
+    keyboard,
+    diag_channel_identity=project_bool_option("custom_diag_channel_identity"),
+    diag_runtime=project_bool_option("custom_diag_runtime"),
+)
