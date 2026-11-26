@@ -31,6 +31,7 @@ static const uint8_t default_keymaps[NUM_PROFILES][NUM_LAYERS][NUM_KEYS] =
 static const rgb_config_t default_rgb_config = (rgb_config_t)DEFAULT_RGB_CONFIG;
 #endif
 static eeconfig_profile_t default_profile = {0};
+static distance_curve_config_t default_distance_curve_config;
 
 static bool eeconfig_write_default_profile(uint8_t profile) {
   if (profile >= NUM_PROFILES)
@@ -76,7 +77,7 @@ void eeconfig_init(void) {
   } while (0)
 
 bool eeconfig_reset(void) {
-  uint16_t bottom_out_threshold[NUM_KEYS] = {0};
+  uint16_t bottom_out_threshold_chunk[16] = {0};
   const uint16_t default_mux_sample_delay_us = ADC_SAMPLE_DELAY_DEFAULT;
 
   // We must not perform any action here that requires reading from
@@ -85,14 +86,27 @@ bool eeconfig_reset(void) {
   EECONFIG_WRITE_LOCAL(magic_start, EECONFIG_MAGIC_START);
   EECONFIG_WRITE_LOCAL(version, EECONFIG_VERSION);
   status &= EECONFIG_WRITE(calibration, &default_calibration);
-  status &= EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+  const uint32_t bottom_out_threshold_size =
+      sizeof(((eeconfig_t *)0)->bottom_out_threshold);
+  const uint32_t bottom_out_threshold_chunk_size =
+      sizeof(bottom_out_threshold_chunk);
+  for (uint32_t offset = 0; offset < bottom_out_threshold_size;
+       offset += bottom_out_threshold_chunk_size) {
+    const uint32_t write_len =
+        M_MIN(bottom_out_threshold_chunk_size,
+              bottom_out_threshold_size - offset);
+    status &= wear_leveling_write(
+        (uint32_t)offsetof(eeconfig_t, bottom_out_threshold) + offset,
+        bottom_out_threshold_chunk, write_len);
+  }
   status &= EECONFIG_WRITE(options, &default_options);
   EECONFIG_WRITE_LOCAL(mux_sample_delay_us, default_mux_sample_delay_us);
   status &= EECONFIG_WRITE(kalman_config, &default_kalman_config);
 
   {
     const distance_curve_t default_curve = DEFAULT_DISTANCE_CURVE;
-    distance_curve_config_t default_distance_curve_config = {0};
+    memset(&default_distance_curve_config, 0,
+           sizeof(default_distance_curve_config));
     default_distance_curve_config.num_curves = 1;
     default_distance_curve_config.curves[0] = default_curve;
     for (uint32_t k = 0; k < NUM_KEYS; k++)
