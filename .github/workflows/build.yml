@@ -220,7 +220,11 @@ jobs:
       - name: Build ${{ matrix.keyboard }}
         run: |
           LIBHMK_STACK_USAGE=1 python setup.py -k ${{ matrix.keyboard }}
-          pio run
+          # Plain `pio run` would also try to build the native_test_*
+          # environments, which only compile under `pio test`; build the
+          # firmware environments from the generated config explicitly.
+          ENVS=$(python3 -c "import configparser; c = configparser.ConfigParser(); c.read('platformio.ini'); print(' '.join('-e ' + s[4:] for s in c.sections() if s.startswith('env:') and not s.startswith('env:native_test')))")
+          pio run $ENVS
 
       - name: Check Firmware Size Budget
         run: |
