@@ -470,7 +470,7 @@ if __name__ == "__main__":
     }
     analog = kb_json.get("analog", {})
     if "mux" in analog:
-        pio_config[f"env:{keyboard}_diag"] = {
+        diag_config = {
             "board": driver.platformio.board,
             "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
             "build_flags": "\n".join(build_flags),
@@ -478,7 +478,6 @@ if __name__ == "__main__":
             "build_src_flags": "\n".join(build_src_flags),
             "extra_scripts": "\n".join(extra_scripts),
             "framework": driver.platformio.framework,
-            "custom_diag_channel_identity": "true",
             "custom_keyboard_name": keyboard,
             "custom_usb_product_name": f"{kb_json['name']} Diagnostic",
             "lib_deps": "\n".join(lib_deps),
@@ -486,6 +485,12 @@ if __name__ == "__main__":
             "test_ignore": "*",
             "upload_protocol": "dfu",
         }
+        # The diagnostic channel-identity view supports at most 8 ADC lanes
+        # (ANALOG_DIAG_MAX_ADC_LANES); keyboards with more mux inputs build
+        # their diagnostic firmware without that feature.
+        if len(analog["mux"].get("input", [])) <= 8:
+            diag_config["custom_diag_channel_identity"] = "true"
+        pio_config[f"env:{keyboard}_diag"] = diag_config
     if cpu_hz is not None:
         env_names = [f"env:{keyboard}", f"env:{keyboard}_recovery"]
         if keyboard == "mochiko40he":
