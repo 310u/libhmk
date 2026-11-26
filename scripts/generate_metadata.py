@@ -1,1 +1,96 @@
-IyBUaGlzIHByb2dyYW0gaXMgZnJlZSBzb2Z0d2FyZTogeW91IGNhbiByZWRpc3RyaWJ1dGUgaXQgYW5kL29yIG1vZGlmeSBpdCB1bmRlcgojIHRoZSB0ZXJtcyBvZiB0aGUgR05VIEdlbmVyYWwgUHVibGljIExpY2Vuc2UgYXMgcHVibGlzaGVkIGJ5IHRoZSBGcmVlIFNvZnR3YXJlCiMgRm91bmRhdGlvbiwgZWl0aGVyIHZlcnNpb24gMyBvZiB0aGUgTGljZW5zZSwgb3IgKGF0IHlvdXIgb3B0aW9uKSBhbnkgbGF0ZXIKIyB2ZXJzaW9uLgojCiMgVGhpcyBwcm9ncmFtIGlzIGRpc3RyaWJ1dGVkIGluIHRoZSBob3BlIHRoYXQgaXQgd2lsbCBiZSB1c2VmdWwsIGJ1dCBXSVRIT1VUCiMgQU5ZIFdBUlJBTlRZOyB3aXRob3V0IGV2ZW4gdGhlIGltcGxpZWQgd2FycmFudHkgb2YgTUVSQ0hBTlRBQklMSVRZIG9yIEZJVE5FU1MKIyBGT1IgQSBQQVJUSUNVTEFSIFBVUlBPU0UuIFNlZSB0aGUgR05VIEdlbmVyYWwgUHVibGljIExpY2Vuc2UgZm9yIG1vcmUKIyBkZXRhaWxzLgojCiMgWW91IHNob3VsZCBoYXZlIHJlY2VpdmVkIGEgY29weSBvZiB0aGUgR05VIEdlbmVyYWwgUHVibGljIExpY2Vuc2UgYWxvbmcgd2l0aAojIHRoaXMgcHJvZ3JhbS4gSWYgbm90LCBzZWUgPGh0dHBzOi8vd3d3LmdudS5vcmcvbGljZW5zZXMvPi4KCiIiIkdlbmVyYXRlIGluY2x1ZGUvbWV0YWRhdGEuaCBmb3IgYSBrZXlib2FyZC4KClRoaXMgbW9kdWxlIGhvbGRzIHRoZSBwbGFpbi1QeXRob24gZ2VuZXJhdGlvbiBsb2dpYyBzbyBib3RoIHRoZSBQbGF0Zm9ybUlPCmV4dHJhIHNjcmlwdCAoc2NyaXB0cy9tZXRhZGF0YS5weSkgYW5kIHNldHVwLnB5IGNhbiBwcm9kdWNlIHRoZSBoZWFkZXIuCnNldHVwLnB5IGdlbmVyYXRlcyBpdCB1cCBmcm9udCBzbyBuYXRpdmUgdGVzdHMgYnVpbGQgZnJvbSBhIGZyZXNoIGNoZWNrb3V0LAp3aGVyZSBubyBmaXJtd2FyZSBidWlsZCBoYXMgcnVuIHRoZSBleHRyYSBzY3JpcHRzIHlldC4KIiIiCgppbXBvcnQgZ3ppcAppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHN5cwoKc3lzLnBhdGguYXBwZW5kKG9zLnBhdGguZGlybmFtZShvcy5wYXRoLmFic3BhdGgoX19maWxlX18pKSkKCmltcG9ydCB1dGlscwpmcm9tIGtleWJvYXJkX21ldGFkYXRhIGltcG9ydCBidWlsZF9rZXlib2FyZF9tZXRhZGF0YQpmcm9tIHV1aWQgaW1wb3J0IHV1aWQ0CgpNRVRBREFUQV9URU1QTEFURSA9ICIiIiNwcmFnbWEgb25jZQoKI2luY2x1ZGUgImNvbW1vbi5oIgoKLy8gRE8gTk9UIEVESVQgVEhJUyBGSUxFIERJUkVDVExZCi8vIFRoaXMgZmlsZSBpcyBhdXRvbWF0aWNhbGx5IGdlbmVyYXRlZCBmcm9tIGBzY3JpcHRzL2dlbmVyYXRlX21ldGFkYXRhLnB5YC4KCi8vIEdVSUQgZm9yIE1pY3Jvc29mdCBPUyAyLjAgZGVzY3JpcHRvcgp7bXNfb3NfMjBfZ3VpZH0KCi8vIENvbXByZXNzZWQga2V5Ym9hcmQgbWV0YWRhdGEgZm9yIHRoZSB3ZWIgY29uZmlndXJhdG9yCntrZXlib2FyZF9tZXRhZGF0YX0KIiIiCgoKZGVmIG1zX29zXzIwX2d1aWRfZGVmKCk6CiAgICB1dWlkID0gdXVpZDQoKS5oZXgudXBwZXIoKQogICAgZ3VpZCA9IGYie3t7dXVpZFs6OF19LXt1dWlkWzg6MTJdfS17dXVpZFsxMjoxNl19LXt1dWlkWzE2OjIwXX0te3V1aWRbMjA6XX19fSIKICAgIGd1aWRfYXJyYXkgPSBbZiJVMTZfVE9fVThTX0xFKCd7eH0nKSIgZm9yIHggaW4gZ3VpZF0gKyBbIlUxNl9UT19VOFNfTEUoJ1xcMCcpIl0gKiAyCgogICAgcmV0dXJuIHV0aWxzLnRvX3NsaWNlX2RlZigiTVNfT1NfMjBfR1VJRCIsIGd1aWRfYXJyYXkpCgoKZGVmIGtleWJvYXJkX21ldGFkYXRhX2RlZihrYl9qc29uLCBkcml2ZXIsIGRpYWdub3N0aWNfY2FwYWJpbGl0aWVzPU5vbmUpOgogICAgbWV0YWRhdGEgPSBidWlsZF9rZXlib2FyZF9tZXRhZGF0YSgKICAgICAgICBrYl9qc29uLCBkcml2ZXIsIGRpYWdub3N0aWNfY2FwYWJpbGl0aWVzPWRpYWdub3N0aWNfY2FwYWJpbGl0aWVzCiAgICApCiAgICB1bmNvbXByZXNzZWQgPSBqc29uLmR1bXBzKG1ldGFkYXRhKS5lbmNvZGUoInV0Zi04IikKICAgIGNvbXByZXNzZWQgPSBnemlwLmNvbXByZXNzKHVuY29tcHJlc3NlZCkKICAgIHByaW50KGYiVW5jb21wcmVzc2VkIG1ldGFkYXRhIHNpemU6IHtsZW4odW5jb21wcmVzc2VkKX0gYnl0ZXMiKQogICAgcHJpbnQoZiJDb21wcmVzc2VkIG1ldGFkYXRhIHNpemU6IHtsZW4oY29tcHJlc3NlZCl9IGJ5dGVzIikKCiAgICByZXR1cm4gdXRpbHMudG9fc2xpY2VfZGVmKCJLRVlCT0FSRF9NRVRBREFUQSIsIGNvbXByZXNzZWQpCgoKZGVmIHJlbmRlcl9tZXRhZGF0YShrYl9qc29uLCBkcml2ZXIsIGRpYWdub3N0aWNfY2FwYWJpbGl0aWVzPU5vbmUpOgogICAgcmV0dXJuIE1FVEFEQVRBX1RFTVBMQVRFLmZvcm1hdCgKICAgICAgICBtc19vc18yMF9ndWlkPW1zX29zXzIwX2d1aWRfZGVmKCksCiAgICAgICAga2V5Ym9hcmRfbWV0YWRhdGE9a2V5Ym9hcmRfbWV0YWRhdGFfZGVmKAogICAgICAgICAgICBrYl9qc29uLCBkcml2ZXIsIGRpYWdub3N0aWNfY2FwYWJpbGl0aWVzPWRpYWdub3N0aWNfY2FwYWJpbGl0aWVzCiAgICAgICAgKSwKICAgICkKCgpkZWYgd3JpdGVfbWV0YWRhdGEoa2V5Ym9hcmQsIGRpYWdfY2hhbm5lbF9pZGVudGl0eT1GYWxzZSwgZGlhZ19ydW50aW1lPUZhbHNlKToKICAgIGtiX2pzb24gPSB1dGlscy5nZXRfa2JfanNvbihrZXlib2FyZCkKICAgIGRyaXZlciA9IHV0aWxzLmdldF9kcml2ZXIoa2V5Ym9hcmQpCgogICAgZGlhZ25vc3RpY19jYXBhYmlsaXRpZXMgPSBOb25lCiAgICBpZiBkaWFnX2NoYW5uZWxfaWRlbnRpdHk6CiAgICAgICAgZGlhZ25vc3RpY19jYXBhYmlsaXRpZXMgPSB7CiAgICAgICAgICAgICJkZWJ1Z0Zpcm13YXJlIjogbm90IGRpYWdfcnVudGltZSwKICAgICAgICAgICAgImludGVncmF0ZWRNb2RlIjogZGlhZ19ydW50aW1lLAogICAgICAgICAgICAiZGlhZ0NoYW5uZWxJZGVudGl0eSI6IFRydWUsCiAgICAgICAgICAgICJzdXBwb3J0c0RlbGF5U3dlZXAiOiBUcnVlLAogICAgICAgICAgICAic3VwcG9ydHNXYWxraW5nS2V5VGVzdCI6IFRydWUsCiAgICAgICAgfQoKICAgIHdpdGggb3Blbihvcy5wYXRoLmpvaW4oImluY2x1ZGUiLCAibWV0YWRhdGEuaCIpLCAidyIpIGFzIGY6CiAgICAgICAgZi53cml0ZSgKICAgICAgICAgICAgcmVuZGVyX21ldGFkYXRhKAogICAgICAgICAgICAgICAga2JfanNvbiwgZHJpdmVyLCBkaWFnbm9zdGljX2NhcGFiaWxpdGllcz1kaWFnbm9zdGljX2NhcGFiaWxpdGllcwogICAgICAgICAgICApCiAgICAgICAgKQo=
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""Generate include/metadata.h for a keyboard.
+
+This module holds the plain-Python generation logic so both the PlatformIO
+extra script (scripts/metadata.py) and setup.py can produce the header.
+setup.py generates it up front so native tests build from a fresh checkout,
+where no firmware build has run the extra scripts yet.
+"""
+
+import gzip
+import json
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+import utils
+from keyboard_metadata import build_keyboard_metadata
+from uuid import uuid4
+
+METADATA_TEMPLATE = """#pragma once
+
+#include "common.h"
+
+// DO NOT EDIT THIS FILE DIRECTLY
+// This file is automatically generated from `scripts/generate_metadata.py`.
+
+// GUID for Microsoft OS 2.0 descriptor
+{ms_os_20_guid}
+
+// Compressed keyboard metadata for the web configurator
+{keyboard_metadata}
+"""
+
+
+def ms_os_20_guid_def():
+    uuid = uuid4().hex.upper()
+    guid = f"{{{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}}}"
+    guid_array = [f"U16_TO_U8S_LE('{x}')" for x in guid] + ["U16_TO_U8S_LE('\\0')"] * 2
+
+    return utils.to_slice_def("MS_OS_20_GUID", guid_array)
+
+
+def keyboard_metadata_def(kb_json, driver, diagnostic_capabilities=None):
+    metadata = build_keyboard_metadata(
+        kb_json, driver, diagnostic_capabilities=diagnostic_capabilities
+    )
+    uncompressed = json.dumps(metadata).encode("utf-8")
+    compressed = gzip.compress(uncompressed)
+    print(f"Uncompressed metadata size: {len(uncompressed)} bytes")
+    print(f"Compressed metadata size: {len(compressed)} bytes")
+
+    return utils.to_slice_def("KEYBOARD_METADATA", compressed)
+
+
+def render_metadata(kb_json, driver, diagnostic_capabilities=None):
+    return METADATA_TEMPLATE.format(
+        ms_os_20_guid=ms_os_20_guid_def(),
+        keyboard_metadata=keyboard_metadata_def(
+            kb_json, driver, diagnostic_capabilities=diagnostic_capabilities
+        ),
+    )
+
+
+def write_metadata(keyboard, diag_channel_identity=False, diag_runtime=False):
+    kb_json = utils.get_kb_json(keyboard)
+    driver = utils.get_driver(keyboard)
+
+    diagnostic_capabilities = None
+    if diag_channel_identity:
+        diagnostic_capabilities = {
+            "debugFirmware": not diag_runtime,
+            "integratedMode": diag_runtime,
+            "diagChannelIdentity": True,
+            "supportsDelaySweep": True,
+            "supportsWalkingKeyTest": True,
+        }
+
+    with open(os.path.join("include", "metadata.h"), "w") as f:
+        f.write(
+            render_metadata(
+                kb_json, driver, diagnostic_capabilities=diagnostic_capabilities
+            )
+        )
